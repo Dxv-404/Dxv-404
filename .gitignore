@@ -1,0 +1,31 @@
+# Working material for the README header.
+#
+# Kept on disk because regenerating it means re-running the image generator and
+# getting a different picture, but never committed: it is ~28 MB of raw
+# generator output, difference plates and abandoned motion tests, and a clone
+# of a profile repo should not carry that forever.
+#
+# Everything actually needed to rebuild the header lives in tools/header/ —
+# four pre-lit layer sets and the assembler, ~350 KB total.
+header-build/
+
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
+
+# Source material for the README art: the raw generated scenes and the
+# extracted character sprites. 48 MB, and every one of them is an input to
+# the build rather than an output of it — assets/*.svg is what the README
+# actually loads, and that is 284 KB.
+assets/scenes/
+assets/sprites/
+
+# Exploratory scripts from the header build that nothing imports. Kept on
+# disk, out of the repo.
+tools/char.py
+tools/grade.py
+tools/pipeline.py
+tools/pxlib.py
+tools/convert.py
+tools/forms.py

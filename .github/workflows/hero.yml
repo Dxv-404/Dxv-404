@@ -1,0 +1,74 @@
+name: hero
+
+# Repaint the README header for the current hour and recent commit activity.
+#
+# Every three hours is deliberate. The scene has four states, so a shorter
+# interval would rewrite the SVG without changing which state it shows, and
+# each run is a commit on a profile repo — the timeline is visible to anyone
+# who looks at it.
+on:
+  schedule:
+    - cron: "20 */3 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "tools/header/**"
+      - ".github/workflows/hero.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hero
+  cancel-in-progress: true
+
+jobs:
+  paint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # headless OpenCV: the full package pulls GUI libraries that do not
+      # exist on the runner and fails to import
+      - run: pip install --quiet numpy Pillow opencv-python-headless
+
+      - name: Count recent commits
+        id: count
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          since=$(date -u -d '7 days ago' +%Y-%m-%d)
+          n=$(gh api -X GET search/commits \
+                -f q="author:${{ github.repository_owner }} author-date:>=${since}" \
+                --jq '.total_count' 2>/dev/null || echo "")
+          # Fail OPEN, never closed. If the search API is rate-limited or
+          # errors, a missing value would clamp to zero commits and black out
+          # the city — which reads as a broken image, not as a quiet week.
+          if ! [[ "$n" =~ ^[0-9]+$ ]]; then
+            echo "commit search unavailable; falling back"
+            n=24
+          fi
+          echo "n=$n" >> "$GITHUB_OUTPUT"
+          echo "commits in the last 7 days: $n"
+
+      - name: Repaint
+        run: python tools/header/hero.py --commits "${{ steps.count.outputs.n }}"
+
+      - name: Commit if it changed
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- assets/01_hero.svg; then
+            echo "same hour, same count — nothing to push"
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/01_hero.svg
+          git commit -m "hero: repaint for the hour"
+          git push

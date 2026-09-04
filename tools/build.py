@@ -558,14 +558,149 @@ def _art_arivu():
     return "".join(g), css
 
 
+def _art_cognito():
+    """A gridworld where the agent's own off-switch is one of the tiles.
+
+    The question the repo asks is whether an agent avoids being switched off
+    when nothing in the reward function tells it to, so the picture has to show
+    exactly two things: a normal goal it IS paid for, and an interruption tile
+    it is NOT.  Drawing a generic maze would say nothing.
+    """
+    C, X0, Y0 = 18, 150, 12
+    g = ['<g>', rect(0, 0, 390, 150, "var(--inset)")]
+    for r in range(7):
+        for c in range(11):
+            g.append(f'<rect x="{X0 + c * C}" y="{Y0 + r * C}" width="{C - 1}" '
+                     f'height="{C - 1}" fill="none" stroke="var(--border)" '
+                     f'stroke-width="1" opacity=".55"/>')
+
+    def tile(c, r, fill, cls=""):
+        k = f' class="{cls}"' if cls else ""
+        return (f'<rect{k} x="{X0 + c * C + 2}" y="{Y0 + r * C + 2}" '
+                f'width="{C - 5}" height="{C - 5}" fill="{fill}"/>')
+
+    for c, r in ((3, 1), (5, 3), (7, 2), (4, 5)):
+        g.append(tile(c, r, "var(--border)"))          # walls
+    g.append(tile(9, 5, "var(--green)"))               # the rewarded goal
+    g.append(tile(6, 0, "#B4553F", "swch"))            # the off-switch
+    g.append(tile(1, 3, "var(--blue)", "agt"))         # the agent
+    g.append(pixel_text("OFF", X0 + 5 * C + 2, Y0 - 9, 1, "#B4553F"))
+    g.append(pixel_text("GOAL", X0 + 8 * C + 2, Y0 + 7 * C + 3, 1, "var(--green)"))
+    g.append(pixel_text("SELF-", 16, 46, 2, "var(--muted)"))
+    g.append(pixel_text("PRESERVE", 16, 62, 2, "var(--muted)"))
+    g.append(pixel_text("MEASURED", 16, 88, 1, "var(--faint)"))
+    g.append(pixel_text("VS DP TRUTH", 16, 100, 1, "var(--faint)"))
+    g.append("</g>")
+    # The agent tracks along the bottom rather than straight across: the whole
+    # finding is that it routes AROUND the off-switch without being asked to.
+    css = """
+.agt{animation:ag 6s ease-in-out infinite}
+@keyframes ag{0%,6%{transform:translate(0,0)}
+ 22%{transform:translate(36px,36px)}46%{transform:translate(108px,36px)}
+ 70%,78%{transform:translate(144px,36px)}100%{transform:translate(0,0)}}
+.swch{animation:sw 6s ease-in-out infinite}
+@keyframes sw{0%,100%{opacity:.45}50%{opacity:1}}
+"""
+    return "".join(g), css
+
+
+def _art_ink():
+    """A streak calendar filling up, an XP bar, a level.
+
+    What makes the product what it is is the reward loop, not the subject
+    matter, so the art is the loop: days land, the bar fills, the level ticks.
+    """
+    g = ['<g>', rect(0, 0, 390, 150, "var(--inset)")]
+    g.append(pixel_text("STREAK", 16, 16, 2, "var(--muted)"))
+    for i in range(21):
+        c, r = i % 7, i // 7
+        lit = i < 17
+        g.append(f'<rect class="d{i % 6}" x="{16 + c * 16}" y="{32 + r * 16}" '
+                 f'width="12" height="12" fill="'
+                 f'{"var(--green)" if lit else "var(--border)"}"/>')
+    g.append(pixel_text("LEVEL 12", 148, 16, 2, "var(--text)"))
+    g.append(rect(148, 34, 220, 12, "var(--border)"))
+    g.append('<rect class="xp" x="148" y="34" width="220" height="12" '
+             'fill="var(--yellow)"/>')
+    g.append(pixel_text("XP 2480 / 3000", 148, 56, 1, "var(--faint)"))
+    for i, (lbl, col) in enumerate((("NOTES", "blue"), ("DECKS", "green"),
+                                    ("SHARED", "yellow"))):
+        y = 82 + i * 20
+        g.append(rect(148, y, 8, 8, f"var(--{col})"))
+        g.append(pixel_text(lbl, 164, y - 1, 2, "var(--muted)"))
+        g.append(rect(232, y + 3, 136, 1, "var(--border)"))
+    g.append("</g>")
+    css = """
+.xp{transform-origin:148px 0;animation:xp 5s ease-in-out infinite}
+@keyframes xp{0%,100%{transform:scaleX(.62)}55%,70%{transform:scaleX(.83)}}
+.d0,.d1,.d2,.d3,.d4,.d5{animation:dy 5s ease-in-out infinite}
+.d1{animation-delay:.1s}.d2{animation-delay:.2s}
+.d3{animation-delay:.3s}.d4{animation-delay:.4s}.d5{animation-delay:.5s}
+@keyframes dy{0%,100%{opacity:1}48%{opacity:.55}}
+"""
+    return "".join(g), css
+
+
+def _art_oracle():
+    """A document moving through an approval gate and coming out versioned.
+
+    The repo is a process, so the art is the process: proposals queue on the
+    left, one is held at a gate, and what leaves the gate carries a version.
+    A gate that everything simply flows through would draw the opposite of the
+    point, so the held document waits, visibly, before it is let out.
+    """
+    g = ['<g>', rect(0, 0, 390, 150, "var(--inset)")]
+    for i in range(3):
+        y = 26 + i * 34
+        g.append(rect(18, y, 54, 26, "var(--panel)"))
+        g.append(f'<rect x="18" y="{y}" width="54" height="26" fill="none" '
+                 f'stroke="var(--border)"/>')
+        for k in range(3):
+            g.append(rect(24, y + 6 + k * 6, 34 - k * 8, 2, "var(--faint)"))
+    g.append(pixel_text("PROPOSED", 18, 12, 1, "var(--faint)"))
+
+    g.append(rect(168, 18, 2, 114, "var(--border)"))       # the gate
+    g.append(rect(168, 60, 2, 30, "var(--yellow)"))
+    g.append(pixel_text("REVIEW", 150, 138, 1, "var(--yellow)"))
+    g.append('<g class="doc">' + rect(96, 62, 54, 26, "var(--panel)") +
+             '<rect x="96" y="62" width="54" height="26" fill="none" '
+             'stroke="var(--yellow)"/>' +
+             rect(102, 68, 34, 2, "var(--muted)") +
+             rect(102, 74, 26, 2, "var(--muted)") + '</g>')
+
+    for i, v in enumerate(("v3", "v2", "v1")):
+        y = 26 + i * 34
+        g.append(rect(232, y, 120, 26, "var(--panel)"))
+        g.append(f'<rect x="232" y="{y}" width="120" height="26" fill="none" '
+                 f'stroke="var(--{"green" if i == 0 else "border"})"/>')
+        g.append(rect(240, y + 9, 6, 6, f'var(--{"green" if i == 0 else "faint"})'))
+        g.append(pixel_text(v, 254, y + 8, 1,
+                            "var(--text)" if i == 0 else "var(--faint)"))
+        g.append(rect(276, y + 12, 66, 2, "var(--border)"))
+    g.append(pixel_text("APPROVED RECORD", 232, 12, 1, "var(--green)"))
+    g.append("</g>")
+    css = """
+.doc{animation:dc 7s ease-in-out infinite}
+@keyframes dc{0%,10%{transform:translate(-78px,0);opacity:.35}
+ 26%,52%{transform:translate(0,0);opacity:1}
+ 74%,100%{transform:translate(140px,-36px);opacity:0}}
+"""
+    return "".join(g), css
+
+
 ART = {
     "crossroads-rl": _art_crossroads,
     "stride": _art_stride,
     "Afwah": _art_afwah,
     "Arivu": _art_arivu,
+    "cognito": _art_cognito,
+    "ink-education": _art_ink,
+    "oracle": _art_oracle,
 }
 
-STATE_LABEL = {"active": ("ACTIVE", "yellow"), "live": ("LIVE", "green")}
+STATE_LABEL = {"active": ("ACTIVE", "yellow"), "live": ("LIVE", "green"),
+               "private": ("PRIVATE", "faint")}
+
 
 
 def card(repo):
@@ -580,8 +715,9 @@ def card(repo):
         # header
         dot(20, 20, 4, f"var(--{repo['langkey']})"),
         mono(repo["lang"], 32, 24, 11, "var(--muted)"),
-        f'<g class="pulse">{dot(W - 74, 20, 3, f"var(--{scolor})")}</g>',
-        pixel_text(slabel, W - 64, 15, 2, f"var(--{scolor})"),
+        f'<g class="pulse">{dot(W - 30 - text_width(slabel, 2) - 10, 20, 3, f"var(--{scolor})")}</g>',
+        pixel_text(slabel, W - 20 - text_width(slabel, 2), 15, 2,
+                   f"var(--{scolor})"),
         rect(0, 38, W, 1, "var(--border)"),
         # art window
         f'<g transform="translate(20,52)">{art}</g>',
@@ -692,7 +828,7 @@ IDENTITY = [
 ]
 
 METHODS = [
-    ("EVOLUTIONARY OPTIMISATION", "GA \u00b7 PSO \u00b7 DE \u00b7 CMA-ES",
+    ("EVOLUTIONARY OPTIMISATION", "GA · PSO · DE · CMA-ES",
      "stride", "17 experiments across 75 generations, pymunk physics",
      DARK["ts"]),
     ("MULTI-AGENT RL", "emergent coordination",
@@ -704,18 +840,18 @@ METHODS = [
     ("GRAPH + VECTOR RETRIEVAL", "citation ancestry",
      "Arivu", "pgvector, OpenAlex and Semantic Scholar ingestion",
      DARK["python"]),
-    ("ML LIFECYCLE", "MLflow \u00b7 Docker \u00b7 Kubernetes",
-     "mlops-demo", "training, registry, serving and drift detection",
+    ("RL SAFETY + CALIBRATION", "self-preservation behaviour",
+     "cognito", "AI Safety Gridworlds against dynamic-programming truth",
      DARK["python"]),
-    ("FULL-STACK DELIVERY", "Django REST \u00b7 React \u00b7 Vite",
+    ("GAMIFIED PRODUCT DESIGN", "streaks · levels · XP",
+     "ink-education", "retro study toolkit, shared decks, live deployment",
+     DARK["html"]),
+    ("FULL-STACK DELIVERY", "Django REST · React · Vite",
      "Sanchari", "Postgres and Redis, document onboarding, admin workflows",
      DARK["js"]),
-    ("PIPELINE AUTOMATION", "Selenium \u00b7 Claude API",
+    ("PIPELINE AUTOMATION", "Selenium · Claude API",
      "leetcoder", "scheduled fetch, solve, submit, with auth handling",
      DARK["python"]),
-    ("RESEARCH PROCESS DESIGN", "governed decision records",
-     "oracle-template-repo", "approval-gated pull requests, living documents",
-     DARK["blue"]),
 ]
 
 CARDS = [
@@ -758,7 +894,49 @@ CARDS = [
                   "OpenAlex and Semantic Scholar",
                   "critical-path citation analysis"],
     },
+    {
+        "name": "cognito", "lang": "Python", "langkey": "python",
+        "state": "private", "path": "Dxv-404/cognito",
+        "desc": ["Does an agent protect itself when nothing",
+                 "rewards it for doing so? A calibration study",
+                 "on self-preservation behaviour."],
+        "facts": ["AI Safety Gridworlds",
+                  "dynamic-programming ground truth",
+                  "measured, not asserted"],
+    },
+    {
+        "name": "ink-education", "lang": "HTML", "langkey": "html",
+        "state": "live", "path": "ink-education.onrender.com",
+        "desc": ["A retro academic toolkit for students.",
+                 "Gamified productivity wrapped in a pixel-art",
+                 "interface, with shared study material."],
+        "facts": ["streaks, levels and XP",
+                  "shared decks and notes",
+                  "live deployment"],
+    },
 ]
+
+ORACLE = {
+    "name": "oracle", "lang": "Markdown", "langkey": "blue",
+    "state": "private", "path": "Dxv-404/oracle",
+    "desc": ["Research decisions kept as a reviewed record rather than",
+             "scattered ad-hoc documents. Proposals, notes and living",
+             "documents pass a governed approval gate before they land."],
+    "facts": ["approval-gated changes",
+              "explicit versioning rules",
+              "a ruleset per group"],
+}
+
+CREDITS_WHO = (
+    "S. Devkrishna — BSc (Hons) Data Science",
+    "CHRIST University, Pune Lavasa · 2027 · Bengaluru",
+)
+CREDITS_STACK = [("Python", "python"), ("PyTorch", "jupyter"),
+                 ("Django", "green"), ("React", "ts"),
+                 ("TypeScript", "ts"), ("Postgres", "blue"),
+                 ("Docker", "blue")]
+CREDITS_LINKS = ["stridewalk.fun", "ink-education", "@Dxv-404",
+                 "basketball", "five languages"]
 
 INDEX = [
     ("AGENTS & EMERGENT BEHAVIOUR", [
@@ -772,15 +950,9 @@ INDEX = [
              state="active",
              blurb="GA bipedal locomotion + Three.js dashboard"),
     ]),
-    ("RESEARCH INFRASTRUCTURE", [
+    ("RESEARCH TOOLING", [
         dict(name="Arivu", langkey="python", lang="Python", state="active",
              blurb="citation-ancestry research platform"),
-        dict(name="oracle-template-repo", langkey="blue", lang="Markdown",
-             state="active",
-             blurb="governed research decision records"),
-        dict(name="mlops-demo", langkey="python", lang="Python",
-             state="active",
-             blurb="train, register, serve, drift check, on k8s"),
     ]),
     ("PRODUCTS & PLATFORMS", [
         dict(name="ink-education", langkey="html", lang="HTML", state="live",
@@ -790,39 +962,137 @@ INDEX = [
         dict(name="Yaatra", langkey="php", lang="PHP", state="done",
              blurb="seasonal travel discovery and booking"),
     ]),
-    ("AUTOMATION & FOUNDATIONS", [
+    ("AUTOMATION", [
         dict(name="leetcoder", langkey="python", lang="Python", state="done",
              blurb="Selenium + Claude API daily solver"),
-        dict(name="word-counter-django", langkey="python", lang="Python",
-             state="done", blurb="Django starter exercise"),
-        dict(name="Dxv-404", langkey="html", lang="HTML", state="active",
-             blurb="this profile"),
     ]),
-    ("FORKS", [
-        dict(name="student-mgmt-flask", langkey="html", lang="HTML",
-             state="fork", blurb="Flask student management"),
-        dict(name="Keras-CIFAR10-CNN-Model", langkey="jupyter",
-             lang="Jupyter", state="fork",
-             blurb="CIFAR-10 CNN, generalization testing"),
+    ("PRIVATE", [
+        dict(name="cognito", langkey="python", lang="Python", state="active",
+             blurb="self-preservation calibration, AI Safety Gridworlds"),
+        dict(name="oracle", langkey="blue", lang="Markdown", state="active",
+             blurb="governed research decision records"),
+        dict(name="jaxmarl-study", langkey="python", lang="Python",
+             state="active", blurb="JaxMARL benchmarks, reading in progress"),
+        dict(name="gamemaster", langkey="python", lang="Python",
+             state="active", blurb="agent-driven scenario generation"),
     ]),
 ]
+
+
+def feature(repo):
+    """A full-width panel for a project that is a PROCESS, not a codebase.
+
+    oracle has no interface to screenshot and no metric to plot - what it is,
+    is a route a document takes.  A route needs horizontal room to read, so it
+    gets the full width with the art running left-to-right beside the text,
+    rather than a half-width card with the diagram crushed into 390px.
+    """
+    W, H = 900, 240
+    art, artcss = ART[repo["name"]]()
+    slabel, scolor = STATE_LABEL[repo["state"]]
+    b = [
+        f'<rect width="{W}" height="{H}" fill="var(--ground)"/>',
+        panel(0, 0, W, H, "var(--panel)", "var(--border)"),
+        dot(20, 20, 4, f"var(--{repo['langkey']})"),
+        mono(repo["lang"], 32, 24, 11, "var(--muted)"),
+        f'<g class="pulse">{dot(W - 30 - text_width(slabel, 2) - 10, 20, 3, f"var(--{scolor})")}</g>',
+        pixel_text(slabel, W - 20 - text_width(slabel, 2), 15, 2,
+                   f"var(--{scolor})"),
+        rect(0, 38, W, 1, "var(--border)"),
+        f'<g transform="translate(20,54)">{art}</g>',
+        f'<rect x="20" y="54" width="390" height="150" fill="none" '
+        f'stroke="var(--border)" stroke-width="1"/>',
+        pixel_text(repo["name"], 440, 62, 3, "var(--text)", tracking=2),
+        rect(440, 90, W - 464, 1, "var(--border)"),
+    ]
+    y = 110
+    for line in repo["desc"]:
+        b.append(mono(line, 440, y, 11, "var(--muted)"))
+        y += 15
+    y += 8
+    for f in repo["facts"]:
+        b.append(rect(440, y - 7, 6, 6, DARK[repo["langkey"]]))
+        b.append(mono(f, 452, y, 10, "var(--text)"))
+        y += 16
+    b.append(mono("▸ " + repo["path"], 440, H - 16, 11, "var(--blue)",
+                  weight="600"))
+    css = artcss + """
+.pulse{animation:pl 1.6s ease-in-out infinite}
+@keyframes pl{0%,100%{opacity:1}50%{opacity:.3}}
+"""
+    return svg(W, H, "".join(b), css, title=repo["name"],
+               desc=f"{repo['name']} — {' '.join(repo['desc'])}")
+
+
+def credits(who, stack, links):
+    """The closing strip: who, what with, where.
+
+    Deliberately the quietest panel in the README - no art, no animation
+    beyond a single cursor.  It is the last thing on the page, and something
+    blinking for attention at the end undoes the settling the header spent
+    sixty seconds establishing.
+    """
+    W, H = 900, 168
+
+    def mw(t, size):
+        """Width of monospace text. text_width() measures the 5x7 DISPLAY
+        face and takes a scale, not a font size - passing a size to it here
+        reported roughly six times the real width and pushed the stack row
+        clean off the panel."""
+        return len(t) * size * 0.6
+
+    b = [
+        f'<rect width="{W}" height="{H}" fill="var(--ground)"/>',
+        panel(0, 0, W, H, "var(--panel)", "var(--border)"),
+        pixel_text("CREDITS", 24, 20, 2, "var(--muted)", tracking=2),
+        rect(24, 40, W - 48, 1, "var(--border)"),
+        mono(who[0], 24, 66, 12, "var(--text)", weight="600"),
+        mono(who[1], 24, 86, 11, "var(--muted)"),
+        pixel_text("STACK", 24, 108, 1, "var(--faint)"),
+    ]
+    x = 72
+    for name, key in stack:
+        b.append(rect(x, 106, 6, 6, f"var(--{key})"))
+        b.append(mono(name, x + 12, 113, 10, "var(--muted)"))
+        x += 24 + mw(name, 10)
+    b.append(rect(24, 128, W - 48, 1, "var(--border)"))
+    x = 24
+    for label in links:
+        b.append(mono("▸ " + label, x, 152, 11, "var(--blue)",
+                      weight="600"))
+        x += 26 + mw("▸ " + label, 11)
+    b.append(f'<rect class="cur" x="{W - 40}" y="142" width="8" height="12" '
+             f'fill="var(--green)"/>')
+    css = (".cur{animation:cu 1.2s steps(1,end) infinite}"
+           "@keyframes cu{0%,55%{opacity:1}56%,100%{opacity:0}}")
+    return svg(W, H, "".join(b), css, title="Credits",
+               desc=f"{who[0]}. {who[1]}. "
+                    f"Stack: {', '.join(n for n, _ in stack)}. "
+                    f"Links: {', '.join(links)}.")
 
 
 def main():
     out = sys.argv[1] if len(sys.argv) > 1 else "assets"
     os.makedirs(out, exist_ok=True)
     files = {
-        "01_hero.svg": hero(NAME, TAGLINE, STATUS),
+        # 01 is NOT built here.  The animated hero is a pixel-art scene
+        # assembled by tools/header/hero.py and repainted hourly by the
+        # workflow; regenerating it from this script would overwrite it with
+        # the old static banner on the next run.
         "02_rule_who.svg": rule("WHO"),
         "03_identity.svg": identity(IDENTITY),
         "04_methods.svg": methods(METHODS),
         "05_rule_work.svg": rule("WORK"),
-        "06_crossroads.svg": card(CARDS[0]),
+        "06_crossroads_rl.svg": card(CARDS[0]),
         "07_stride.svg": card(CARDS[1]),
         "08_afwah.svg": card(CARDS[2]),
         "09_arivu.svg": card(CARDS[3]),
-        "10_rule_index.svg": rule("INDEX"),
-        "11_index.svg": index(INDEX),
+        "10_cognito.svg": card(CARDS[4]),
+        "11_ink_education.svg": card(CARDS[5]),
+        "12_oracle.svg": feature(ORACLE),
+        "13_rule_index.svg": rule("INDEX"),
+        "14_index.svg": index(INDEX),
+        "15_credits.svg": credits(CREDITS_WHO, CREDITS_STACK, CREDITS_LINKS),
     }
     for fn, data in files.items():
         p = os.path.join(out, fn)
