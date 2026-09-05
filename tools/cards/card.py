@@ -32,7 +32,7 @@ sys.path.insert(0, str(HERE.parent))
 from px import rect, pixel_text, mono, svg, text_width  # noqa: E402
 
 CW, CH = 430, 516            # card
-M, T = 14, 22                # margin around the card; frame thickness
+M, T = 2, 22                 # margin around the card (room for the fireflies that leave it); frame thickness
 AX, AY, AW, AH = T, T, CW - 2 * T, 268          # art window
 WIN_W, WIN_H = 390, 336                          # the painting is quantised at this size, then scaled to the window
 PALE, MUTED, PANEL, LINE = "#F3EAD8", "#8E96A0", "#151A21", "#2A323C"
@@ -79,7 +79,7 @@ def ptext(s, x, y, scale, fill, tracking=1, shadow=SHADOW):
 
 
 # ── frame ───────────────────────────────────────────────────────────────────
-def frame(g):
+def frame(g, ch=CH):
     corner = Image.open(HERE / "kit" / "corner.png").convert("RGBA")
     edge = Image.open(HERE / "kit" / "edge.png").convert("RGBA")
     vert = edge.rotate(90, expand=True)
@@ -88,21 +88,24 @@ def frame(g):
     g.append(f'<defs><pattern id="hp" x="{T}" y="0" width="{ew:.1f}" height="{T}" patternUnits="userSpaceOnUse">{img(0, 0, sc(edge, ew, T))}</pattern>'
              f'<pattern id="vp" x="0" y="{T}" width="{T}" height="{ew:.1f}" patternUnits="userSpaceOnUse">{img(0, 0, sc(vert, T, ew))}</pattern></defs>')
     g += [f'<rect x="{T}" y="0" width="{CW - 2 * T}" height="{T}" fill="url(#hp)"/>',
-          f'<g transform="translate(0 {CH}) scale(1 -1)"><rect x="{T}" y="0" width="{CW - 2 * T}" height="{T}" fill="url(#hp)"/></g>',
-          f'<rect x="0" y="{T}" width="{T}" height="{CH - 2 * T}" fill="url(#vp)"/>',
-          f'<g transform="translate({CW} 0) scale(-1 1)"><rect x="0" y="{T}" width="{T}" height="{CH - 2 * T}" fill="url(#vp)"/></g>']
+          f'<g transform="translate(0 {ch}) scale(1 -1)"><rect x="{T}" y="0" width="{CW - 2 * T}" height="{T}" fill="url(#hp)"/></g>',
+          f'<rect x="0" y="{T}" width="{T}" height="{ch - 2 * T}" fill="url(#vp)"/>',
+          f'<g transform="translate({CW} 0) scale(-1 1)"><rect x="0" y="{T}" width="{T}" height="{ch - 2 * T}" fill="url(#vp)"/></g>']
     cs = T + 26
     c = img(0, 0, sc(corner, cs, cs))
     g += [c, f'<g transform="translate({CW} 0) scale(-1 1)">{c}</g>',
-          f'<g transform="translate(0 {CH}) scale(1 -1)">{c}</g>', f'<g transform="translate({CW} {CH}) scale(-1 -1)">{c}</g>']
+          f'<g transform="translate(0 {ch}) scale(1 -1)">{c}</g>', f'<g transform="translate({CW} {ch}) scale(-1 -1)">{c}</g>']
     return cs
 
 
 # ── card ────────────────────────────────────────────────────────────────────
-def build(spec):
-    W, H = CW + 2 * M, CH + 2 * M
-    g, css = [rect(0, 0, CW, CH, PANEL)], []
-    cs = frame(g)
+def build(spec, compact=False):
+    """compact=True: the painting, the plate and the tag only, for grids where the card is
+    shown too small for its text (the facts then live in the index panel)."""
+    ch = (AY + AH - 18 + 40 + 18 + T) if compact else CH
+    W, H = CW + 2 * M, ch + 2 * M
+    g, css = [rect(0, 0, CW, ch, PANEL)], []
+    cs = frame(g, ch)
     # art
     win = quantise(HERE / "src" / f"{spec['id']}.png", shift=spec.get("shift", 0))
     S = AW / WIN_W
@@ -126,7 +129,7 @@ def build(spec):
     g += [rect(px - 2, py - 2, pw + 4, 40, GOLD3), rect(px, py, pw, 36, GOLD2), rect(px + 2, py + 2, pw - 4, 32, "#171219")]
     for (x, y) in ((px + 3, py + 3), (px + pw - 6, py + 3), (px + 3, py + 30), (px + pw - 6, py + 30)): g.append(rect(x, y, 3, 3, GOLD2))
     g.append(ptext(name, px + 20, py + (36 - 7 * ns) // 2 + 1, ns, GOLD, 2, shadow=GOLD3))
-    g.append(pixel_text(tag, px + 2, py + 44, 1, MUTED, 1))
+    if not compact: g.append(pixel_text(tag, px + 2, py + 44, 1, MUTED, 1))
     # bleed: the nearest creatures stand on the body
     eyes = []
     sheet_p = HERE / "src" / f"{spec['id']}_sprites.png"
@@ -144,20 +147,20 @@ def build(spec):
                 if spec.get("blink", True): eyes.append((x + sw * S * (0.40 if flip else 0.60), y + sw * S * 0.44))
     # body
     y = py + 68; x0 = T + 12; w0 = CW - 2 * T - 24
-    for i, (k, v) in enumerate(spec["rows"]):
+    for i, (k, v) in enumerate([] if compact else spec["rows"]):
         g.append(pixel_text(k, x0, y + i * 22, 1, GOLD, 1)); g.append(pixel_text(v, x0 + 124, y + i * 22, 1, PALE, 1))
-    g.append(rect(x0, y + 50, w0, 1, LINE))
-    for i, (lab, val) in enumerate(zip(spec.get("labels", ("LANGUAGE", "STATUS", "ACTIVITY")), spec["facts"])):
+    if not compact: g.append(rect(x0, y + 50, w0, 1, LINE))
+    for i, (lab, val) in enumerate([] if compact else zip(spec.get("labels", ("LANGUAGE", "STATUS", "ACTIVITY")), spec["facts"])):
         cx = x0 + i * (w0 // 3)
         g.append(pixel_text(lab, cx, y + 62, 1, MUTED, 1)); g.append(pixel_text(val, cx, y + 75, 1, PALE, 1))
         if i: g.append(rect(cx - 10, y + 60, 1, 26, LINE))
-    for i, l in enumerate(spec["blurb"]): g.append(mono(l, x0, y + 104 + i * 13, 10, MUTED))
+    for i, l in enumerate([] if compact else spec["blurb"]): g.append(mono(l, x0, y + 104 + i * 13, 10, MUTED))
     # frame light, gem glints, blinks
-    per = 2 * (CW - T + CH - T)
-    g.append(f'<rect class="run" x="{T // 2}" y="{T // 2}" width="{CW - T}" height="{CH - T}" fill="none" stroke="{PALE}" stroke-width="1" stroke-dasharray="16 {per}" opacity=".85"/>')
+    per = 2 * (CW - T + ch - T)
+    g.append(f'<rect class="run" x="{T // 2}" y="{T // 2}" width="{CW - T}" height="{ch - T}" fill="none" stroke="{PALE}" stroke-width="1" stroke-dasharray="16 {per}" opacity=".85"/>')
     css.append(f".run{{animation:run 16s linear infinite}}@keyframes run{{to{{stroke-dashoffset:-{per + 16}}}}}")
     gx = cs // 2
-    for i, (x, y) in enumerate(((gx, gx), (CW - gx, gx), (gx, CH - gx), (CW - gx, CH - gx))):
+    for i, (x, y) in enumerate(((gx, gx), (CW - gx, gx), (gx, ch - gx), (CW - gx, ch - gx))):
         g.append(f'<rect class="gem g{i}" x="{x - 3}" y="{y - 3}" width="6" height="6" fill="{PALE}"/>')
     css.append(".gem{opacity:0;animation:gg 7s steps(1) infinite}@keyframes gg{0%,3%{opacity:1}4%,100%{opacity:0}}.g1{animation-delay:1.75s}.g2{animation-delay:3.5s}.g3{animation-delay:5.25s}")
     for i, (ex, ey) in enumerate(eyes):
@@ -240,11 +243,11 @@ CARDS = {
     "oracle": dict(
         id="oracle", name="ORACLE", tag="IN PROGRESS", reveal=0.90, blink=False, glow=(203, 186), glow_color=("#FFE0A0", "#E8A35C"),
         rows=[("IT KEEPS", "A GROUP'S RESEARCH DECISIONS"), ("THE RULE", "NOTHING CHANGES WITHOUT REVIEW")],
-        facts=("MARKDOWN + YAML", "TEMPLATE", "AUG 2026"),
-        blurb=["A repository template for research decision records:",
-               "decisions, notes, living documents and a library, every",
-               "change passing through a governed pull-request gate."],
-        alt="Oracle: a tall standing stone in a dusk meadow, its face carved with rows of glowing entries like a ledger, a figure adding a new page while a circle of eight holds lanterns, five lit and raised, three dark. A template for a research group's governed decision records: nothing is written until enough of the group approves.",
+        facts=("TYPESCRIPT", "LIVE", "198 COMMITS"),
+        blurb=["A collaborative, versioned research decision record for a",
+               "group: decisions, notes, living documents and a library,",
+               "every change passing through review before it is written."],
+        alt="Oracle: a tall standing stone in a dusk meadow, its face carved with rows of glowing entries like a ledger, a figure adding a new page while a circle of eight holds lanterns, five lit and raised, three dark. A collaborative, versioned research decision record for a group: nothing is written until enough of the group approves.",
         out="assets/12_oracle.svg"),
     "ink": dict(
         id="ink", name="INK", tag="APP", reveal=1.05, blink=False, glow=(152, 135), glow_color=("#FFE0A0", "#E8A35C"),
