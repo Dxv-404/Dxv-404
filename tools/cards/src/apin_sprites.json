@@ -1,0 +1,16 @@
+{
+ "window_width": 390,
+ "window_top_offset": 27.0,
+ "sprites": [
+  {
+   "cx": 80.36,
+   "cy": 271.78,
+   "size": 53
+  },
+  {
+   "cx": 39.42,
+   "cy": 293.68,
+   "size": 53
+  }
+ ]
+}

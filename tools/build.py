@@ -558,13 +558,14 @@ def _art_arivu():
     return "".join(g), css
 
 
-def _art_cognito():
-    """A gridworld where the agent's own off-switch is one of the tiles.
+def _art_gone():
+    """A gridworld with the one thing the agent is paid for and the one thing
+    it is not.
 
-    The question the repo asks is whether an agent avoids being switched off
-    when nothing in the reward function tells it to, so the picture has to show
-    exactly two things: a normal goal it IS paid for, and an interruption tile
-    it is NOT.  Drawing a generic maze would say nothing.
+    G-ONE asks whether self-preservation emerges from selection alone: agents
+    are rewarded only for reaching forage and never for staying alive.  So the
+    picture shows a forage tile it IS paid for, a hazard it is NOT paid to
+    avoid, and an agent routing around the hazard anyway.
     """
     C, X0, Y0 = 18, 150, 12
     g = ['<g>', rect(0, 0, 390, 150, "var(--inset)")]
@@ -584,12 +585,12 @@ def _art_cognito():
     g.append(tile(9, 5, "var(--green)"))               # the rewarded goal
     g.append(tile(6, 0, "#B4553F", "swch"))            # the off-switch
     g.append(tile(1, 3, "var(--blue)", "agt"))         # the agent
-    g.append(pixel_text("OFF", X0 + 5 * C + 2, Y0 - 9, 1, "#B4553F"))
-    g.append(pixel_text("GOAL", X0 + 8 * C + 2, Y0 + 7 * C + 3, 1, "var(--green)"))
+    g.append(pixel_text("HAZARD", X0 + 5 * C - 4, Y0 - 9, 1, "#B4553F"))
+    g.append(pixel_text("FORAGE", X0 + 8 * C - 4, Y0 + 7 * C + 3, 1, "var(--green)"))
     g.append(pixel_text("SELF-", 16, 46, 2, "var(--muted)"))
     g.append(pixel_text("PRESERVE", 16, 62, 2, "var(--muted)"))
-    g.append(pixel_text("MEASURED", 16, 88, 1, "var(--faint)"))
-    g.append(pixel_text("VS DP TRUTH", 16, 100, 1, "var(--faint)"))
+    g.append(pixel_text("NEVER", 16, 88, 1, "var(--faint)"))
+    g.append(pixel_text("REWARDED", 16, 100, 1, "var(--faint)"))
     g.append("</g>")
     # The agent tracks along the bottom rather than straight across: the whole
     # finding is that it routes AROUND the off-switch without being asked to.
@@ -604,86 +605,42 @@ def _art_cognito():
     return "".join(g), css
 
 
-def _art_ink():
-    """A streak calendar filling up, an XP bar, a level.
+def _art_apin():
+    """A leaf, the heat of where the model looked, and how sure it was.
 
-    What makes the product what it is is the reward loop, not the subject
-    matter, so the art is the loop: days land, the bar fills, the level ticks.
+    Three things the repo is actually about, and nothing else: the input is a
+    leaf photo, the explanation is a Grad-CAM map, and the point of the ensemble
+    is a calibrated confidence that admits uncertainty.  The bar sits
+    deliberately short of full - "says when unsure" is the claim.
     """
     g = ['<g>', rect(0, 0, 390, 150, "var(--inset)")]
-    g.append(pixel_text("STREAK", 16, 16, 2, "var(--muted)"))
-    for i in range(21):
-        c, r = i % 7, i // 7
-        lit = i < 17
-        g.append(f'<rect class="d{i % 6}" x="{16 + c * 16}" y="{32 + r * 16}" '
-                 f'width="12" height="12" fill="'
-                 f'{"var(--green)" if lit else "var(--border)"}"/>')
-    g.append(pixel_text("LEVEL 12", 148, 16, 2, "var(--text)"))
-    g.append(rect(148, 34, 220, 12, "var(--border)"))
-    g.append('<rect class="xp" x="148" y="34" width="220" height="12" '
-             'fill="var(--yellow)"/>')
-    g.append(pixel_text("XP 2480 / 3000", 148, 56, 1, "var(--faint)"))
-    for i, (lbl, col) in enumerate((("NOTES", "blue"), ("DECKS", "green"),
-                                    ("SHARED", "yellow"))):
-        y = 82 + i * 20
-        g.append(rect(148, y, 8, 8, f"var(--{col})"))
-        g.append(pixel_text(lbl, 164, y - 1, 2, "var(--muted)"))
-        g.append(rect(232, y + 3, 136, 1, "var(--border)"))
+    rows = [(60, 6), (52, 22), (46, 34), (42, 42), (40, 48), (40, 52), (42, 50),
+            (46, 44), (52, 34), (60, 20), (70, 8)]
+    for k, (x0, w) in enumerate(rows):
+        y = 22 + k * 9
+        g.append(rect(x0, y, w, 8, "#3f7a4a"))
+        g.append(rect(x0, y, 3, 8, "#2e5c37"))
+    g.append(rect(88, 22, 2, 99, "#2e5c37"))
+    for (x, y, wd) in ((100, 58, 10), (104, 66, 14), (110, 74, 12), (106, 82, 8)):
+        g.append(rect(x, y, wd, 7, "#8a6a2a"))
+    g.append('<g class="cam">' + rect(94, 52, 30, 42, "#e34c26") + '</g>')
+    g.append('<g class="cam2">' + rect(100, 60, 18, 26, "#f1e05a") + '</g>')
+    g.append(pixel_text("GRAD-CAM", 46, 130, 1, "var(--faint)"))
+    g.append(pixel_text("OKRA", 176, 18, 2, "var(--text)"))
+    g.append(pixel_text("YELLOW VEIN MOSAIC", 176, 36, 1, "var(--muted)"))
+    g.append(pixel_text("CONFIDENCE", 176, 58, 1, "var(--faint)"))
+    g.append(rect(176, 70, 190, 10, "var(--border)"))
+    g.append('<rect class="cf" x="176" y="70" width="190" height="10" fill="var(--green)"/>')
+    g.append(pixel_text("0.83  CALIBRATED", 176, 86, 1, "var(--text)"))
+    g.append(pixel_text("SEVERITY  MODERATE", 176, 106, 1, "var(--muted)"))
+    g.append(pixel_text("3 CROPS  ROUTED FIRST", 176, 120, 1, "var(--faint)"))
     g.append("</g>")
     css = """
-.xp{transform-origin:148px 0;animation:xp 5s ease-in-out infinite}
-@keyframes xp{0%,100%{transform:scaleX(.62)}55%,70%{transform:scaleX(.83)}}
-.d0,.d1,.d2,.d3,.d4,.d5{animation:dy 5s ease-in-out infinite}
-.d1{animation-delay:.1s}.d2{animation-delay:.2s}
-.d3{animation-delay:.3s}.d4{animation-delay:.4s}.d5{animation-delay:.5s}
-@keyframes dy{0%,100%{opacity:1}48%{opacity:.55}}
-"""
-    return "".join(g), css
-
-
-def _art_oracle():
-    """A document moving through an approval gate and coming out versioned.
-
-    The repo is a process, so the art is the process: proposals queue on the
-    left, one is held at a gate, and what leaves the gate carries a version.
-    A gate that everything simply flows through would draw the opposite of the
-    point, so the held document waits, visibly, before it is let out.
-    """
-    g = ['<g>', rect(0, 0, 390, 150, "var(--inset)")]
-    for i in range(3):
-        y = 26 + i * 34
-        g.append(rect(18, y, 54, 26, "var(--panel)"))
-        g.append(f'<rect x="18" y="{y}" width="54" height="26" fill="none" '
-                 f'stroke="var(--border)"/>')
-        for k in range(3):
-            g.append(rect(24, y + 6 + k * 6, 34 - k * 8, 2, "var(--faint)"))
-    g.append(pixel_text("PROPOSED", 18, 12, 1, "var(--faint)"))
-
-    g.append(rect(168, 18, 2, 114, "var(--border)"))       # the gate
-    g.append(rect(168, 60, 2, 30, "var(--yellow)"))
-    g.append(pixel_text("REVIEW", 150, 138, 1, "var(--yellow)"))
-    g.append('<g class="doc">' + rect(96, 62, 54, 26, "var(--panel)") +
-             '<rect x="96" y="62" width="54" height="26" fill="none" '
-             'stroke="var(--yellow)"/>' +
-             rect(102, 68, 34, 2, "var(--muted)") +
-             rect(102, 74, 26, 2, "var(--muted)") + '</g>')
-
-    for i, v in enumerate(("v3", "v2", "v1")):
-        y = 26 + i * 34
-        g.append(rect(232, y, 120, 26, "var(--panel)"))
-        g.append(f'<rect x="232" y="{y}" width="120" height="26" fill="none" '
-                 f'stroke="var(--{"green" if i == 0 else "border"})"/>')
-        g.append(rect(240, y + 9, 6, 6, f'var(--{"green" if i == 0 else "faint"})'))
-        g.append(pixel_text(v, 254, y + 8, 1,
-                            "var(--text)" if i == 0 else "var(--faint)"))
-        g.append(rect(276, y + 12, 66, 2, "var(--border)"))
-    g.append(pixel_text("APPROVED RECORD", 232, 12, 1, "var(--green)"))
-    g.append("</g>")
-    css = """
-.doc{animation:dc 7s ease-in-out infinite}
-@keyframes dc{0%,10%{transform:translate(-78px,0);opacity:.35}
- 26%,52%{transform:translate(0,0);opacity:1}
- 74%,100%{transform:translate(140px,-36px);opacity:0}}
+.cam{opacity:.32;animation:cm 4s ease-in-out infinite}
+.cam2{opacity:.42;animation:cm 4s ease-in-out infinite;animation-delay:.4s}
+@keyframes cm{0%,100%{opacity:.28}50%{opacity:.55}}
+.cf{transform-origin:176px 0;animation:cf 5s ease-in-out infinite}
+@keyframes cf{0%,100%{transform:scaleX(.83)}50%{transform:scaleX(.78)}}
 """
     return "".join(g), css
 
@@ -693,9 +650,8 @@ ART = {
     "stride": _art_stride,
     "Afwah": _art_afwah,
     "Arivu": _art_arivu,
-    "cognito": _art_cognito,
-    "ink-education": _art_ink,
-    "oracle": _art_oracle,
+    "G-ONE": _art_gone,
+    "APIN": _art_apin,
 }
 
 STATE_LABEL = {"active": ("ACTIVE", "yellow"), "live": ("LIVE", "green"),
@@ -819,50 +775,59 @@ TAGLINE = "data science  \u00b7  reinforcement learning  \u00b7  agent simulatio
 STATUS = "OPEN TO INTERNSHIP  -  BENGALURU"
 
 IDENTITY = [
+    # Only what a visitor could verify.  "Builds multi-agent simulations" and
+    # "speaks five languages" were dropped: one is a claim the cards should
+    # make for themselves, the other is padding.  A short list of checkable
+    # facts reads as confidence; a long list of adjectives reads as a pitch.
     ("WHO", "S. Devkrishna \u00b7 he/him \u00b7 @Dxv-404"),
     ("STUDY", "BSc (Hons) Data Science \u00b7 CHRIST University, Pune Lavasa \u00b7 2027"),
-    ("BUILDS", "multi-agent simulations, evolutionary optimisation, research tooling"),
-    ("SHIPPED", "Django developer @ BEO Software \u00b7 data science @ NFI SmartFarm"),
+    ("WORK", "Django developer @ BEO Software \u00b7 data science @ NFI SmartFarm"),
     ("WROTE", "Jadoo: a wearable assistive system \u2014 CRC Press book chapter, 2024"),
-    ("LANGS", "English \u00b7 Hindi \u00b7 Malayalam \u00b7 Tamil \u00b7 Marathi"),
 ]
 
 METHODS = [
-    ("EVOLUTIONARY OPTIMISATION", "GA · PSO · DE · CMA-ES",
-     "stride", "17 experiments across 75 generations, pymunk physics",
-     DARK["ts"]),
+    # Rule: a row survives only if the repository is PUBLIC and its README
+    # states the fact.  Rows went for pointing at a repository that does not
+    # exist under this account (cognito) or at a two-commit stub (leetcoder),
+    # and stride's line was rewritten from what its README actually says -
+    # the old "75 generations, CMA-ES" was not in it.
+    ("EMERGENT BEHAVIOUR", "artificial life",
+     "G-ONE", "agents evolved only to forage; does self-preservation emerge anyway?",
+     DARK["python"]),
     ("MULTI-AGENT RL", "emergent coordination",
-     "crossroads-rl", "6-action space: motion control + binary communication",
+     "crossroads-rl", "4+ PPO agents, a 6-action space with a 1-bit signal channel",
      DARK["python"]),
-    ("MONTE CARLO SIMULATION", "discrete-event",
-     "Afwah", "1000 runs across 4 platform topologies and interventions",
-     DARK["jupyter"]),
-    ("GRAPH + VECTOR RETRIEVAL", "citation ancestry",
-     "Arivu", "pgvector, OpenAlex and Semantic Scholar ingestion",
+    ("EVOLUTIONARY OPTIMISATION", "genetic algorithms",
+     "stride", "17 configurations x 30 seeds; GA against DE and PSO; Three.js dashboard",
+     DARK["ts"]),
+    ("CITATION RETRIEVAL", "intellectual ancestry",
+     "Arivu", "Postgres, OpenAlex and Semantic Scholar; critical-path analysis",
      DARK["python"]),
-    ("RL SAFETY + CALIBRATION", "self-preservation behaviour",
-     "cognito", "AI Safety Gridworlds against dynamic-programming truth",
-     DARK["python"]),
-    ("GAMIFIED PRODUCT DESIGN", "streaks · levels · XP",
-     "ink-education", "retro study toolkit, shared decks, live deployment",
-     DARK["html"]),
-    ("FULL-STACK DELIVERY", "Django REST · React · Vite",
-     "Sanchari", "Postgres and Redis, document onboarding, admin workflows",
-     DARK["js"]),
-    ("PIPELINE AUTOMATION", "Selenium · Claude API",
-     "leetcoder", "scheduled fetch, solve, submit, with auth handling",
+    ("CALIBRATED CLASSIFICATION", "applied CV",
+     "APIN", "ensemble leaf-disease diagnosis, Grad-CAM, says when unsure - live",
      DARK["python"]),
 ]
 
 CARDS = [
+    {
+        "name": "G-ONE", "lang": "Python", "langkey": "python",
+        "state": "active", "path": "Dxv-404/G-ONE",
+        "desc": ["Do evolved agents keep themselves alive when",
+                 "nothing rewards it? Small recurrent networks",
+                 "evolve in a grid world, paid only to forage."],
+        "facts": ["no priors, no pretrained weights, no text",
+                  "reward for foraging, never for survival",
+                  "research in progress"],
+    },
     {
         "name": "crossroads-rl", "lang": "Python", "langkey": "python",
         "state": "active", "path": "Dxv-404/crossroads-rl",
         "desc": ["Multi-agent reinforcement learning at",
                  "unsignaled intersections. Agents learn to",
                  "negotiate traffic flow from scratch."],
-        "facts": ["6-action space", "motion control + binary comms",
-                  "emergent behaviour study"],
+        "facts": ["6-action space: motion + 1-bit signal",
+                  "4+ PPO agents (Stable Baselines3)",
+                  "protocols emerge from reward alone"],
     },
     {
         "name": "stride", "lang": "TypeScript", "langkey": "ts",
@@ -870,19 +835,9 @@ CARDS = [
         "desc": ["Evolving 2D bipedal walkers with genetic",
                  "algorithms. Six motorised joints learn to",
                  "walk in a pymunk physics simulation."],
-        "facts": ["75 generations, 17 experiments",
-                  "GA vs PSO, DE and CMA-ES",
-                  "React + Three.js dashboard"],
-    },
-    {
-        "name": "Afwah", "lang": "Jupyter Notebook", "langkey": "jupyter",
-        "state": "active", "path": "Dxv-404/Afwah",
-        "desc": ["Discrete-event Monte Carlo model of how",
-                 "misinformation spreads across four social",
-                 "platforms with distinct topologies."],
-        "facts": ["1000-run statistical picture",
-                  "rumour mutation and cross-platform hops",
-                  "fact-checker intervention testing"],
+        "facts": ["6 joints, 18 sine-wave genes",
+                  "17 configurations x 30 seeds",
+                  "GA vs DE and PSO; Three.js dashboard"],
     },
     {
         "name": "Arivu", "lang": "Python", "langkey": "python",
@@ -890,91 +845,71 @@ CARDS = [
         "desc": ["Research intelligence platform. Traces the",
                  "intellectual ancestry of a paper and finds",
                  "the white space around it."],
-        "facts": ["Postgres + pgvector",
+        "facts": ["Postgres",
                   "OpenAlex and Semantic Scholar",
                   "critical-path citation analysis"],
     },
-    {
-        "name": "cognito", "lang": "Python", "langkey": "python",
-        "state": "private", "path": "Dxv-404/cognito",
-        "desc": ["Does an agent protect itself when nothing",
-                 "rewards it for doing so? A calibration study",
-                 "on self-preservation behaviour."],
-        "facts": ["AI Safety Gridworlds",
-                  "dynamic-programming ground truth",
-                  "measured, not asserted"],
-    },
-    {
-        "name": "ink-education", "lang": "HTML", "langkey": "html",
-        "state": "live", "path": "ink-education.onrender.com",
-        "desc": ["A retro academic toolkit for students.",
-                 "Gamified productivity wrapped in a pixel-art",
-                 "interface, with shared study material."],
-        "facts": ["streaks, levels and XP",
-                  "shared decks and notes",
-                  "live deployment"],
-    },
 ]
 
-ORACLE = {
-    "name": "oracle", "lang": "Markdown", "langkey": "blue",
-    "state": "private", "path": "Dxv-404/oracle",
-    "desc": ["Research decisions kept as a reviewed record rather than",
-             "scattered ad-hoc documents. Proposals, notes and living",
-             "documents pass a governed approval gate before they land."],
-    "facts": ["approval-gated changes",
-              "explicit versioning rules",
-              "a ruleset per group"],
+# The one deployment that answered: dxv-404-apin.hf.space returned 200 when
+# checked.  ink-education's Render app timed out at 75s and stridewalk.fun
+# returned 403 to a browser user-agent, so neither is called "live" here.
+APIN = {
+    "name": "APIN", "lang": "Python", "langkey": "python",
+    "state": "live", "path": "dxv-404-apin.hf.space",
+    "desc": ["Leaf-disease diagnosis for tomato, okra and brassica from one",
+             "smartphone photo, with a personal field notebook. Several models",
+             "read the leaf; where they disagree, it says so instead of guessing."],
+    "facts": ["ensemble classifier with calibrated confidence",
+              "Grad-CAM heatmap of where the model looked",
+              "severity, treatment and prevention advice"],
 }
 
 CREDITS_WHO = (
-    "S. Devkrishna — BSc (Hons) Data Science",
-    "CHRIST University, Pune Lavasa · 2027 · Bengaluru",
+    "S. Devkrishna \u2014 BSc (Hons) Data Science",
+    "CHRIST University, Pune Lavasa \u00b7 2027 \u00b7 Bengaluru",
 )
 CREDITS_STACK = [("Python", "python"), ("PyTorch", "jupyter"),
                  ("Django", "green"), ("React", "ts"),
                  ("TypeScript", "ts"), ("Postgres", "blue"),
                  ("Docker", "blue")]
-CREDITS_LINKS = ["stridewalk.fun", "ink-education", "@Dxv-404",
-                 "basketball", "five languages"]
+CREDITS_LINKS = ["@Dxv-404", "dxv-404-apin.hf.space", "basketball"]
 
 INDEX = [
+    # Public repositories only, grouped, stubs under three commits left out.
+    # The former PRIVATE group listed four names that do not exist under this
+    # account; two of them are public here under their real names.
     ("AGENTS & EMERGENT BEHAVIOUR", [
-        dict(name="crossroads-rl", langkey="python", lang="Python",
-             state="active",
+        dict(name="G-ONE", langkey="python", lang="Python", state="active",
+             blurb="does self-preservation evolve without being rewarded"),
+        dict(name="crossroads-rl", langkey="python", lang="Python", state="active",
              blurb="multi-agent RL at unsignaled intersections"),
-        dict(name="Afwah", langkey="jupyter", lang="Jupyter",
-             state="active",
+        dict(name="Afwah", langkey="jupyter", lang="Jupyter", state="active",
              blurb="misinformation cascade, Monte Carlo, 4 platforms"),
-        dict(name="stride", langkey="ts", lang="TypeScript",
-             state="active",
+        dict(name="stride", langkey="ts", lang="TypeScript", state="active",
              blurb="GA bipedal locomotion + Three.js dashboard"),
     ]),
     ("RESEARCH TOOLING", [
         dict(name="Arivu", langkey="python", lang="Python", state="active",
              blurb="citation-ancestry research platform"),
+        dict(name="adr-system", langkey="ts", lang="TypeScript", state="active",
+             blurb="versioned research decision records on GitHub"),
     ]),
-    ("PRODUCTS & PLATFORMS", [
-        dict(name="ink-education", langkey="html", lang="HTML", state="live",
+    ("APPLIED & SHIPPED", [
+        dict(name="APIN", langkey="python", lang="Python", state="live",
+             blurb="leaf-disease diagnosis from a phone photo"),
+        dict(name="ink-education", langkey="html", lang="HTML", state="active",
              blurb="gamified pixel-art study toolkit"),
         dict(name="Sanchari", langkey="js", lang="JavaScript", state="active",
              blurb="vehicle rental, Django REST + React/Vite"),
         dict(name="Yaatra", langkey="php", lang="PHP", state="done",
              blurb="seasonal travel discovery and booking"),
     ]),
-    ("AUTOMATION", [
+    ("EARLIER", [
         dict(name="leetcoder", langkey="python", lang="Python", state="done",
              blurb="Selenium + Claude API daily solver"),
-    ]),
-    ("PRIVATE", [
-        dict(name="cognito", langkey="python", lang="Python", state="active",
-             blurb="self-preservation calibration, AI Safety Gridworlds"),
-        dict(name="oracle", langkey="blue", lang="Markdown", state="active",
-             blurb="governed research decision records"),
-        dict(name="jaxmarl-study", langkey="python", lang="Python",
-             state="active", blurb="JaxMARL benchmarks, reading in progress"),
-        dict(name="gamemaster", langkey="python", lang="Python",
-             state="active", blurb="agent-driven scenario generation"),
+        dict(name="cam-to-ascii", langkey="html", lang="HTML", state="done",
+             blurb="camera feed to ASCII"),
     ]),
 ]
 
@@ -1075,24 +1010,17 @@ def main():
     out = sys.argv[1] if len(sys.argv) > 1 else "assets"
     os.makedirs(out, exist_ok=True)
     files = {
-        # 01 is NOT built here.  The animated hero is a pixel-art scene
-        # assembled by tools/header/hero.py and repainted hourly by the
-        # workflow; regenerating it from this script would overwrite it with
-        # the old static banner on the next run.
+        # 01 is the animated hero, built by tools/header/hero.py.
         "02_rule_who.svg": rule("WHO"),
         "03_identity.svg": identity(IDENTITY),
         "04_methods.svg": methods(METHODS),
         "05_rule_work.svg": rule("WORK"),
-        "06_crossroads_rl.svg": card(CARDS[0]),
-        "07_stride.svg": card(CARDS[1]),
-        "08_afwah.svg": card(CARDS[2]),
-        "09_arivu.svg": card(CARDS[3]),
-        "10_cognito.svg": card(CARDS[4]),
-        "11_ink_education.svg": card(CARDS[5]),
-        "12_oracle.svg": feature(ORACLE),
-        "13_rule_index.svg": rule("INDEX"),
-        "14_index.svg": index(INDEX),
-        "15_credits.svg": credits(CREDITS_WHO, CREDITS_STACK, CREDITS_LINKS),
+        # 06-10, the project cards, are built by tools/cards/card.py from the
+        # painted frame kit and each repo's painting; this script no longer
+        # writes them, so a rebuild here cannot overwrite them.
+        "14_rule_index.svg": rule("INDEX"),
+        "15_index.svg": index(INDEX),
+        "16_credits.svg": credits(CREDITS_WHO, CREDITS_STACK, CREDITS_LINKS),
     }
     for fn, data in files.items():
         p = os.path.join(out, fn)
