@@ -781,7 +781,7 @@ IDENTITY = [
     # facts reads as confidence; a long list of adjectives reads as a pitch.
     ("WHO", "S. Devkrishna \u00b7 he/him \u00b7 @Dxv-404"),
     ("STUDY", "BSc (Hons) Data Science \u00b7 CHRIST University, Pune Lavasa \u00b7 2027"),
-    ("WORK", "Django developer @ BEO Software \u00b7 data science @ NFI SmartFarm"),
+    ("WORK", "AI intern @ TCS \u00b7 Django developer @ BEO Software \u00b7 data science @ NFI SmartFarm"),
     ("WROTE", "Jadoo: a wearable assistive system \u2014 CRC Press book chapter, 2024"),
 ]
 
@@ -864,16 +864,6 @@ APIN = {
               "Grad-CAM heatmap of where the model looked",
               "severity, treatment and prevention advice"],
 }
-
-CREDITS_WHO = (
-    "S. Devkrishna \u2014 BSc (Hons) Data Science",
-    "CHRIST University, Pune Lavasa \u00b7 2027 \u00b7 Bengaluru",
-)
-CREDITS_STACK = [("Python", "python"), ("PyTorch", "jupyter"),
-                 ("Django", "green"), ("React", "ts"),
-                 ("TypeScript", "ts"), ("Postgres", "blue"),
-                 ("Docker", "blue")]
-CREDITS_LINKS = ["@Dxv-404", "dxv-404-apin.hf.space", "basketball"]
 
 INDEX = [
     # Public repositories only, grouped, stubs under three commits left out.
@@ -959,51 +949,7 @@ def feature(repo):
                desc=f"{repo['name']} — {' '.join(repo['desc'])}")
 
 
-def credits(who, stack, links):
-    """The closing strip: who, what with, where.
 
-    Deliberately the quietest panel in the README - no art, no animation
-    beyond a single cursor.  It is the last thing on the page, and something
-    blinking for attention at the end undoes the settling the header spent
-    sixty seconds establishing.
-    """
-    W, H = 900, 168
-
-    def mw(t, size):
-        """Width of monospace text. text_width() measures the 5x7 DISPLAY
-        face and takes a scale, not a font size - passing a size to it here
-        reported roughly six times the real width and pushed the stack row
-        clean off the panel."""
-        return len(t) * size * 0.6
-
-    b = [
-        f'<rect width="{W}" height="{H}" fill="var(--ground)"/>',
-        panel(0, 0, W, H, "var(--panel)", "var(--border)"),
-        pixel_text("CREDITS", 24, 20, 2, "var(--muted)", tracking=2),
-        rect(24, 40, W - 48, 1, "var(--border)"),
-        mono(who[0], 24, 66, 12, "var(--text)", weight="600"),
-        mono(who[1], 24, 86, 11, "var(--muted)"),
-        pixel_text("STACK", 24, 108, 1, "var(--faint)"),
-    ]
-    x = 72
-    for name, key in stack:
-        b.append(rect(x, 106, 6, 6, f"var(--{key})"))
-        b.append(mono(name, x + 12, 113, 10, "var(--muted)"))
-        x += 24 + mw(name, 10)
-    b.append(rect(24, 128, W - 48, 1, "var(--border)"))
-    x = 24
-    for label in links:
-        b.append(mono("▸ " + label, x, 152, 11, "var(--blue)",
-                      weight="600"))
-        x += 26 + mw("▸ " + label, 11)
-    b.append(f'<rect class="cur" x="{W - 40}" y="142" width="8" height="12" '
-             f'fill="var(--green)"/>')
-    css = (".cur{animation:cu 1.2s steps(1,end) infinite}"
-           "@keyframes cu{0%,55%{opacity:1}56%,100%{opacity:0}}")
-    return svg(W, H, "".join(b), css, title="Credits",
-               desc=f"{who[0]}. {who[1]}. "
-                    f"Stack: {', '.join(n for n, _ in stack)}. "
-                    f"Links: {', '.join(links)}.")
 
 
 def main():
@@ -1020,7 +966,6 @@ def main():
         # writes them, so a rebuild here cannot overwrite them.
         "14_rule_index.svg": rule("INDEX"),
         "15_index.svg": index(INDEX),
-        "16_credits.svg": credits(CREDITS_WHO, CREDITS_STACK, CREDITS_LINKS),
     }
     for fn, data in files.items():
         p = os.path.join(out, fn)

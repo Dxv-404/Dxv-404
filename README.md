@@ -3,7 +3,7 @@
   github.com/Dxv-404  ·  profile README
   ─────────────────────────────────────────────────────────────────────
   Every image is a generated, standalone SVG. Don't hand-edit them.
-  Panels (02-05, 14-16): change copy in the DATA block at the bottom of
+  Panels (02-05, 14-15): change copy in the DATA block at the bottom of
   tools/build.py, then:
 
       cd tools && python3 build.py ../assets
@@ -33,7 +33,7 @@
 
 <img src="assets/02_rule_who.svg" width="880" alt="Section: who">
 
-<img src="assets/03_identity.svg" width="880" alt="S. Devkrishna, he/him, @Dxv-404. BSc (Hons) Data Science at CHRIST University, Pune Lavasa, 2027. Django developer at BEO Software; data science at NFI SmartFarm. Co-author of Jadoo: a wearable assistive system, CRC Press book chapter, 2024.">
+<img src="assets/03_identity.svg" width="880" alt="S. Devkrishna, he/him, @Dxv-404. BSc (Hons) Data Science at CHRIST University, Pune Lavasa, 2027. AI intern at TCS; Django developer at BEO Software; data science at NFI SmartFarm. Co-author of Jadoo: a wearable assistive system, CRC Press book chapter, 2024.">
 
 <img src="assets/04_methods.svg" width="880" alt="Methods and where they are demonstrated. Emergent behaviour in G-ONE: evolved recurrent agents rewarded only to forage. Multi-agent RL in crossroads-rl: PPO agents with a six-action space and a one-bit signal. Evolutionary optimisation in stride: 17 configurations, 30 seeds, GA against DE and PSO. Citation retrieval in Arivu: Postgres, OpenAlex and Semantic Scholar. Calibrated classification in APIN: ensemble leaf-disease diagnosis with Grad-CAM, live.">
 
@@ -46,7 +46,5 @@
 <img src="assets/14_rule_index.svg" width="880" alt="Section: index">
 
 <img src="assets/15_index.svg" width="880" alt="Repository index. Agents and emergent behaviour: G-ONE, crossroads-rl, Afwah, stride. Research tooling: Arivu, adr-system. Applied and shipped: APIN (live), ink-education, Sanchari, Yaatra. Earlier: leetcoder, cam-to-ascii.">
-
-<img src="assets/16_credits.svg" width="880" alt="Credits. S. Devkrishna, BSc (Hons) Data Science, CHRIST University Pune Lavasa, 2027, Bengaluru. Python, PyTorch, Django, React, TypeScript, Postgres, Docker. Links: @Dxv-404, the APIN demo, basketball.">
 
 [github.com/Dxv-404](https://github.com/Dxv-404) · [APIN live demo](https://dxv-404-apin.hf.space)
