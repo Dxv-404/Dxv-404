@@ -15,6 +15,15 @@
 
   Cards fade in on load, staggered down the grid (reveal= in each spec).
 
+  The ending (16_ending_*.svg) is the header's hill again, at dusk: the figure
+  pinning the live apps to a board. Six slices of one scene, side by side, the
+  four note slices linked. Built by tools/ending/ending.py from the header's
+  layers and the painted kit in tools/ending/kit:
+
+      python tools/ending/ending.py
+
+  It does not follow the clock; only the hero does.
+
   The hero is ONE file, assets/01_hero.svg. Do NOT edit it by hand:
   .github/workflows/hero.yml regenerates it every three hours for the real
   time of day in IST and the week's commit count, and a manual edit is
@@ -47,4 +56,4 @@
 
 <img src="assets/15_index.svg" width="880" alt="Repository index. Agents and emergent behaviour: G-ONE, crossroads-rl, Afwah, stride. Research tooling: Arivu, adr-system. Applied and shipped: APIN (live), ink-education, Sanchari, Yaatra. Earlier: leetcoder, cam-to-ascii.">
 
-[github.com/Dxv-404](https://github.com/Dxv-404) · [APIN live demo](https://dxv-404-apin.hf.space)
+<p align="center"><img src="assets/16_ending_a.svg" width="32.624%" alt=""><a href="https://dxv-404-apin.hf.space"><img src="assets/16_ending_apin.svg" width="10.638%" alt="APIN: leaf doctor one photo. Pinned to the board; opens https://dxv-404-apin.hf.space"></a><a href="https://oracleonline.app"><img src="assets/16_ending_oracle.svg" width="11.111%" alt="ORACLE: a group's decisions. Pinned to the board; opens https://oracleonline.app"></a><a href="https://www.stridewalk.fun"><img src="assets/16_ending_stride.svg" width="10.165%" alt="STRIDE: evolved walkers. Pinned to the board; opens https://www.stridewalk.fun"></a><a href="https://github.com/Dxv-404/ink-education"><img src="assets/16_ending_ink.svg" width="10.875%" alt="INK: studying as a game. Pinned to the board; opens https://github.com/Dxv-404/ink-education"></a><img src="assets/16_ending_b.svg" width="24.586%" alt=""></p>
