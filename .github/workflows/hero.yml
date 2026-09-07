@@ -2,13 +2,14 @@ name: hero
 
 # Repaint the README header for the current hour and recent commit activity.
 #
-# Every three hours is deliberate. The scene has four states, so a shorter
-# interval would rewrite the SVG without changing which state it shows, and
-# each run is a commit on a profile repo — the timeline is visible to anyone
-# who looks at it.
+# Hourly, though the scene only has four states, because GitHub's cron is a
+# best-effort queue: a three-hourly schedule was skipping runs and the header
+# sat on "day" into the night. A run that finds the same state makes no
+# commit, so the extra runs cost nothing on the timeline. The state edges are
+# 05:00, 09:00, 17:00 and 20:00 IST, i.e. :30 past the hour in UTC, so :35.
 on:
   schedule:
-    - cron: "20 */3 * * *"
+    - cron: "35 * * * *"
   workflow_dispatch:
   push:
     branches: [main]

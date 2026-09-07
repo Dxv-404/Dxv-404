@@ -239,7 +239,7 @@ def readme_block():
     out = ['<p align="center">']
     for k in range(6):
         w = (cuts[k + 1] - cuts[k]) / total * 100
-        img = f'<img src="assets/16_ending_{names[k]}.svg" width="{w:.3f}%" align="top" alt="">'
+        img = f'<a name="ending-{names[k]}"><img src="assets/16_ending_{names[k]}.svg" width="{w:.3f}%" align="top" alt=""></a>'
         if 1 <= k <= 4:
             name, lines, href = NOTES[k - 1]
             img = f'<a href="{href}"><img src="assets/16_ending_{names[k]}.svg" width="{w:.3f}%" align="top" alt="{name}: {lines[0].lower()} {lines[1].lower()}. Pinned to the board; opens {href}"></a>'
