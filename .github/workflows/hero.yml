@@ -11,8 +11,15 @@ on:
   schedule:
     - cron: "35 * * * *"
     - cron: "5 * * * *"
-  # the auditor routine (claude.ai/code/routines) and anything else with a
-  # token can fire this directly when the schedule above is dropped
+  # GitHub's scheduler drops most of the ticks above (about 1 in 6 fires), so
+  # an external pinger with a real clock fires this directly. Dispatched runs
+  # are never throttled. Any free cron service works; the one in use is
+  # cron-job.org, hourly at :45 UTC, calling
+  #   POST https://api.github.com/repos/Dxv-404/Dxv-404/actions/workflows/hero.yml/dispatches
+  #   headers: Authorization: Bearer <fine-grained PAT, Actions: read+write on this repo>
+  #            Accept: application/vnd.github+json
+  #   body:    {"ref":"main"}
+  # A run that finds the same state makes no commit, so hourly costs nothing.
   workflow_dispatch:
   repository_dispatch:
     types: [repaint]
