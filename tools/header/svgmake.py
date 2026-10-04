@@ -489,7 +489,7 @@ def moon_layer(W, H, phase, x=214, y=22, R=6, dim=1.0):
 def build(layerdir, out_path, commits=24, pushed_today=True, seed=7,
           W=440, H=140, scale=2, stars=26, accent="#B4553F", typ=None,
           ink=None, sub=None, mut=None, win_ratio=2.6,
-          plane=True, moon=None, moon_at=None):
+          plane=True, moon=None, moon_at=None, state="dusk"):
     meta = json.load(open(f"{layerdir}/scene.json"))
     rng = random.Random(seed)
     base = Image.open(f"{layerdir}/base.png").convert("RGB")
@@ -608,9 +608,9 @@ def build(layerdir, out_path, commits=24, pushed_today=True, seed=7,
     style = ("<style>" + "".join(css) +
              "*{shape-rendering:crispEdges}#win rect{will-change:opacity}</style>")
     svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" '
-           f'width="{W*scale}" height="{H*scale}" role="img" '
+           f'width="{W*scale}" height="{H*scale}" role="img" data-state="{state}" '
            f'aria-label="Pixel-art header: a figure sits on a hilltop above a '
-           f'city at dusk">{style}{"".join(parts_out)}</svg>')
+           f'city at {state}">{style}{"".join(parts_out)}</svg>')
     open(out_path, "w", encoding="utf-8").write(svg)
     return dict(bytes=len(svg.encode()), lit=lit_n, total=len(meta["windows"]),
                 clumps=len(clumps))

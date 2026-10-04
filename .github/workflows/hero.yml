@@ -10,7 +10,12 @@ name: hero
 on:
   schedule:
     - cron: "35 * * * *"
+    - cron: "5 * * * *"
+  # the auditor routine (claude.ai/code/routines) and anything else with a
+  # token can fire this directly when the schedule above is dropped
   workflow_dispatch:
+  repository_dispatch:
+    types: [repaint]
   push:
     branches: [main]
     paths:

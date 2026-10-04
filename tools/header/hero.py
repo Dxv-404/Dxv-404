@@ -106,7 +106,7 @@ def main():
                       commits=int(round(commits * h["winmul"])),
                       win_ratio=WIN_RATIO, plane=h["plane"],
                       moon=(phase if h["moon"] else None),
-                      moon_at=dict(dim=h["dim"]))
+                      moon_at=dict(dim=h["dim"]), state=state)
     print(f"{out}  state={state}  commits={commits}  "
           f"lit={r['lit']}/{r['total']}  stars={h['stars']}  "
           f"plane={h['plane']}  moon={(phase if h['moon'] else 0):.2f}  "
