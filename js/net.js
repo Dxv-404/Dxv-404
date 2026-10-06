@@ -104,11 +104,18 @@ export class Link {
     dc.onerror = () => {};
     dc.onmessage = (e) => {
       this.lastSeen = Date.now();
+      this.setQuiet(false);
       let msg; try { msg = JSON.parse(e.data); } catch { return; }
       if (msg.t === 'ping') return this.send({ t: 'pong' });
       if (msg.t === 'pong') return;
       this.onmessage && this.onmessage(msg);
     };
+  }
+
+  setQuiet(q) {
+    if (!!this.quiet === q || this.closed) return;
+    this.quiet = q;
+    this.onquiet && this.onquiet(q);
   }
 
   _closed() {
@@ -122,6 +129,7 @@ export class Link {
     this.pc.onconnectionstatechange = () => {
       const st = this.pc.connectionState;
       if (st === 'failed' || st === 'closed') this._closed();
+      else if (st === 'disconnected') this.setQuiet(true);
     };
   }
 
@@ -169,15 +177,22 @@ export class Link {
   }
 }
 
-// Keepalive: pings every 2.5 s; a link silent for 9 s is treated as dropped.
-export function keepAlive(link, onDead) {
-  const iv = setInterval(() => {
+// Keepalive. A phone whose screen is locked or whose browser is in the background
+// gets its timers slowed down, so silence is NOT a dropped connection: it only marks
+// the link "quiet" (shown as away). The link is closed only when WebRTC itself
+// reports the connection failed, which happens after ~30 s of real radio silence.
+export function keepAlive(link) {
+  const tick = () => {
     if (link.closed) return clearInterval(iv);
     if (!link.open) return;
     link.send({ t: 'ping' });
-    if (Date.now() - link.lastSeen > 9000) { clearInterval(iv); link.close(); onDead && onDead(); }
-  }, 2500);
-  return () => clearInterval(iv);
+    if (Date.now() - link.lastSeen > 8000) link.setQuiet(true);
+  };
+  const iv = setInterval(tick, 2500);
+  // coming back to the foreground: say hello straight away
+  const vis = () => { if (document.visibilityState === 'visible' && link.open) { link.lastSeen = Math.max(link.lastSeen, Date.now() - 3000); link.send({ t: 'ping' }); } };
+  document.addEventListener('visibilitychange', vis);
+  return () => { clearInterval(iv); document.removeEventListener('visibilitychange', vis); };
 }
 
 // Expose raw LAN IPs instead of mDNS names: Chrome only does this while the page

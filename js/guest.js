@@ -38,6 +38,11 @@ export class Guest {
     };
     link.onmessage = (m) => this.onMessage(m);
     link.onclose = () => { if (this.link === link && this.status !== 'kicked') this.setStatus('lost'); };
+    link.onquiet = (q) => {
+      if (this.link !== link) return;
+      this.setStatus(q ? 'quiet' : 'connected');
+      if (!q) link.send({ t: 'hello' }); // fetch anything missed while asleep
+    };
     keepAlive(link);
     this.setStatus('waiting');
     return reply;

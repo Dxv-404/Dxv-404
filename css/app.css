@@ -241,6 +241,7 @@ input[type=checkbox][role=switch]:checked::after { transform: translateX(20px); 
 .hand-info { display: flex; flex-direction: column; line-height: 1.2; }
 .hand-no { font-family: var(--serif); font-size: 16px; font-weight: 600; }
 .blinds { font-size: 13px; color: var(--muted); }
+.conn-pill:disabled { opacity: 1; }
 .conn-pill { margin-left: auto; font-size: 12px; padding: 3px 10px; border-radius: 99px; background: rgba(168,60,50,.3); color: #f2c7bf; border: 1px solid rgba(168,60,50,.55); }
 
 .arena { position: relative; display: flex; flex-direction: column; justify-content: center; min-height: 0; padding-bottom: 28px; }

@@ -41,7 +41,7 @@ export class TableView {
     this.handInfo = h('div', { class: 'hand-info' }, h('span', { class: 'hand-no' }), h('span', { class: 'blinds' }));
     this.menuBtn = h('button', { class: 'icon-btn menu-btn', 'aria-label': 'Table menu', onclick: () => this.client.menu() },
       h('span', { class: 'burger', 'aria-hidden': 'true' }, h('i'), h('i'), h('i')));
-    this.awayDot = h('span', { class: 'conn-pill', hidden: true });
+    this.awayDot = h('button', { class: 'conn-pill', hidden: true, onclick: () => this.client.menu() });
     const top = h('header', { class: 'topbar' }, this.menuBtn, this.handInfo, this.awayDot);
 
     this.bubble = h('div', { class: 'bubble', 'aria-live': 'polite' });
@@ -258,6 +258,8 @@ export class TableView {
       case 'show': this.say(`${this.name(ev.pid)} shows.`); return this.revealSeat(ev.pid, ev.cards, true);
       case 'turn': return;
       case 'joined': if (!this.isMe(ev.pid)) this.say(`${this.name(ev.pid)} is connected.`); return;
+      case 'idle': if (!this.isMe(ev.pid)) this.say(`Waiting for ${this.name(ev.pid)}’s phone to wake up.`); return;
+      case 'back': if (!this.isMe(ev.pid)) this.say(`${this.name(ev.pid)} is back.`); return;
       case 'away': if (!this.isMe(ev.pid)) this.say(`${this.name(ev.pid)} dropped off. I'll check or fold for them.`); return;
       case 'rebuy': this.say(`${this.name(ev.pid)} rebuys for ${fmt(ev.amount)}.`); sfx.chip(3); return;
       case 'left': return;
@@ -704,8 +706,18 @@ export class TableView {
     }
     // connection pill
     const away = v.players.filter((p) => !p.connected && p.id !== v.me && !p.sittingOut);
-    this.awayDot.hidden = !v.isHost || !away.length;
-    this.awayDot.textContent = away.length ? `${away.length} away` : '';
+    if (v.isHost) {
+      this.awayDot.hidden = !away.length;
+      this.awayDot.disabled = false;
+      this.awayDot.textContent = away.length ? `${away.length} away` : '';
+    }
+  }
+
+  // guest side: the host phone has gone quiet (locked screen or app in background)
+  setHostQuiet(q) {
+    this.awayDot.hidden = !q;
+    this.awayDot.disabled = true;
+    this.awayDot.textContent = q ? 'Waiting for host' : '';
   }
 
   renderTop(v) {

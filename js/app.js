@@ -169,7 +169,7 @@ function lobby() {
       h('header', { class: 'page-head' }, h('button', { class: 'icon-btn', 'aria-label': 'Back to setup', onclick: () => { host.destroy(); setup(); } }, '‹'), h('h1', {}, 'Pair the phones')),
       h('p', { class: 'hint' }, 'Everyone must be on the same hotspot. For each friend: tap Pair phone, let them scan the code with Join a table, then scan the reply code on their screen.'),
       list,
-      h('p', { class: 'hint small' }, 'Players you skip now can be paired later from the table menu.'),
+      h('p', { class: 'hint small' }, 'Players you skip now can be paired later from the table menu. Keep this phone on the game screen: it runs the table. Other phones can lock for a while and catch up when unlocked.'),
       h('div', { class: 'sticky-go' }, start));
     render();
     return unsub;
@@ -308,6 +308,7 @@ function playTable() {
       if (guest.view) table.update([{ t: 'sync' }], guest.view);
       offStatus = guest.onStatus((s) => {
         if (s === 'lost') lostHost();
+        if (table) table.setHostQuiet(s === 'quiet');
         if (s === 'kicked') { toast('The host removed you from the table.'); guest.destroy(); guest = null; home(); }
       });
       if (!guest.view) table.say('Connected. Waiting for the host to start.');

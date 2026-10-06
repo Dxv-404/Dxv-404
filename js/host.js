@@ -104,6 +104,14 @@ export class Host {
       this.e.logLine(`${pl ? pl.name : 'A player'} lost connection`);
       this.push([{ t: 'away', pid }]);
     };
+    // a quiet link (locked screen, app in background) is shown as away but kept open
+    link.onquiet = (q) => {
+      if (this.links.get(pid) !== link) return;
+      const pl = this.e.player(pid);
+      if (!pl) return;
+      pl.connected = !q;
+      this.push([{ t: q ? 'idle' : 'back', pid }]);
+    };
     keepAlive(link);
     this.e.logLine(`${p ? p.name : 'A player'} connected`);
     this.push([{ t: 'joined', pid }]);
