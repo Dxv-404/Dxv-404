@@ -434,4 +434,8 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
 // test hooks
 window.__tp = { get host() { return host; }, get guest() { return guest; }, get table() { return table; } };
 
-home();
+// make sure this browser can actually connect phones
+if (!window.RTCPeerConnection || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+  app.replaceChildren(h('main', { class: 'screen home' }, h('div', { class: 'home-hero' }, h('h1', {}, 'Train Poker'),
+    h('p', { class: 'tagline' }, 'This browser can’t connect phones or use the camera. Open train-poker.vercel.app in Chrome (or Safari on iPhone).'))));
+} else home();

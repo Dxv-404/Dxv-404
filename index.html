@@ -18,7 +18,17 @@
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
-<div id="app"></div>
+<div id="app"><div id="boot" style="font-family:Georgia,serif;color:#f3ead7;background:#1b120d;min-height:100vh;padding:48px 24px;box-sizing:border-box">
+<h1 style="font-size:34px;margin:0 0 12px">Train Poker</h1>
+<p id="boot-msg" style="font-family:sans-serif;font-size:17px;line-height:1.5;color:#d9cbb0;margin:0">Loading&hellip;</p>
+</div></div>
+<script>
+/* Runs even in old browsers: if the game hasn't started after a few seconds, explain why. */
+setTimeout(function () {
+  var m = document.getElementById('boot-msg');
+  if (m) m.innerHTML = 'This browser can\'t run Train Poker. It looks like Opera Mini or another data-saving browser, which can\'t use the camera or connect phones directly.<br><br><b style="color:#ecd39b">Open this link in Chrome</b> (or Safari on iPhone): train-poker.vercel.app';
+}, 4000);
+</script>
 <button id="info-btn" aria-label="Poker hands and rules"><span aria-hidden="true">i</span></button>
 <noscript>Train Poker needs JavaScript.</noscript>
 <script type="module" src="js/app.js"></script>

@@ -1,5 +1,5 @@
 // Offline cache: everything the game needs is stored on first visit.
-const CACHE = 'train-poker-1d632eed9e';
+const CACHE = 'train-poker-891f54e341';
 const FILES = [
   './',
   "assets/dealer.webp",
