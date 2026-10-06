@@ -5,7 +5,7 @@ import { TableView } from './table.js';
 import { qrSvg, Scanner } from './qr.js';
 import { infoContent } from './info.js';
 import { settings, saveSettings, unlockAudio, keepAwake, sfx } from './fx.js';
-import { warmUpCamera } from './net.js';
+import { warmUpCamera, parsePayload } from './net.js';
 
 const app = $('#app');
 let host = null;
@@ -184,12 +184,16 @@ async function pair(pid, after) {
   const sheet = openSheet(body, { label: `Pair ${p.name}`, onClose: () => { scanner && scanner.stop(); host.cancelPairing(); after && after(); } });
   body.append(h('h2', {}, `Pair ${p.name}`), h('p', { class: 'hint' }, 'Getting the camera ready…'));
   // camera permission first: it also lets the browser share this phone's hotspot address directly
+  // keep the camera open while the code is made: browsers only share this phone's
+  // hotspot address (instead of a hidden one) while camera access is active
   const warm = await warmUpCamera();
-  if (warm) warm.getTracks().forEach((t) => t.stop());
   let offer;
   try { offer = await host.pairOffer(pid); } catch (e) { body.replaceChildren(h('h2', {}, 'Could not create a code'), h('p', {}, String(e.message || e))); return; }
+  finally { if (warm) warm.getTracks().forEach((t) => t.stop()); }
+  const noRoute = !parsePayload(offer).cands.length;
   const step1 = () => {
     body.replaceChildren(
+      noRoute && h('p', { class: 'warn' }, 'This phone has no network to share the game on. Turn WiFi on and join the hotspot (or turn on this phone’s hotspot), then try again.'),
       h('h2', {}, `${p.name}, scan this`),
       h('p', { class: 'hint' }, `On ${p.name}’s phone: Train Poker, then Join a table.`),
       h('div', { class: 'qr', html: qrSvg(offer) }),
@@ -238,19 +242,21 @@ function join() {
       scanner = new Scanner(video);
       try {
         await scanner.start(async (text) => {
-          scanner.stop();
           try {
-            const reply = await guest.answer(text);
+            const reply = await guest.answer(text); // camera still on: see note in pair()
+            scanner.stop();
             unlockAudio();
             showReply(reply);
-          } catch (e) { msg.textContent = e.message; setTimeout(scan, 1600); }
+          } catch (e) { scanner.stop(); msg.textContent = e.message; setTimeout(scan, 1600); }
         });
       } catch {
         msg.textContent = 'Camera is blocked. Allow camera access for this site in your browser settings, then reopen this page.';
       }
     };
     const showReply = (reply) => {
+      const noRoute = !parsePayload(reply).cands.length;
       body.replaceChildren(
+        noRoute && h('p', { class: 'warn' }, 'This phone is not on any network. Join the host’s hotspot WiFi, then scan again.'),
         h('h2', {}, `You’re joining as ${guest.name}`),
         h('p', { class: 'hint' }, 'Show this to the host so they can scan it.'),
         h('div', { class: 'qr', html: qrSvg(reply) }),
