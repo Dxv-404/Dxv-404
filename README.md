@@ -46,7 +46,7 @@
 
 <a name="rule_who"><img src="assets/02_rule_who.svg" width="880" alt="Section: who"></a>
 
-<a name="identity"><img src="assets/03_identity.svg" width="880" alt="S. Devkrishna, he/him, @Dxv-404. BSc (Hons) Data Science at CHRIST University, Pune Lavasa, 2027. AI intern at TCS; Django developer at BEO Software; data science at NFI SmartFarm. Co-author of Jadoo: a wearable assistive system, CRC Press book chapter, 2024."></a>
+<a name="identity"><img src="assets/03_identity.svg" width="880" alt="S. Devkrishna, he/him, @Dxv-404. BSc (Hons) Data Science at CHRIST University,2027. AI intern at TCS; Django developer at BEO Software; data science at NFI SmartFarm. Co-author of Jadoo: a wearable assistive system, CRC Press book chapter, 2024."></a>
 
 <a name="methods"><img src="assets/04_methods.svg" width="880" alt="Methods and where they are demonstrated. Emergent behaviour in G-ONE: evolved recurrent agents rewarded only to forage. Multi-agent RL in crossroads-rl: PPO agents with a six-action space and a one-bit signal. Evolutionary optimisation in stride: 17 configurations, 30 seeds, GA against DE and PSO. Citation retrieval in Arivu: Postgres, OpenAlex and Semantic Scholar. Calibrated classification in APIN: ensemble leaf-disease diagnosis with Grad-CAM, live."></a>
 
