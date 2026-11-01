@@ -1,4 +1,4 @@
-// Phase 3 in the browser, against the real accounts project (LIVE_SUPABASE=1; each run makes 4 accounts
+// Phase 3 in the browser, against the real accounts project (LIVE_SUPABASE=1; each run makes 5 accounts
 // and deletes them). Every phone is its own browser profile; a wiped phone is a brand-new profile.
 import { test, expect, type Browser, type Page } from '@playwright/test';
 import { MODELS, newPhone, type Phone } from '../harness';
@@ -13,6 +13,12 @@ async function phone(browser: Browser, name: string, baseURL: string, model = MO
   p.page.on('dialog', (d) => d.accept());
   phones.push(p);
   return p;
+}
+async function openCrew(page: Page, name: string) {
+  await page.goto('/');
+  await page.getByTestId('open-profile').click();
+  await page.getByTestId('crews').getByText(name).click();
+  await expect(page.getByTestId('crew-title')).toHaveText(name);
 }
 async function makeProfile(page: Page, name: string) {
   await page.goto('/');
@@ -84,6 +90,30 @@ test('no sign-up, crews by link, a wiped phone recovers everything, crew rescue'
   // the new phone moves on by itself and is Riya, in the crew
   await expect(riyaNew.page.getByTestId('name')).toHaveValue('Riya', { timeout: 20_000 });
   await expect(riyaNew.page.getByTestId('crews')).toContainText('Friday crew');
+  // the crew log shows what happened, so a rescue never goes unnoticed
+  await openCrew(wiped.page, 'Friday crew');
+  await expect(wiped.page.getByTestId('crew-log')).toContainText('said yes: a new phone is now Riya');
+  await expect(wiped.page.getByTestId('crew-log')).toContainText('A new phone asked to be Riya');
+
+  // Riya sees both her phones, and logs the old one out
+  await expect(riyaNew.page.getByTestId('phones').locator('li')).toHaveCount(2);
+  await riyaNew.page.getByTestId('phones').getByRole('button', { name: 'Log out' }).click();
+  await expect(riyaNew.page.getByTestId('phones').locator('li')).toHaveCount(1);
+  await expect(riyaNew.page.getByTestId('phones')).toContainText('This phone');
+
+  // a stranger claims to be Rahul from the link; Rahul says no; the stranger is told plainly
+  const stranger = await phone(browser, 'Stranger', baseURL!, MODELS.smallAndroid);
+  await stranger.page.goto(link.replace(/^https?:\/\/[^/]+/, ''));
+  await stranger.page.getByTestId('already-in').click();
+  await stranger.page.getByTestId('rescue-Rahul').click();
+  await expect(stranger.page.getByTestId('rescue-status')).toContainText("Is this Rahul's new phone?");
+  await expect(riyaNew.page.getByTestId('crews')).toContainText('Friday crew');
+  await riyaNew.page.getByTestId('crews').getByText('Friday crew').click(); // Riya is a member: she cannot decide
+  await expect(riyaNew.page.getByTestId('rescues')).toHaveCount(0);
+  await openCrew(wiped.page, 'Friday crew');
+  await expect(wiped.page.getByTestId('rescues')).toContainText('A new phone says it is you.');
+  await wiped.page.getByTestId('rescue-not-me').click();
+  await expect(stranger.page.getByTestId('rescue-status')).toContainText("The crew said this isn't Rahul's phone", { timeout: 20_000 });
 
   for (const p of phones) expect(p.errors.filter((e) => !/Failed to load resource/.test(e))).toEqual([]);
 });

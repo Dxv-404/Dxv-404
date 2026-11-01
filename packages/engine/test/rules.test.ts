@@ -664,3 +664,19 @@ describe('defaults', () => {
     expect(makeConfig({ startStack: 500 }).rebuyBelow).toBe(500);
   });
 });
+
+describe('pots: chips no live player can win', () => {
+  it('what a folded player put in above every live player joins the pot below (not a pot nobody can win)', () => {
+    const e = table(3, { startStack: 1000 });
+    start(e);
+    const h = e.s.hand!;
+    const [a, b, c] = h.order as [string, string, string];
+    // a put in 300 and folded; b is all-in for 100, c is all-in for 200
+    h.ps[a]!.total = 300; h.ps[a]!.folded = true;
+    h.ps[b]!.total = 100; h.ps[b]!.allIn = true;
+    h.ps[c]!.total = 200; h.ps[c]!.allIn = true;
+    const pots = e.buildPots();
+    expect(pots).toEqual([{ amount: 300, elig: [b, c] }, { amount: 300, elig: [c] }]);
+    expect(pots.reduce((s, p) => s + p.amount, 0)).toBe(600); // every chip is in a pot someone can win
+  });
+});

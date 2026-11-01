@@ -60,7 +60,7 @@ select testing.as_phone(:ATTACK, $$select public.recover_account('999999999999')
 select is(testing.one(:ATTACK, $$select public.recover_account('$$ || :'code2' || $$')$$), 'Too many wrong codes. Try again in an hour.', 'after 10 wrong codes the phone is locked');
 
 -- and per network: a second phone on the same connection is locked too
-select set_config('request.headers', '{"x-forwarded-for": "203.0.113.7, 10.0.0.1"}', false);
+select set_config('request.headers', '{"cf-connecting-ip": "203.0.113.7"}', false);
 \set NET1 '''00000000-0000-0000-0000-0000000000b1'''
 select testing.as_phone(:NET1, $$select public.recover_account('$$ || (200000000000 + n)::text || $$')$$) from generate_series(1, 10) n;
 select is(testing.one(:SAMENET, $$select public.recover_account('$$ || :'code2' || $$')$$), 'Too many wrong codes. Try again in an hour.', 'another phone on the same network is locked as well');

@@ -9,6 +9,14 @@ import { freshDeck } from '../src/cards';
 
 const nodeSha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
 
+describe('utf8 (names with emoji go into hashes)', () => {
+  it('encodes 1-, 2-, 3- and 4-byte characters exactly like the platform', () => {
+    for (const s of ['A', 'é', '₹', '😀', 'Riya 🔥', '🂡♠'] ) expect([...utf8(s)]).toEqual([...Buffer.from(s, 'utf8')]);
+    expect([...utf8('😀')]).toEqual([0xf0, 0x9f, 0x98, 0x80]);
+    expect(sha256hex('Riya 🔥')).toBe(nodeSha(Buffer.from('Riya 🔥', 'utf8')));
+  });
+});
+
 describe('sha256', () => {
   it('matches the standard test vectors', () => {
     expect(sha256hex('')).toBe('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');

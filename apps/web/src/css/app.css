@@ -432,3 +432,6 @@ input[type=checkbox][role=switch]:checked::after { transform: translateX(20px); 
 .rescue { display: grid; gap: 8px; padding: 12px 14px; border-radius: 14px; border: 1px solid rgba(201,161,91,.45); background: rgba(201,161,91,.08); }
 .rescue p { margin: 0; }
 a.btn { text-decoration: none; color: var(--text); }
+.log-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 14px; }
+.log-list li { display: flex; justify-content: space-between; gap: 12px; }
+.log-list small { color: var(--muted); white-space: nowrap; }

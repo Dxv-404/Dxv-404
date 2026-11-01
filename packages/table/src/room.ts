@@ -46,6 +46,8 @@ export interface Persisted {
   acks?: Record<PlayerId, Ack[]>;
   /** Crew-only table: the crew whose members may sit and watch. */
   crew?: string | null;
+  /** Seats that belong to signed-in accounts. */
+  accountSeats?: PlayerId[];
 }
 
 export interface RoomOptions {
@@ -71,6 +73,7 @@ export interface Identity { account: string; device: string; name: string; crews
 export type Ack = Extract<ServerMessage, { t: 'ack' }>;
 
 const hashToken = (t: string): string => sha256hex(t);
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ACKS_KEPT = 64;
 const ACKS_SAVED = 16;
 const REACT_GAP_MS = 800;
@@ -88,6 +91,8 @@ export class TableRoom {
   private base: GameState | null = null;
   private inputs: Input[] = [];
   private tokens: Record<PlayerId, string> = {};
+  /** Seats taken by signed-in accounts: only a ticket for that account may use them. */
+  private accountSeats = new Set<PlayerId>();
   private conns = new Map<Conn, ConnState>();
   private acks = new Map<PlayerId, Map<string, Ack>>();
   private recent: { seq: number; events: GameEvent[] }[] = [];
@@ -204,6 +209,8 @@ export class TableRoom {
     };
     if (m.spectate || (!m.token && !who)) return watch();
     if (!who) {
+      // account ids belong to signed-in phones: without a ticket nobody can sit as an account
+      if (UUID.test(m.player) || this.accountSeats.has(m.player)) return fail('not_allowed', 'Sign in to take this seat');
       const tokenHash = hashToken(m.token!);
       if (this.tokens[m.player] && this.tokens[m.player] !== tokenHash) return fail('not_allowed', 'That seat belongs to another phone');
     }
@@ -217,9 +224,10 @@ export class TableRoom {
     if (!e.player(m.player)) {
       const name = m.name ?? who?.name;
       if (!name) return fail('bad_message', 'A name is needed to join');
-      const r = this.apply({ t: 'join', id: m.player, name, now });
+      const r = this.apply({ t: 'join', id: m.player, name: this.uniqueName(name), now });
       if (r) return fail(r === 'The table is full' ? 'table_full' : 'not_allowed', r);
       if (m.token && !who) this.tokens[m.player] = hashToken(m.token);
+      if (who) this.accountSeats.add(m.player);
       if (!this.host) this.host = m.player;
       this.persist();
     }
@@ -347,6 +355,18 @@ export class TableRoom {
     this.clock.schedule(times.length ? Math.min(...times) : null);
   }
 
+  /** Two players called Riya at one table: the second becomes "Riya 2" (names are cut to 14 at the table). */
+  private uniqueName(name: string): string {
+    const taken = new Set(this.engine!.s.players.map((p) => p.name.toLowerCase()));
+    const base = Engine.cleanName(name);
+    if (!taken.has(base.toLowerCase())) return base;
+    for (let n = 2; ; n++) {
+      const tag = ` ${n}`;
+      const candidate = base.slice(0, 14 - tag.length).trimEnd() + tag;
+      if (!taken.has(candidate.toLowerCase())) return candidate;
+    }
+  }
+
   private pickHost(not: PlayerId): PlayerId | null {
     const others = this.engine!.s.players.filter((p) => p.id !== not && !p.leaving);
     return others.find((p) => p.connected)?.id ?? others[0]?.id ?? null;
@@ -396,7 +416,7 @@ export class TableRoom {
     for (const [pid, m] of this.acks) acks[pid] = [...m.values()].slice(-ACKS_SAVED);
     return {
       v: 1, code: this.code, base: this.base, inputs: this.inputs, seq: this.seq, host: this.host, tokens: this.tokens,
-      running: this.running, nextDealAt: this.nextDealAt, createdAt: this.createdAt, acks, crew: this.crew,
+      running: this.running, nextDealAt: this.nextDealAt, createdAt: this.createdAt, acks, crew: this.crew, accountSeats: [...this.accountSeats],
     };
   }
 
@@ -419,7 +439,7 @@ export class TableRoom {
     this.lastRecord = this.engine.lastHandRecord;
     this.base = p.base; this.inputs = p.inputs.slice();
     this.seq = p.seq; this.host = p.host; this.tokens = { ...p.tokens };
-    this.running = p.running; this.nextDealAt = p.nextDealAt; this.createdAt = p.createdAt; this.crew = p.crew ?? null;
+    this.running = p.running; this.nextDealAt = p.nextDealAt; this.createdAt = p.createdAt; this.crew = p.crew ?? null; this.accountSeats = new Set(p.accountSeats ?? []);
     for (const [pid, list] of Object.entries(p.acks ?? {})) this.acks.set(pid, new Map(list.map((a) => [a.actionId, a])));
   }
 

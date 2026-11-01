@@ -41,6 +41,30 @@ function setup() {
 }
 
 describe('signed-in phones at the table', () => {
+  it('nobody can take an account seat without that account\'s ticket (the id alone is not enough)', async () => {
+    const t = setup();
+    await t.hello(RAHUL, t.pass(RAHUL, 'phone-1', 'Rahul', []));
+    const fake = await t.hello(RAHUL, null, { token: 'f'.repeat(20), name: 'Not Rahul' });
+    expect(fake.last('error')!.message).toBe('Sign in to take this seat');
+    const early = await t.hello(RIYA, null, { token: 'f'.repeat(20), name: 'Not Riya' });
+    expect(early.last('error')!.message).toBe('Sign in to take this seat'); // not even before Riya arrives
+    // and after a restart of the table server
+    const back = new TableRoom('CREW1', { now: () => t.now, schedule: () => {} }, { save: () => {}, appendHand: () => {} }, t.saves.at(-1)!, {});
+    const c = new FakeConn(); back.connect(c);
+    back.message(c, JSON.stringify({ t: 'hello', v: 1, table: 'CREW1', player: RAHUL, lastSeq: 0, token: 'f'.repeat(20), name: 'X' }));
+    expect(c.last('error')!.message).toBe('Sign in to take this seat');
+  });
+
+  it('two players with the same name are told apart: Riya, Riya 2, Riya 3', async () => {
+    const t = setup();
+    await t.hello(RAHUL, t.pass(RAHUL, 'p1', 'Riya', []));
+    await t.hello(RIYA, t.pass(RIYA, 'p2', 'riya', []));
+    await t.hello('guest-a', null, { token: 'g'.repeat(20), name: 'Riya' });
+    await t.hello('guest-b', null, { token: 'h'.repeat(20), name: 'Abcdefghijklmn' });
+    await t.hello('guest-c', null, { token: 'i'.repeat(20), name: 'Abcdefghijklmn' });
+    expect(t.room.engine!.s.players.map((p) => p.name)).toEqual(['Riya', 'riya 2', 'Riya 3', 'Abcdefghijklmn', 'Abcdefghijkl 2']);
+  });
+
   it('a crew table: members sit with their account name; outsiders and ticket-less phones are refused', async () => {
     const t = setup();
     const host = await t.hello(RAHUL, t.pass(RAHUL, 'phone-r1', 'Rahul', [CREW]), { settings: { crew: CREW, startStack: 1500 } });

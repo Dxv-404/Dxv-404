@@ -1,7 +1,7 @@
 -- Crew rescue (no code, a crew admin vouches) and table tickets (how a live table knows who you are).
 begin;
 set search_path = public, extensions;
-select plan(18);
+select plan(19);
 
 \set OWNER '''00000000-0000-0000-0000-0000000000d1'''
 \set RAHUL '''00000000-0000-0000-0000-0000000000d2'''
@@ -31,6 +31,9 @@ select is(testing.one(:OWNER, $$select public.decide_rescue('$$ || :'req' || $$'
 -- a thief asks to be the owner: refused, and an admin cannot approve their own rescue
 select testing.one(:THIEF, $$select public.request_rescue('$$ || :'inv' || $$', '$$ || :'owner_acc' || $$')$$) as req2 \gset
 select is(testing.one(:OWNER, $$select public.decide_rescue('$$ || :'req2' || $$', true)$$), 'Another admin has to approve your own rescue', 'nobody approves a rescue of their own account');
+select testing.one(:THIEF, $$select public.request_rescue('$$ || :'inv' || $$', '$$ || :'owner_acc' || $$')$$) as req3 \gset
+select testing.one(:OWNER, $$select public.decide_rescue('$$ || :'req3' || $$', false)$$);
+select is(testing.one(:THIEF, $$select status from rescue_requests where id = '$$ || :'req3' || $$'$$), 'denied', 'but anyone can say "that is not my phone" to a request claiming to be them');
 select testing.one(:OWNER, $$select public.set_role('$$ || :'crew' || $$', '$$ || :'rahul_acc' || $$', 'admin')$$);
 select testing.one(:RAHUL, $$select public.decide_rescue('$$ || :'req2' || $$', false)$$);
 select is(testing.one(:THIEF, $$select count(*) from crews$$), '0', 'denied: the thief gets nothing');

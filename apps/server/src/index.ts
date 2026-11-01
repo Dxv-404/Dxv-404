@@ -2,7 +2,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { PROTOCOL_VERSION } from '@tp/protocol';
 import { TableRoom, type Conn, type Persisted } from '@tp/table';
-import { cachedTicketChecker } from '@tp/account/ticket';
+import { cachedTicketChecker, checkTicket } from '@tp/account/ticket';
 
 // signed-in phones show a ticket; the accounts database says whose it is (cached while this isolate lives)
 const identify = cachedTicketChecker();
@@ -164,5 +164,14 @@ export default {
       return env.TABLES.get(id, hint ? { locationHint: hint } : undefined).fetch(request);
     }
     return new Response('Not found', { status: 404, headers: cors });
+  },
+
+  // Daily keep-alive: a free Supabase project pauses after 7 days with no activity, and accounts would
+  // stop working until someone restored it by hand. One tiny database call a day prevents that.
+  async scheduled(_event, _env, ctx): Promise<void> {
+    ctx.waitUntil(checkTicket('keep-alive', 'KEEP').then(
+      () => console.log('keep-alive: accounts database answered'),
+      (e: unknown) => console.error('keep-alive failed', e),
+    ));
   },
 } satisfies ExportedHandler<Env>;

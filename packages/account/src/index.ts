@@ -13,6 +13,8 @@ export type Role = 'owner' | 'admin' | 'member';
 export interface Crew { id: string; name: string; color: string; avatar_url: string | null; house_rules: Record<string, unknown>; require_approval: boolean; role: Role; status: 'active' | 'pending' }
 export interface Member { account_id: string; name: string; role: Role; status: 'active' | 'pending'; joined_at: string }
 export interface InviteInfo { crew: string; name: string; color: string; members: { id: string; name: string }[] }
+export interface PhoneLogin { phone: string; this_phone: boolean; added: string; last_seen: string }
+export interface LogEntry { id: number; what: string; detail: Record<string, unknown>; at: string; actor_name: string | null }
 export interface Rescue { id: string; crew_id: string; target_account: string; target_name?: string; status: string; created_at: string }
 export type RecoverResult = { ok: true; profile: Profile } | { ok: false; reason: 'wrong' | 'locked' | 'error'; message: string };
 
@@ -82,6 +84,9 @@ export class Account {
   }
 
   logoutOtherPhones(): Promise<number> { return this.rpc<number>('logout_other_phones'); }
+  /** The phones signed in to this account, most recently used first. */
+  phones(): Promise<PhoneLogin[]> { return this.rpc<PhoneLogin[]>('my_phones'); }
+  logoutPhone(phone: string): Promise<boolean> { return this.rpc<boolean>('logout_phone', { p_phone: phone }); }
 
   async deleteAccount(): Promise<void> {
     await this.rpc('delete_my_account');
@@ -140,6 +145,20 @@ export class Account {
     return (data as unknown as (Rescue & { accounts: { name: string } | null })[]).map((r) => ({ id: r.id, crew_id: r.crew_id, target_account: r.target_account, status: r.status, created_at: r.created_at, target_name: r.accounts?.name }));
   }
   decideRescue(requestId: string, approve: boolean): Promise<void> { return this.rpc('decide_rescue', { p_request: requestId, p_approve: approve }); }
+
+  /** The asking phone checks its own request: pending, approved or denied. */
+  async rescueStatus(requestId: string): Promise<string | null> {
+    const { data, error } = await this.db.from('rescue_requests').select('status').eq('id', requestId).maybeSingle();
+    if (error) throw new AccountError(error.message, error.code);
+    return (data as { status: string } | null)?.status ?? null;
+  }
+
+  /** What happened in the crew (rescues, removals, role changes), newest first. */
+  async crewLog(crewId: string, limit = 20): Promise<LogEntry[]> {
+    const { data, error } = await this.db.from('crew_audit').select('id, what, detail, at, accounts(name)').eq('crew_id', crewId).order('at', { ascending: false }).limit(limit);
+    if (error) throw new AccountError(error.message, error.code);
+    return (data as unknown as (Omit<LogEntry, 'actor_name'> & { accounts: { name: string } | null })[]).map((r) => ({ id: r.id, what: r.what, detail: r.detail, at: r.at, actor_name: r.accounts?.name ?? null }));
+  }
 
   /** After crew rescue was approved, this phone is the old account: reload the profile. */
   async refresh(): Promise<Profile | null> {

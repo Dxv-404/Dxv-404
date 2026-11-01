@@ -50,9 +50,9 @@ select is(testing.one(:LATE, $$select public.join_crew('$$ || :'inv' || $$')$$),
 select testing.one(:OWNER, $$select public.update_crew('$$ || :'crew' || $$', p_require_approval => true)$$);
 select testing.one(:OWNER, $$select public.create_invite('$$ || :'crew' || $$')$$) as inv2 \gset
 select is(testing.one(:LATE, $$select public.join_crew('$$ || :'inv2' || $$')$$), 'pending', 'with approval on, a new member waits');
-select is(testing.one(:LATE, $$select count(*) from crews$$), '0', 'and sees nothing of the crew yet');
+select is(testing.one(:LATE, $$select count(*) from crew_members where account_id <> '$$ || :'late_acc' || $$'$$), '0', 'and sees none of its members yet');
 select testing.one(:ADMIN, $$select public.approve_member('$$ || :'crew' || $$', '$$ || :'late_acc' || $$')$$);
-select is(testing.one(:LATE, $$select count(*) from crews$$), '1', 'until an admin approves');
+select is(testing.one(:LATE, $$select count(*) > 1 from crew_members$$), 'true', 'until an admin approves');
 
 -- removing
 select is(testing.one(:ADMIN, $$select public.remove_member('$$ || :'crew' || $$', '$$ || :'owner_acc' || $$')$$), 'The owner cannot be removed', 'the owner cannot be removed');

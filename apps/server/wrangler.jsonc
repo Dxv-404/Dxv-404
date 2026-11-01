@@ -4,6 +4,7 @@
   "main": "src/index.ts",
   "compatibility_date": "2025-10-01",
   "observability": { "enabled": true },
+  "triggers": { "crons": ["23 21 * * *"] },
   "durable_objects": {
     "bindings": [{ "name": "TABLES", "class_name": "Table" }, { "name": "ECHO", "class_name": "Echo" }]
   },
