@@ -103,7 +103,7 @@ describe('recorder', () => {
     const { store } = memory();
     let fail = true, t = 0;
     const sent: string[] = [];
-    const send: Send = async (fn, body) => { if (fn === 'record_hand' && fail) throw new Error('down'); sent.push(fn); return 'ok'; };
+    const send: Send = async (fn) => { if (fn === 'record_hand' && fail) throw new Error('down'); sent.push(fn); return 'ok'; };
     const r = new Recorder(store, async () => 'tok', send, () => t);
     await r.add('record_hand', 'g2:1', {});
     await r.add('record_game_end', 'g2:end', {});
