@@ -250,7 +250,7 @@ export class TableRoom {
     const now = this.clock.now();
     if (now - st.lastReact < REACT_GAP_MS) return this.send(conn, { t: 'error', code: 'rate_limited', message: 'One reaction at a time' });
     st.lastReact = now;
-    this.broadcastRaw({ t: 'react', from: st.pid, reaction });
+    this.broadcastRaw({ t: 'react', from: st.pid, reaction, at: now });
   }
 
   // ---------------- the table ----------------
@@ -277,7 +277,7 @@ export class TableRoom {
       this.store.appendHand(rec);
       if (this.running && e.s.phase !== 'ended') this.nextDealAt = input.now + this.opt.handPauseMs;
     }
-    for (const [c, st] of this.conns) if (st.hello) this.send(c, { t: 'update', seq: this.seq, events: events as unknown as Record<string, unknown>[], view: this.view(st.pid), host: this.host });
+    for (const [c, st] of this.conns) if (st.hello) this.send(c, { t: 'update', seq: this.seq, events: events as unknown as Record<string, unknown>[], view: this.view(st.pid), host: this.host, at: input.now });
     this.persist();
     this.reschedule();
     return null;

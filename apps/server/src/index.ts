@@ -3,6 +3,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { PROTOCOL_VERSION } from '@tp/protocol';
 import { TableRoom, type Conn, type Persisted } from '@tp/table';
 import { LATENCY_PAGE } from './latency-page';
+import { TAP_PAGE } from './tap-page';
 
 export interface Env { TABLES: DurableObjectNamespace<Table>; ECHO: DurableObjectNamespace<Echo> }
 
@@ -138,6 +139,7 @@ export default {
     const url = new URL(request.url);
     const cors = { 'Access-Control-Allow-Origin': '*' };
     if (url.pathname === '/latency') return new Response(LATENCY_PAGE, { headers: { 'content-type': 'text/html; charset=utf-8' } });
+    if (url.pathname === '/tap') return new Response(TAP_PAGE, { headers: { 'content-type': 'text/html; charset=utf-8' } });
     if (url.pathname === '/health') {
       const cf = (request as Request & { cf?: { colo?: string; country?: string } }).cf;
       return Response.json({ ok: true, protocol: PROTOCOL_VERSION, colo: cf?.colo, country: cf?.country }, { headers: cors });

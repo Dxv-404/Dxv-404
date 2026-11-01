@@ -1,5 +1,5 @@
 // Table server for an ordinary Linux machine (the free Oracle server in Hyderabad).
-// Routes: /health, /latency, a live table at /table/CODE, and a plain echo at /echo/CODE for the latency page.
+// Routes: /health, /latency, /tap (tap-to-everyone check), a live table at /table/CODE, and a plain echo at /echo/CODE for the latency page.
 // Each table is a TableRoom (the same code the Cloudflare server and the host phone run). Tables are saved
 // to disk after every change (taps inside a hand batched for 0.1 s, everything else at once) and every finished hand is appended to
 // that table's hand log, so a restart or a crash loses nothing.
@@ -10,6 +10,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { PROTOCOL_VERSION } from '@tp/protocol';
 import { TableRoom, type Conn, type Persisted } from '@tp/table';
 import { LATENCY_PAGE } from './latency-page';
+import { TAP_PAGE } from './tap-page';
 
 const PORT = Number(process.env.PORT ?? 8080);
 const SITE = process.env.SITE_NAME ?? 'HYD';
@@ -75,9 +76,9 @@ const server = createServer((req, res) => {
     res.end(JSON.stringify({ ok: true, protocol: PROTOCOL_VERSION, colo: SITE, country: req.headers['cf-ipcountry'] ?? null, version: VERSION, rooms: live.size, connections }));
     return;
   }
-  if (url.pathname === '/latency') {
+  if (url.pathname === '/latency' || url.pathname === '/tap') {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', ...cors });
-    res.end(LATENCY_PAGE);
+    res.end(url.pathname === '/tap' ? TAP_PAGE : LATENCY_PAGE);
     return;
   }
   res.writeHead(404, cors);

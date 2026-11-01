@@ -66,9 +66,9 @@ const events = z.array(z.record(z.string(), z.unknown()));
 
 export const ServerMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('welcome'), v: z.number().int(), seq: z.number().int().nonnegative(), you: id.nullable(), host: id.nullable(), view, serverTime: z.number(), missed: events.optional() }),
-  z.object({ t: z.literal('update'), seq: z.number().int().positive(), events, view, host: id.nullable() }),
+  z.object({ t: z.literal('update'), seq: z.number().int().positive(), events, view, host: id.nullable(), at: z.number().optional() }),
   z.object({ t: z.literal('ack'), actionId: id, ok: z.boolean(), error: z.string().optional() }),
-  z.object({ t: z.literal('react'), from: id, reaction: z.enum(REACTIONS) }),
+  z.object({ t: z.literal('react'), from: id, reaction: z.enum(REACTIONS), at: z.number().optional() }),
   z.object({ t: z.literal('seedRequest'), handNo: z.number().int().positive(), dealerSeedCommit: seed }),
   z.object({ t: z.literal('pong'), c: z.number(), s: z.number(), seq: z.number().int().nonnegative() }),
   z.object({ t: z.literal('error'), code: z.enum(['version', 'bad_message', 'not_allowed', 'table_full', 'no_table', 'rate_limited', 'server', 'replaced', 'need_hello']), message: z.string() }),
