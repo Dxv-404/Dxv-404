@@ -88,7 +88,7 @@ for (const scene of ['flop', 'preflop', 'showdown'] as const) test(`693 layout c
     await page.evaluate(() => { (window as any).__tpLab.loadDesignCss(); });
     for (const theme of THEMES) {
       await page.evaluate((t) => (window as any).__tpLab.setTheme(t), theme);
-      await page.waitForFunction(() => [...document.styleSheets].some((s) => s.href?.includes('/tp/t-')) && document.fonts.status === 'loaded');
+      await page.waitForFunction(() => Array.from(document.styleSheets).some((s) => s.href?.includes('/tp/t-')) && document.fonts.status === 'loaded');
       for (const n of COUNTS) {
         const r = await page.evaluate(([v, t, w, h, check]) => {
           const lab = (window as any).__tpLab;
