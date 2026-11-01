@@ -1,0 +1,13 @@
+{
+  "name": "@tp/server",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": { "@tp/engine": "workspace:*", "@tp/protocol": "workspace:*" },
+  "devDependencies": { "wrangler": "4.156.0", "@cloudflare/workers-types": "5.20261101.1" }
+}

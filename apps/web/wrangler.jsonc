@@ -1,0 +1,7 @@
+{
+  // Test previews of the web app on Cloudflare (public link, used by real-device tests).
+  // Production stays on Vercel until the hosting decision is revisited.
+  "name": "train-poker-preview",
+  "compatibility_date": "2025-10-01",
+  "assets": { "directory": "./dist", "not_found_handling": "single-page-application" }
+}
