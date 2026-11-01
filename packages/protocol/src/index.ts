@@ -19,9 +19,28 @@ const action = z.object({
   to: z.number().int().nonnegative().optional(),
 });
 
+/** Settings the first player may choose when a table is created (everything else takes the defaults). */
+export const TableSettings = z.object({
+  startStack: z.number().int().min(100).max(1_000_000),
+  sb: z.number().int().min(1).max(100_000),
+  bb: z.number().int().min(1).max(200_000),
+  blindUpEvery: z.number().int().min(0).max(1000),
+  turnTime: z.number().int().min(0).max(300),
+  timeBank: z.number().int().min(0).max(600),
+  rebuys: z.boolean(),
+  maxRebuys: z.number().int().min(0).max(100),
+  straddle: z.boolean(),
+  dealItTwice: z.boolean(),
+  maxPlayers: z.number().int().min(2).max(15),
+}).partial().strict().refine((c) => c.sb === undefined || c.bb === undefined || c.bb >= c.sb, { message: 'Big blind must be at least the small blind' });
+export type TableSettings = z.infer<typeof TableSettings>;
+
+/** A phone's secret for its seat: sent on every hello so nobody else can take the seat over. */
+const token = z.string().min(16).max(128);
+
 // ---------- phone -> server ----------
 export const ClientMessage = z.discriminatedUnion('t', [
-  z.object({ t: z.literal('hello'), v: z.number().int(), table: tableCode, player: id, token: z.string().max(4096).optional(), lastSeq: z.number().int().nonnegative(), name: z.string().min(1).max(20).optional(), spectate: z.boolean().optional() }),
+  z.object({ t: z.literal('hello'), v: z.number().int(), table: tableCode, player: id, token: token.optional(), lastSeq: z.number().int().nonnegative(), name: z.string().min(1).max(20).optional(), spectate: z.boolean().optional(), settings: TableSettings.optional() }),
   z.object({ t: z.literal('act'), actionId: id, handNo: z.number().int().positive(), action }),
   z.object({ t: z.literal('sit'), actionId: id, out: z.boolean(), postNow: z.boolean().optional() }),
   z.object({ t: z.literal('rebuy'), actionId: id }),
@@ -46,13 +65,13 @@ const view = z.record(z.string(), z.unknown());
 const events = z.array(z.record(z.string(), z.unknown()));
 
 export const ServerMessage = z.discriminatedUnion('t', [
-  z.object({ t: z.literal('welcome'), v: z.number().int(), seq: z.number().int().nonnegative(), you: id.nullable(), view, serverTime: z.number() }),
-  z.object({ t: z.literal('update'), seq: z.number().int().positive(), events, view }),
+  z.object({ t: z.literal('welcome'), v: z.number().int(), seq: z.number().int().nonnegative(), you: id.nullable(), host: id.nullable(), view, serverTime: z.number(), missed: events.optional() }),
+  z.object({ t: z.literal('update'), seq: z.number().int().positive(), events, view, host: id.nullable() }),
   z.object({ t: z.literal('ack'), actionId: id, ok: z.boolean(), error: z.string().optional() }),
   z.object({ t: z.literal('react'), from: id, reaction: z.enum(REACTIONS) }),
   z.object({ t: z.literal('seedRequest'), handNo: z.number().int().positive(), dealerSeedCommit: seed }),
-  z.object({ t: z.literal('pong'), c: z.number(), s: z.number() }),
-  z.object({ t: z.literal('error'), code: z.enum(['version', 'bad_message', 'not_allowed', 'table_full', 'no_table', 'rate_limited', 'server']), message: z.string() }),
+  z.object({ t: z.literal('pong'), c: z.number(), s: z.number(), seq: z.number().int().nonnegative() }),
+  z.object({ t: z.literal('error'), code: z.enum(['version', 'bad_message', 'not_allowed', 'table_full', 'no_table', 'rate_limited', 'server', 'replaced', 'need_hello']), message: z.string() }),
 ]);
 export type ServerMessage = z.infer<typeof ServerMessage>;
 
@@ -60,19 +79,21 @@ export type Parsed<T> = { ok: true; msg: T } | { ok: false; error: string };
 
 /** Largest message a phone may send; anything bigger is dropped unread. */
 export const MAX_CLIENT_BYTES = 8 * 1024;
+/** Largest message a server sends (a full table view with its log and results); a sanity cap, not a budget. */
+export const MAX_SERVER_BYTES = 256 * 1024;
 
-function parse<T>(schema: z.ZodType<T>, raw: unknown): Parsed<T> {
+function parse<T>(schema: z.ZodType<T>, raw: unknown, maxBytes: number): Parsed<T> {
   let data = raw;
   if (typeof raw === 'string') {
-    if (raw.length > MAX_CLIENT_BYTES) return { ok: false, error: 'Message too large' };
+    if (raw.length > maxBytes) return { ok: false, error: 'Message too large' };
     try { data = JSON.parse(raw); } catch { return { ok: false, error: 'Not JSON' }; }
   }
   const r = schema.safeParse(data);
   return r.success ? { ok: true, msg: r.data } : { ok: false, error: r.error.issues.map((i) => `${i.path.join('.') || 'message'}: ${i.message}`).join('; ') };
 }
 
-export const parseClient = (raw: unknown): Parsed<ClientMessage> => parse(ClientMessage, raw);
-export const parseServer = (raw: unknown): Parsed<ServerMessage> => parse(ServerMessage, raw);
+export const parseClient = (raw: unknown): Parsed<ClientMessage> => parse(ClientMessage, raw, MAX_CLIENT_BYTES);
+export const parseServer = (raw: unknown): Parsed<ServerMessage> => parse(ServerMessage, raw, MAX_SERVER_BYTES);
 
 /** Does the server talk this phone's protocol version? */
 export const versionOk = (v: number): boolean => SUPPORTED_VERSIONS.includes(v);

@@ -5,7 +5,7 @@ import { Engine } from '@tp/engine';
 
 const ok: ClientMessage[] = [
   { t: 'hello', v: PROTOCOL_VERSION, table: 'QK7P', player: 'u_123', lastSeq: 0 },
-  { t: 'hello', v: PROTOCOL_VERSION, table: 'QK7P', player: 'u_123', lastSeq: 41, token: 'abc', name: 'Riya', spectate: true },
+  { t: 'hello', v: PROTOCOL_VERSION, table: 'QK7P', player: 'u_123', lastSeq: 41, token: 'abcdefghijklmnop', name: 'Riya', spectate: true },
   { t: 'act', actionId: 'a1', handNo: 3, action: { type: 'raise', to: 240 } },
   { t: 'act', actionId: 'a2', handNo: 3, action: { type: 'fold' } },
   { t: 'sit', actionId: 'a3', out: false, postNow: true },
@@ -64,15 +64,15 @@ describe('server -> phone messages', () => {
     e.apply({ t: 'join', id: 'a', name: 'A', now: 0 });
     e.apply({ t: 'join', id: 'b', name: 'B', now: 0 });
     const r = e.apply({ t: 'start', seed: '1'.repeat(64), now: 1 });
-    const update = { t: 'update' as const, seq: 1, events: r.events as unknown as Record<string, unknown>[], view: e.viewFor('a') as unknown as Record<string, unknown> };
+    const update = { t: 'update' as const, seq: 1, events: r.events as unknown as Record<string, unknown>[], view: e.viewFor('a') as unknown as Record<string, unknown>, host: 'a' };
     const p = parseServer(JSON.stringify(update));
     expect(p.ok).toBe(true);
     for (const m of [
-      { t: 'welcome', v: 1, seq: 0, you: null, view: {}, serverTime: 5 },
+      { t: 'welcome', v: 1, seq: 0, you: null, host: null, view: {}, serverTime: 5 },
       { t: 'ack', actionId: 'a1', ok: false, error: 'Not your turn' },
       { t: 'react', from: 'a', reaction: 'gg' },
       { t: 'seedRequest', handNo: 2, dealerSeedCommit: 'b'.repeat(64) },
-      { t: 'pong', c: 1, s: 2 },
+      { t: 'pong', c: 1, s: 2, seq: 0 },
       { t: 'error', code: 'version', message: 'Please update the app' },
     ]) expect(parseServer(m).ok, JSON.stringify(m)).toBe(true);
     expect(parseServer({ t: 'update', seq: 0, events: [], view: {} }).ok).toBe(false);
@@ -84,5 +84,33 @@ describe('versions', () => {
     expect(versionOk(PROTOCOL_VERSION)).toBe(true);
     expect(versionOk(PROTOCOL_VERSION + 1)).toBe(false);
     expect(versionOk(0)).toBe(false);
+  });
+});
+
+describe('Phase 2 additions', () => {
+  it('table settings: accepted within bounds, refused outside or unknown', () => {
+    const hello = (settings: unknown) => parseClient({ t: 'hello', v: 1, table: 'AB12', player: 'p1', lastSeq: 0, token: 'x'.repeat(16), name: 'A', settings });
+    expect(hello({ startStack: 2000, sb: 10, bb: 20, turnTime: 20, timeBank: 60 }).ok).toBe(true);
+    expect(hello({ sb: 20, bb: 10 }).ok).toBe(false);
+    expect(hello({ maxPlayers: 16 }).ok).toBe(false);
+    expect(hello({ cheat: true }).ok).toBe(false);
+  });
+  it('a short seat token is refused', () => {
+    expect(parseClient({ t: 'hello', v: 1, table: 'AB12', player: 'p1', lastSeq: 0, token: 'short' }).ok).toBe(false);
+  });
+  it('welcome may carry missed events; pong carries the server seq', () => {
+    expect(parseServer({ t: 'welcome', v: 1, seq: 3, you: 'p1', host: 'p1', view: {}, serverTime: 1, missed: [{ t: 'collect' }] }).ok).toBe(true);
+    expect(parseServer({ t: 'pong', c: 1, s: 2 }).ok).toBe(false);
+  });
+});
+
+describe('message size limits', () => {
+  it('a big server message (a long night’s table) is accepted; a phone message over 8 KB is not', () => {
+    const view = { log: Array.from({ length: 300 }, (_, i) => ({ text: `line ${i} `.repeat(5) })) };
+    const big = JSON.stringify({ t: 'welcome', v: 1, seq: 1, you: 'a', host: 'a', view, serverTime: 1 });
+    expect(big.length).toBeGreaterThan(8 * 1024);
+    expect(parseServer(big).ok).toBe(true);
+    expect(parseServer('x'.repeat(300 * 1024)).ok).toBe(false);
+    expect(parseClient(JSON.stringify({ t: 'ping', c: 1, pad: 'x'.repeat(9000) })).ok).toBe(false);
   });
 });
