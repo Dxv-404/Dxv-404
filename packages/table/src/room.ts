@@ -44,6 +44,8 @@ export interface Persisted {
   createdAt: number;
   /** Recent answers per seat, so a tap resent across a restart is still applied once. */
   acks?: Record<PlayerId, Ack[]>;
+  /** Crew-only table: the crew whose members may sit and watch. */
+  crew?: string | null;
 }
 
 export interface RoomOptions {
@@ -58,9 +60,14 @@ export interface RoomOptions {
   offlineAfterMs?: number;
   /** Where shuffle seeds come from (tests pass a repeatable one). */
   seed?: () => string;
+  /** Checks an account ticket (phones that are signed in send one). Needed for crew-only tables. */
+  identify?: (ticket: string, table: string) => Promise<Identity | null>;
 }
 
-interface ConnState { pid: PlayerId | null; hello: boolean; spectator: boolean; windowStart: number; count: number; lastReact: number }
+interface ConnState { pid: PlayerId | null; hello: boolean; spectator: boolean; windowStart: number; count: number; lastReact: number; device?: string; checking?: boolean }
+
+/** Who a ticket belongs to, as the accounts database answers (see check_ticket). */
+export interface Identity { account: string; device: string; name: string; crews: string[] }
 export type Ack = Extract<ServerMessage, { t: 'ack' }>;
 
 const hashToken = (t: string): string => sha256hex(t);
@@ -74,6 +81,8 @@ export class TableRoom {
   seq = 0;
   host: PlayerId | null = null;
   running = false;
+  /** Crew-only table (set by the first player's settings). */
+  crew: string | null = null;
   nextDealAt: number | null = null;
   createdAt: number;
   private base: GameState | null = null;
@@ -92,7 +101,7 @@ export class TableRoom {
 
   constructor(code: string, private clock: RoomClock, private store: RoomStore, saved?: Persisted | null, opt: RoomOptions = {}) {
     this.code = code;
-    this.opt = { handPauseMs: 4000, rateLimit: 40, rateWindowMs: 2000, keepUpdates: 200, offlineAfterMs: 3000, seed: randomSeed, ...opt };
+    this.opt = { handPauseMs: 4000, rateLimit: 40, rateWindowMs: 2000, keepUpdates: 200, offlineAfterMs: 3000, seed: randomSeed, identify: async () => null, ...opt };
     this.createdAt = clock.now();
     if (saved) this.restore(saved);
   }
@@ -163,25 +172,54 @@ export class TableRoom {
 
   // ---------------- messages ----------------
   private hello(conn: Conn, st: ConnState, m: Extract<ClientMessage, { t: 'hello' }>): void {
-    const now = this.clock.now();
     const fail = (code: Extract<ServerMessage, { t: 'error' }>['code'], message: string) => { this.send(conn, { t: 'error', code, message }); conn.close(4000, code); };
     if (!versionOk(m.v)) return fail('version', 'Please update the app');
     if (m.table !== this.code) return fail('no_table', 'Wrong table');
-    if (st.hello) return this.send(conn, { t: 'error', code: 'bad_message', message: 'Already said hello' });
-    if (m.spectate || !m.token) {
+    if (st.hello || st.checking) return this.send(conn, { t: 'error', code: 'bad_message', message: 'Already said hello' });
+    if (!m.ticket) return this.seat(conn, st, m, null);
+    // a signed-in phone: ask the accounts database who it is, then carry on
+    st.checking = true;
+    this.opt.identify(m.ticket, this.code).then(
+      (who) => this.batch(() => {
+        st.checking = false;
+        if (this.conns.get(conn) !== st) return; // gone while we were checking
+        if (!who) return fail('ticket', 'Your table pass has expired. Please try again.');
+        this.seat(conn, st, m, who);
+      }),
+      () => this.batch(() => { st.checking = false; if (this.conns.get(conn) === st) fail('server', 'Could not check your account. Please try again.'); }),
+    );
+  }
+
+  /** Seat (or watch) after the hello is checked. `who` is set for signed-in phones. */
+  private seat(conn: Conn, st: ConnState, m: Extract<ClientMessage, { t: 'hello' }>, who: Identity | null): void {
+    const now = this.clock.now();
+    const fail = (code: Extract<ServerMessage, { t: 'error' }>['code'], message: string) => { this.send(conn, { t: 'error', code, message }); conn.close(4000, code); };
+    const crew = this.engine ? this.crew : (m.settings?.crew ?? null);
+    if (crew && !who?.crews.includes(crew)) return fail('not_allowed', 'This table is for crew members');
+    if (who && m.player !== who.account) return fail('not_allowed', 'That seat belongs to another account');
+    const watch = (): void => {
       if (!this.engine) return fail('no_table', 'This table has not started');
-      st.hello = true; st.spectator = true;
-      return this.welcome(conn, null, m.lastSeq);
+      st.hello = true; st.spectator = true; st.pid = null;
+      this.welcome(conn, null, m.lastSeq);
+    };
+    if (m.spectate || (!m.token && !who)) return watch();
+    if (!who) {
+      const tokenHash = hashToken(m.token!);
+      if (this.tokens[m.player] && this.tokens[m.player] !== tokenHash) return fail('not_allowed', 'That seat belongs to another phone');
     }
-    const tokenHash = hashToken(m.token);
-    if (this.tokens[m.player] && this.tokens[m.player] !== tokenHash) return fail('not_allowed', 'That seat belongs to another phone');
-    if (!this.engine) this.create(m.settings, now);
+    // the same account on a second phone watches instead of taking the seat (one seat per account)
+    if (who && this.connsOf(m.player).some((c) => { const o = this.conns.get(c)!; return o.device && o.device !== who.device; })) {
+      st.device = who.device;
+      return watch();
+    }
+    if (!this.engine) { this.create(m.settings, now); this.crew = crew; }
     const e = this.engine!;
     if (!e.player(m.player)) {
-      if (!m.name) return fail('bad_message', 'A name is needed to join');
-      const r = this.apply({ t: 'join', id: m.player, name: m.name, now });
+      const name = m.name ?? who?.name;
+      if (!name) return fail('bad_message', 'A name is needed to join');
+      const r = this.apply({ t: 'join', id: m.player, name, now });
       if (r) return fail(r === 'The table is full' ? 'table_full' : 'not_allowed', r);
-      this.tokens[m.player] = tokenHash;
+      if (m.token && !who) this.tokens[m.player] = hashToken(m.token);
       if (!this.host) this.host = m.player;
       this.persist();
     }
@@ -194,7 +232,7 @@ export class TableRoom {
     this.goingOffline.delete(m.player); // back before anyone noticed
     // mark the player back before this connection counts as listening, so its first message is the welcome
     if (!e.player(m.player)!.connected) this.apply({ t: 'presence', pid: m.player, connected: true, now });
-    st.hello = true; st.pid = m.player;
+    st.hello = true; st.pid = m.player; if (who) st.device = who.device;
     this.welcome(conn, m.player, m.lastSeq);
     this.tryDeal(now); // a returning or new player may be all a waiting table needs
     this.reschedule();
@@ -255,7 +293,8 @@ export class TableRoom {
 
   // ---------------- the table ----------------
   private create(settings: TableSettings | undefined, now: number): void {
-    this.engine = Engine.create(this.code, settings ?? {}, now);
+    const { crew: _crew, ...rules } = settings ?? {}; // the crew belongs to the room, not the rules
+    this.engine = Engine.create(this.code, rules, now);
     this.base = this.engine.snapshot();
     this.inputs = [];
   }
@@ -356,7 +395,7 @@ export class TableRoom {
     for (const [pid, m] of this.acks) acks[pid] = [...m.values()].slice(-ACKS_SAVED);
     return {
       v: 1, code: this.code, base: this.base, inputs: this.inputs, seq: this.seq, host: this.host, tokens: this.tokens,
-      running: this.running, nextDealAt: this.nextDealAt, createdAt: this.createdAt, acks,
+      running: this.running, nextDealAt: this.nextDealAt, createdAt: this.createdAt, acks, crew: this.crew,
     };
   }
 
@@ -379,7 +418,7 @@ export class TableRoom {
     this.lastRecord = this.engine.lastHandRecord;
     this.base = p.base; this.inputs = p.inputs.slice();
     this.seq = p.seq; this.host = p.host; this.tokens = { ...p.tokens };
-    this.running = p.running; this.nextDealAt = p.nextDealAt; this.createdAt = p.createdAt;
+    this.running = p.running; this.nextDealAt = p.nextDealAt; this.createdAt = p.createdAt; this.crew = p.crew ?? null;
     for (const [pid, list] of Object.entries(p.acks ?? {})) this.acks.set(pid, new Map(list.map((a) => [a.actionId, a])));
   }
 

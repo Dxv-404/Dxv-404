@@ -31,6 +31,8 @@ export interface ClientOptions {
   table: string;
   player: string;
   token?: string;
+  /** Signed-in phones: fetch a table ticket for each connection (fresh = the last one was refused). */
+  getTicket?(fresh: boolean): Promise<string>;
   name?: string;
   spectate?: boolean;
   settings?: TableSettings;
@@ -74,6 +76,7 @@ export class TableClient {
   private attempts = 0;
   private lastHeard = 0;
   private connectStartedAt = 0;
+  private ticketRefused = false;
   private reconnectTimer: unknown = null;
   private tickTimer: unknown = null;
   private readonly t: Timers;
@@ -141,11 +144,18 @@ export class TableClient {
     ws.onopen = () => {
       if (this.ws !== ws) return;
       this.lastHeard = this.t.now();
-      this.raw({
-        t: 'hello', v: PROTOCOL_VERSION, table: this.o.table, player: this.o.player, lastSeq: this.seq,
-        ...(this.o.token ? { token: this.o.token } : {}), ...(this.o.name ? { name: this.o.name } : {}),
-        ...(this.o.spectate ? { spectate: true } : {}), ...(this.o.settings ? { settings: this.o.settings } : {}),
-      });
+      const hello = (ticket?: string) => {
+        if (this.ws !== ws) return;
+        this.raw({
+          t: 'hello', v: PROTOCOL_VERSION, table: this.o.table, player: this.o.player, lastSeq: this.seq,
+          ...(ticket ? { ticket } : {}), ...(this.o.token ? { token: this.o.token } : {}), ...(this.o.name ? { name: this.o.name } : {}),
+          ...(this.o.spectate ? { spectate: true } : {}), ...(this.o.settings ? { settings: this.o.settings } : {}),
+        });
+      };
+      if (!this.o.getTicket) return hello();
+      const fresh = this.ticketRefused;
+      this.ticketRefused = false;
+      this.o.getTicket(fresh).then(hello, () => { if (this.ws === ws) this.reconnect(); });
     };
     ws.onmessage = (ev) => { if (this.ws === ws) this.receive(String(ev.data)); };
     ws.onclose = () => {
@@ -200,6 +210,7 @@ export class TableClient {
         return;
       case 'error':
         this.o.onError?.(m.code, m.message);
+        if (m.code === 'ticket') this.ticketRefused = true; // the next connection asks for a fresh ticket
         if (FATAL.has(m.code)) this.close();
         return;
       case 'seedRequest':

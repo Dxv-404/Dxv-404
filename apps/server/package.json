@@ -13,7 +13,8 @@
     "@tp/engine": "workspace:*",
     "@tp/protocol": "workspace:*",
     "ws": "8.18.3",
-    "@tp/table": "workspace:*"
+    "@tp/table": "workspace:*",
+    "@tp/account": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261101.1",

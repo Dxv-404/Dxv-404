@@ -2,6 +2,10 @@
 import { DurableObject } from 'cloudflare:workers';
 import { PROTOCOL_VERSION } from '@tp/protocol';
 import { TableRoom, type Conn, type Persisted } from '@tp/table';
+import { cachedTicketChecker } from '@tp/account/ticket';
+
+// signed-in phones show a ticket; the accounts database says whose it is (cached while this isolate lives)
+const identify = cachedTicketChecker();
 import { LATENCY_PAGE } from './latency-page';
 import { TAP_PAGE } from './tap-page';
 
@@ -46,7 +50,7 @@ export class Table extends DurableObject<Env> {
     }, {
       save: (p) => { void storage.put('table', p); },
       appendHand: (h) => { void storage.put(`hand:${String(h.handNo).padStart(6, '0')}`, h); },
-    }, saved);
+    }, saved, { identify });
     this.room = room;
     for (const ws of this.ctx.getWebSockets()) {
       const a = ws.deserializeAttachment() as Attachment | null;

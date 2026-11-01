@@ -9,6 +9,7 @@ import { dirname, join } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { PROTOCOL_VERSION } from '@tp/protocol';
 import { TableRoom, type Conn, type Persisted } from '@tp/table';
+import { cachedTicketChecker } from '@tp/account/ticket';
 import { LATENCY_PAGE } from './latency-page';
 import { TAP_PAGE } from './tap-page';
 
@@ -25,6 +26,8 @@ mkdirSync(join(DATA, 'hands'), { recursive: true });
 
 interface Live { room: TableRoom; timer: NodeJS.Timeout | null; dirty: Persisted | null; saveTimer: NodeJS.Timeout | null; idleSince: number }
 const live = new Map<string, Live>();
+// signed-in phones show a ticket; the accounts database says whose it is (answers cached 5 minutes)
+const identify = cachedTicketChecker();
 const echo = new Map<string, Set<WebSocket>>();
 
 const tableFile = (code: string) => join(DATA, 'tables', `${code}.json`);
@@ -60,7 +63,7 @@ function getRoom(code: string): Live {
       else l.saveTimer ??= setTimeout(() => flush(code, l), SAVE_EVERY_MS);
     },
     appendHand: (h) => appendFileSync(join(DATA, 'hands', `${code}.jsonl`), JSON.stringify(h) + '\n'),
-  }, saved, process.env.HAND_PAUSE_MS ? { handPauseMs: Number(process.env.HAND_PAUSE_MS) } : {});
+  }, saved, { identify, ...(process.env.HAND_PAUSE_MS ? { handPauseMs: Number(process.env.HAND_PAUSE_MS) } : {}) });
   l.room.settleAfterRestart(); // nobody is connected to a table just loaded from disk
   live.set(code, l);
   return l;

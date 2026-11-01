@@ -1,7 +1,7 @@
 -- Crew rescue (no code, a crew admin vouches) and table tickets (how a live table knows who you are).
 begin;
 set search_path = public, extensions;
-select plan(17);
+select plan(18);
 
 \set OWNER '''00000000-0000-0000-0000-0000000000d1'''
 \set RAHUL '''00000000-0000-0000-0000-0000000000d2'''
@@ -16,6 +16,7 @@ select testing.one(:RAHUL, $$select public.join_crew('$$ || :'inv' || $$')$$);
 
 -- Rahul's phone is lost with the code. On a new phone he opens the crew link: "I'm already in this crew"
 select is(testing.one(:RAHUL2, $$select jsonb_array_length(public.invite_info('$$ || :'inv' || $$') -> 'members')$$), '2', 'the link lists the members to pick from');
+select is(testing.one(null, $$select public.invite_info('$$ || :'inv' || $$') ->> 'name'$$), 'Crew', 'even on a phone that has not signed in yet');
 select testing.one(:RAHUL2, $$select public.request_rescue('$$ || :'inv' || $$', '$$ || :'rahul_acc' || $$')$$) as req \gset
 select is(testing.one(:OWNER, $$select status from rescue_requests$$), 'pending', 'an admin sees the request');
 select is(testing.one(:RAHUL, $$select count(*) from rescue_requests$$), '0', 'ordinary members do not');

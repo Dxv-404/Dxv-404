@@ -32,6 +32,8 @@ export const TableSettings = z.object({
   straddle: z.boolean(),
   dealItTwice: z.boolean(),
   maxPlayers: z.number().int().min(2).max(15),
+  /** A crew-only table: only active members of this crew may sit or watch. */
+  crew: z.string().uuid(),
 }).partial().strict().refine((c) => c.sb === undefined || c.bb === undefined || c.bb >= c.sb, { message: 'Big blind must be at least the small blind' });
 export type TableSettings = z.infer<typeof TableSettings>;
 
@@ -40,7 +42,7 @@ const token = z.string().min(16).max(128);
 
 // ---------- phone -> server ----------
 export const ClientMessage = z.discriminatedUnion('t', [
-  z.object({ t: z.literal('hello'), v: z.number().int(), table: tableCode, player: id, token: token.optional(), lastSeq: z.number().int().nonnegative(), name: z.string().min(1).max(20).optional(), spectate: z.boolean().optional(), settings: TableSettings.optional() }),
+  z.object({ t: z.literal('hello'), v: z.number().int(), table: tableCode, player: id, token: token.optional(), ticket: z.string().min(16).max(128).optional(), lastSeq: z.number().int().nonnegative(), name: z.string().min(1).max(20).optional(), spectate: z.boolean().optional(), settings: TableSettings.optional() }),
   z.object({ t: z.literal('act'), actionId: id, handNo: z.number().int().positive(), action }),
   z.object({ t: z.literal('sit'), actionId: id, out: z.boolean(), postNow: z.boolean().optional() }),
   z.object({ t: z.literal('rebuy'), actionId: id }),
@@ -71,7 +73,7 @@ export const ServerMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('react'), from: id, reaction: z.enum(REACTIONS), at: z.number().optional() }),
   z.object({ t: z.literal('seedRequest'), handNo: z.number().int().positive(), dealerSeedCommit: seed }),
   z.object({ t: z.literal('pong'), c: z.number(), s: z.number(), seq: z.number().int().nonnegative() }),
-  z.object({ t: z.literal('error'), code: z.enum(['version', 'bad_message', 'not_allowed', 'table_full', 'no_table', 'rate_limited', 'server', 'replaced', 'need_hello']), message: z.string() }),
+  z.object({ t: z.literal('error'), code: z.enum(['version', 'bad_message', 'not_allowed', 'table_full', 'no_table', 'rate_limited', 'server', 'replaced', 'need_hello', 'ticket']), message: z.string() }),
 ]);
 export type ServerMessage = z.infer<typeof ServerMessage>;
 
