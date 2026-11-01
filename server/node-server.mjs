@@ -17797,6 +17797,7 @@ var Engine = class _Engine {
 
 // ../../packages/table/src/room.ts
 var hashToken = (t) => sha256hex(t);
+var UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 var ACKS_KEPT = 64;
 var ACKS_SAVED = 16;
 var REACT_GAP_MS = 800;
@@ -17821,6 +17822,8 @@ var TableRoom = class {
   base = null;
   inputs = [];
   tokens = {};
+  /** Seats taken by signed-in accounts: only a ticket for that account may use them. */
+  accountSeats = /* @__PURE__ */ new Set();
   conns = /* @__PURE__ */ new Map();
   acks = /* @__PURE__ */ new Map();
   recent = [];
@@ -17935,6 +17938,7 @@ var TableRoom = class {
     };
     if (m.spectate || !m.token && !who) return watch();
     if (!who) {
+      if (UUID.test(m.player) || this.accountSeats.has(m.player)) return fail("not_allowed", "Sign in to take this seat");
       const tokenHash = hashToken(m.token);
       if (this.tokens[m.player] && this.tokens[m.player] !== tokenHash) return fail("not_allowed", "That seat belongs to another phone");
     }
@@ -17953,9 +17957,10 @@ var TableRoom = class {
     if (!e.player(m.player)) {
       const name = m.name ?? who?.name;
       if (!name) return fail("bad_message", "A name is needed to join");
-      const r = this.apply({ t: "join", id: m.player, name, now });
+      const r = this.apply({ t: "join", id: m.player, name: this.uniqueName(name), now });
       if (r) return fail(r === "The table is full" ? "table_full" : "not_allowed", r);
       if (m.token && !who) this.tokens[m.player] = hashToken(m.token);
+      if (who) this.accountSeats.add(m.player);
       if (!this.host) this.host = m.player;
       this.persist();
     }
@@ -18041,7 +18046,8 @@ var TableRoom = class {
   }
   // ---------------- the table ----------------
   create(settings, now) {
-    const { crew: _crew, ...rules } = settings ?? {};
+    const rules = { ...settings };
+    delete rules.crew;
     this.engine = Engine.create(this.code, rules, now);
     this.base = this.engine.snapshot();
     this.inputs = [];
@@ -18090,6 +18096,17 @@ var TableRoom = class {
   reschedule() {
     const times = [this.handDeadline(), this.nextDealAt, ...this.goingOffline.values()].filter((x) => x !== null);
     this.clock.schedule(times.length ? Math.min(...times) : null);
+  }
+  /** Two players called Riya at one table: the second becomes "Riya 2" (names are cut to 14 at the table). */
+  uniqueName(name) {
+    const taken = new Set(this.engine.s.players.map((p) => p.name.toLowerCase()));
+    const base = Engine.cleanName(name);
+    if (!taken.has(base.toLowerCase())) return base;
+    for (let n = 2; ; n++) {
+      const tag = ` ${n}`;
+      const candidate = base.slice(0, 14 - tag.length).trimEnd() + tag;
+      if (!taken.has(candidate.toLowerCase())) return candidate;
+    }
   }
   pickHost(not) {
     const others = this.engine.s.players.filter((p) => p.id !== not && !p.leaving);
@@ -18147,7 +18164,8 @@ var TableRoom = class {
       nextDealAt: this.nextDealAt,
       createdAt: this.createdAt,
       acks,
-      crew: this.crew
+      crew: this.crew,
+      accountSeats: [...this.accountSeats]
     };
   }
   persist() {
@@ -18181,6 +18199,7 @@ var TableRoom = class {
     this.nextDealAt = p.nextDealAt;
     this.createdAt = p.createdAt;
     this.crew = p.crew ?? null;
+    this.accountSeats = new Set(p.accountSeats ?? []);
     for (const [pid, list] of Object.entries(p.acks ?? {})) this.acks.set(pid, new Map(list.map((a) => [a.actionId, a])));
   }
   /**
