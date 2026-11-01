@@ -9,5 +9,9 @@
     "preview": "vite preview --port 4173 --strictPort",
     "typecheck": "tsc -p tsconfig.json"
   },
-  "dependencies": { "@tp/engine": "workspace:*", "@tp/protocol": "workspace:*" }
+  "dependencies": {
+    "@tp/engine": "workspace:*",
+    "@tp/protocol": "workspace:*",
+    "@tp/account": "workspace:*"
+  }
 }

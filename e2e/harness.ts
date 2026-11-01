@@ -40,8 +40,9 @@ export const NET = {
   patchy4g: [80, 4000, 1500] as const,
 };
 
-export async function newPhone(browser: Browser, name: string, model: PhoneModel, baseURL: string): Promise<Phone> {
+export async function newPhone(browser: Browser, name: string, model: PhoneModel, baseURL: string, extra: Parameters<Browser['newContext']>[0] = {}): Promise<Phone> {
   const ctx = await browser.newContext({
+    ...extra,
     baseURL,
     viewport: { width: model.width, height: model.height },
     deviceScaleFactor: model.scale,

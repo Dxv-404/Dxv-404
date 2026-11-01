@@ -408,3 +408,27 @@ input[type=checkbox][role=switch]:checked::after { transform: translateX(20px); 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* ---------------- profile and crews ---------------- */
+.recovery-code { font-family: var(--serif); font-size: 30px; letter-spacing: .06em; text-align: center; color: var(--brass-hi); margin: 4px 0; font-variant-numeric: tabular-nums; user-select: all; }
+.crew-list, .member-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.crew-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 54px; padding: 10px 14px; border-radius: 14px; border: 1px solid rgba(246,240,225,.14); background: rgba(246,240,225,.05); color: var(--text); text-align: left; font-size: 17px; }
+.crew-row strong { flex: 1; font-weight: 600; }
+.crew-row small { color: var(--muted); font-size: 13px; }
+.crew-dot { width: 14px; height: 14px; border-radius: 50%; flex: none; box-shadow: 0 0 0 2px rgba(246,240,225,.15); }
+.crew-dot.big { width: 22px; height: 22px; }
+.crew-title { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.crew-title h2 { font-size: 24px; }
+.member-list li { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 6px 0; border-bottom: 1px solid rgba(246,240,225,.08); }
+.member-list li > .btn { width: 100%; }
+.member-list .who { flex: 1; display: grid; }
+.member-list .who small { color: var(--muted); font-size: 13px; }
+.row-actions { display: flex; gap: 6px; }
+.swatches { display: flex; gap: 10px; flex-wrap: wrap; }
+.swatch { width: 40px; height: 40px; border-radius: 50%; border: 2px solid transparent; }
+.swatch.on { border-color: var(--text); box-shadow: 0 0 0 3px rgba(0,0,0,.4) inset; }
+.invite { display: grid; gap: 10px; }
+.invite-link { font-size: 14px; word-break: break-all; padding: 10px 12px; border-radius: 10px; background: rgba(0,0,0,.25); border: 1px solid rgba(246,240,225,.1); margin: 0; user-select: all; }
+.rescue { display: grid; gap: 8px; padding: 12px 14px; border-radius: 14px; border: 1px solid rgba(201,161,91,.45); background: rgba(201,161,91,.08); }
+.rescue p { margin: 0; }
+a.btn { text-decoration: none; color: var(--text); }

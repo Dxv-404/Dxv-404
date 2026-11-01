@@ -6,6 +6,7 @@ import { qrSvg, Scanner } from './qr.js';
 import { infoContent } from './info.js';
 import { settings, saveSettings, unlockAudio, keepAwake, sfx } from './fx.js';
 import { warmUpCamera, parsePayload } from './net.js';
+import { accountScreens } from './account-ui.js';
 
 const app = $('#app');
 let host = null;
@@ -40,6 +41,9 @@ function openSheet(content, { label = 'Panel', onClose, tall = false } = {}) {
   return { close, sheet };
 }
 
+const accounts = accountScreens({ screen, openSheet, home: () => home() });
+window.addEventListener('hashchange', () => accounts.route());
+
 // The info button is always on top of everything.
 $('#info-btn').addEventListener('click', () => openSheet(infoContent(), { label: 'Poker hands', tall: true }));
 
@@ -68,7 +72,8 @@ function home() {
       h('div', { class: 'home-actions' },
         saved && h('button', { class: 'btn primary', onclick: () => resumeHost() }, 'Resume your table', h('small', {}, `${saved.players} players, hand ${saved.handNo}`)),
         h('button', { class: 'btn ' + (saved ? 'secondary' : 'primary'), onclick: () => setup() }, 'Host a new table', h('small', {}, 'This phone deals the game')),
-        h('button', { class: 'btn secondary', onclick: () => join() }, gsaved ? 'Join or rejoin a table' : 'Join a table', h('small', {}, gsaved ? `Last time you were ${gsaved.name}` : 'Scan the host’s code'))),
+        h('button', { class: 'btn secondary', onclick: () => join() }, gsaved ? 'Join or rejoin a table' : 'Join a table', h('small', {}, gsaved ? `Last time you were ${gsaved.name}` : 'Scan the host’s code')),
+        h('button', { class: 'btn ghost', 'data-testid': 'open-profile', onclick: () => accounts.profile() }, 'Profile and crews', h('small', {}, 'Recovery code, crews, invites'))),
       h('details', { class: 'howto' },
         h('summary', {}, 'How phones connect without WiFi'),
         h('ol', {},
@@ -439,4 +444,4 @@ window.__tp = { get host() { return host; }, get guest() { return guest; }, get 
 if (!window.RTCPeerConnection || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
   app.replaceChildren(h('main', { class: 'screen home' }, h('div', { class: 'home-hero' }, h('h1', {}, 'Train Poker'),
     h('p', { class: 'tagline' }, 'This browser can’t connect phones or use the camera. Open train-poker.vercel.app in Chrome (or Safari on iPhone).'))));
-} else home();
+} else if (!accounts.route()) home();
