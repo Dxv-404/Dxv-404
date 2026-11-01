@@ -17,6 +17,9 @@ importers:
       '@tp/account':
         specifier: workspace:*
         version: link:packages/account
+      '@tp/engine':
+        specifier: workspace:*
+        version: link:packages/engine
       '@tp/table':
         specifier: workspace:*
         version: link:packages/table

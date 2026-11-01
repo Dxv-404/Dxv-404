@@ -7,7 +7,7 @@ export type Mode = 'phone' | 'land' | 'lap';
 export interface Geo { W: number; H: number; tl: number; tt: number; tw: number; th: number; rx: number; ry: number; gaps: [number, number][]; topx: number; yk: number; mode: Mode }
 export interface SeatIn { mini: boolean; bet: boolean }
 export interface SeatOut { x: number; y: number; bx?: number; by?: number }
-export interface Placed { cx: number; cy: number; seats: SeatOut[]; dbtn: { x: number; y: number } | null }
+export interface Placed { cx: number; cy: number; seats: SeatOut[]; dbtn: { x: number; y: number } | null; /** every pair of neighbours clear of each other */ ok: boolean }
 
 /** -> mode, zoom, logical width and height, dock width */
 export function modeFor(W: number, H: number): { mode: Mode; u: number; lw: number; lh: number; dock: number } {
@@ -36,7 +36,7 @@ export function makeGeo(mode: Mode, aw: number, ah: number, n: number, compact =
     const tl = crowd ? 54 : 50;
     const tt = compact ? 52 : Math.trunc(Math.max(70, Math.min(104, ah * 0.17)));
     return { W: aw, H: ah, tl, tt, tw: aw - 2 * tl, th: ah - tt - 34, rx: crowd ? 14 : 12, ry: crowd ? 10 : 8,
-      gaps: [[90, crowd ? 26 : n <= 6 ? 40 : 30], [270, 1]], topx: compact ? 0 : 76, yk: crowd ? 1.1 : 1, mode };
+      gaps: [[90, crowd ? 26 : n <= 6 ? 40 : 30], [270, 1]], topx: compact ? 0 : n <= 6 ? 88 : 76, yk: crowd ? 1.1 : 1, mode };
   }
   if (mode === 'land') {
     const tl = n > 10 ? 62 : 66;
@@ -84,13 +84,15 @@ export function place(g: Geo, states: SeatIn[], dealerAt: number | null): Placed
   const cx = g.tl + g.tw / 2, cy = g.tt + g.th / 2;
   const wts = states.map((s) => (s.mini ? 0.5 : 1));
   const fp = { lap: [52, 32, 78], land: [31, 18, 46], phone: [37, 24, 56] }[g.mode] as [number, number, number];
-  const foot = (s: SeatIn, x: number, y: number): R => (s.mini ? [x - 18, y - 18, x + 18, y + 18] : [x - fp[0], y - fp[1], x + fp[0], y + fp[2]]);
+  const mh = g.mode === 'lap' ? 24 : 18; // a shrunk seat: its avatar (a little more room on big screens, whose avatars are bigger)
+  const foot = (s: SeatIn, x: number, y: number): R => (s.mini ? [x - mh, y - mh, x + mh, y + mh] : [x - fp[0], y - fp[1], x + fp[0], y + fp[2]]);
   let pts: [number, number][] = [];
+  let ok = false;
   for (let it = 0; it < 80; it++) { // relax: give more arc to neighbours that would touch
     pts = ellipseSlots(cx, cy, g.tw / 2 + g.rx, g.th / 2 + g.ry, states.length, g.gaps, wts, g.topx, g.yk);
     const bad: number[] = [];
     for (let i = 0; i < states.length - 1; i++) if (hit(foot(states[i]!, ...pts[i]!), foot(states[i + 1]!, ...pts[i + 1]!))) bad.push(i);
-    if (!bad.length) break;
+    if (!bad.length) { ok = true; break; }
     for (const i of bad) { wts[i]! *= 1.12; wts[i + 1]! *= 1.12; }
   }
   const seats: SeatOut[] = pts.map(([x, y]) => ({ x, y }));
@@ -136,7 +138,7 @@ export function place(g: Geo, states: SeatIn[], dealerAt: number | null): Placed
       dbtn = { x: dx, y: dy }; break;
     }
   }
-  return { cx, cy, seats, dbtn };
+  return { cx, cy, seats, dbtn, ok };
 }
 
 /** the widest board card that clears every seat sitting level with the board and pot */

@@ -69,12 +69,24 @@ export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: num
   const mineAt = players.findIndex((p) => p.id === me);
   const others = mineAt >= 0 ? players.slice(mineAt + 1).concat(players.slice(0, mineAt)) : players.slice();
   const crowd = n > 10;
-  const st = others.map((p) => {
+  const won = new Set<string>();
+  for (const pot of hand?.results?.pots ?? []) for (const a of pot.awards) won.add(a.pid);
+  // a crowded table (11 to 15) on a phone has no room for 14 full seats: seats that have nothing going on
+  // right now (folded, out of the hand, or simply waiting) shrink to their avatar; the player to act, anyone
+  // with chips in front of them, and anyone showing cards stay full size. On big screens only folded seats shrink.
+  const seatsFor = (shrinkWaiting: boolean) => others.map((p) => {
     const hp = hand?.ps[p.id];
-    return { p, hp, mini: crowd && !!hp?.folded, bet: !!hp && hp.streetBet > 0 };
+    const busy = !!hp && !hp.folded && (hand?.toAct === p.id || hp.streetBet > 0 || hp.allIn || (!!hand?.results && won.has(p.id)));
+    const mini = crowd && (!!hp?.folded || (shrinkWaiting && !busy));
+    return { p, hp, mini, bet: !!hp && hp.streetBet > 0 };
   });
   const dealerIdx = hand?.buttonId ? others.findIndex((p) => p.id === hand.buttonId) : -1;
-  const placed = place(g, st.map((s) => ({ mini: s.mini, bet: s.bet })), dealerIdx >= 0 ? dealerIdx : null);
+  let st = seatsFor(mode !== 'lap');
+  let placed = place(g, st.map((s) => ({ mini: s.mini, bet: s.bet })), dealerIdx >= 0 ? dealerIdx : null);
+  if (!placed.ok && crowd && mode === 'lap') { // a big screen that still cannot fit them all: waiting seats shrink too
+    st = seatsFor(true);
+    placed = place(g, st.map((s) => ({ mini: s.mini, bet: s.bet })), dealerIdx >= 0 ? dealerIdx : null);
+  }
   const cw = fitCard(g, placed, st.map((s) => ({ mini: s.mini, bet: s.bet })), Math.max(n, 2));
   const winners = new Set<string>();
   for (const pot of hand?.results?.pots ?? []) for (const a of pot.awards) winners.add(a.pid);
@@ -84,12 +96,13 @@ export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: num
     const { p, hp } = s;
     const pos = placed.seats[i]!;
     const cls = ['seat'];
-    if (hp?.folded) cls.push(s.mini ? 'mini' : 'fold');
+    if (s.mini) cls.push('mini');
+    else if (hp?.folded) cls.push('fold');
     if (p.away || p.sittingOut || (!hp && hand && v.phase === 'hand')) cls.push('away');
     if (hand?.toAct === p.id) cls.push('turn');
     if (winners.has(p.id) && hand?.results) cls.push('win');
     let inner = '';
-    if (hp?.cards && hp.cards.length) inner += `<div class="shown">${hp.cards.map((c) => card(c, 22, winners.has(p.id) ? 'win' : '')).join('')}</div>`;
+    if (hp?.cards && hp.cards.length && !s.mini) inner += `<div class="shown">${hp.cards.map((c) => card(c, 22, winners.has(p.id) ? 'win' : '')).join('')}</div>`;
     else if (hp && !hp.folded) inner += `<div class="backs">${back(17)}${back(17)}</div>`;
     const status = !p.connected ? '<span class="status off" title="Connection lost">⏻</span>' : '';
     inner += `<div class="av">${avatar(th, p.id, p.name)}${status}</div>`;
@@ -123,7 +136,9 @@ export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: num
   const felt = `<div class="felt">${art.felt}<div class="board" style="gap:${gap}px">${boardHtml}</div>${board2}${potHtml}${mode !== 'land' ? side : ''}</div>`;
   const table = `<div class="table" style="left:${g.tl}px;top:${g.tt}px;width:${g.tw}px;height:${g.th}px">${art.rail}${felt}</div>`;
   const dealer = !compact && art.dealer ? art.dealer : '';
-  const bubble = o.bubble && art.dealer && !compact ? `<div class="bubble live" style="top:8px;left:calc(50% + 48px)">${esc(o.bubble)}</div>` : '';
+  // what the dealer says: beside the dealer on phones and big screens (sideways phones have no room for it)
+  const bubble = o.bubble && art.dealer && !compact && mode !== 'land'
+    ? `<div class="bubble live" style="${mode === 'lap' ? 'left:calc(50% + 66px);top:18px' : 'top:8px;left:calc(50% + 48px)'}">${esc(o.bubble)}</div>` : '';
   const arena = `<div class="arena">${art.arena}${dealer}${bubble}${table}${betsHtml}${dbtn}${seatsHtml}</div>`;
 
   // top bar
