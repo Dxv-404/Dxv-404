@@ -1,0 +1,12 @@
+{
+  "name": "@tp/host",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:js": "vite build -c vite.engine.config.ts",
+    "build:apk": "pnpm build:js && node scripts/copy-assets.mjs && cd android && gradle assembleDebug --no-daemon -q",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": { "@tp/engine": "workspace:*" }
+}

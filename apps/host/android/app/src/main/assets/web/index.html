@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Train Poker Host</title>
+<style>
+  body { font: 17px/1.5 system-ui, sans-serif; background: #1b120d; color: #f3ead7; margin: 0; padding: 24px; }
+  h1 { font-size: 26px; margin: 0 0 16px; }
+  .code { font-size: 44px; letter-spacing: 6px; font-weight: 700; color: #ecd39b; }
+  .row { margin: 10px 0; } .ok { color: #8fd18f; } .bad { color: #f08a7a; }
+</style>
+</head>
+<body>
+<h1>Train Poker host (test build)</h1>
+<div class="row">Table code: <div id="code" class="code">…</div></div>
+<div class="row">Rules engine on this phone: <b id="engine">checking…</b></div>
+<div class="row">Live connection: <b id="ws">checking…</b></div>
+<div class="row" id="addrs"></div>
+<div class="row" id="device"></div>
+<script>
+async function info() {
+  for (let i = 0; i < 60; i++) {
+    const r = await fetch('/info').then((x) => x.json());
+    document.getElementById('code').textContent = r.code ? r.code.slice(0, 2) + ' ' + r.code.slice(2) : 'no hotspot yet';
+    document.getElementById('addrs').textContent = 'Addresses: ' + r.addresses.join(', ');
+    document.getElementById('device').textContent = r.model + ', Android ' + r.android;
+    const e = r.engine, el = document.getElementById('engine');
+    if (!e.pending) {
+      el.textContent = e.conserved ? `OK: ${e.hands} hands in ${e.ms} ms, chips conserved` : 'FAILED ' + JSON.stringify(e);
+      el.className = e.conserved ? 'ok' : 'bad';
+      el.dataset.result = JSON.stringify(e);
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+}
+function ws() {
+  const el = document.getElementById('ws');
+  const s = new WebSocket(`ws://${location.host}/ws`);
+  const t0 = performance.now();
+  s.onopen = () => s.send('ping');
+  s.onmessage = (m) => { el.textContent = m.data === 'echo:ping' ? `OK (${Math.round(performance.now() - t0)} ms)` : 'unexpected ' + m.data; el.className = m.data === 'echo:ping' ? 'ok' : 'bad'; el.dataset.result = m.data; };
+  s.onerror = () => { el.textContent = 'FAILED'; el.className = 'bad'; };
+}
+info(); ws();
+</script>
+</body>
+</html>

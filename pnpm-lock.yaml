@@ -42,6 +42,12 @@ importers:
         specifier: 3.2.4
         version: 3.2.4(@types/node@22.20.5)
 
+  apps/host:
+    dependencies:
+      '@tp/engine':
+        specifier: workspace:*
+        version: link:../../packages/engine
+
   apps/web:
     dependencies:
       '@tp/engine':
