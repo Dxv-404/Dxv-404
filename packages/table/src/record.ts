@@ -127,7 +127,12 @@ export interface Signer { (body: string): Promise<string> }
  * database keeps). The token itself never leaves the server, and a signed call is only good for 10 minutes.
  */
 export function tokenSigner(token: string, now: () => number = Date.now): Signer {
-  const subtle = (globalThis as unknown as { crypto: { subtle: SubtleCrypto } }).crypto.subtle;
+  // WebCrypto exists on Node, Cloudflare and phones; typed by hand so this package needs no DOM types
+  interface Subtle {
+    importKey(f: 'raw', k: Uint8Array, a: { name: 'HMAC'; hash: 'SHA-256' }, x: boolean, u: ['sign']): Promise<unknown>;
+    sign(a: 'HMAC', k: unknown, d: Uint8Array): Promise<ArrayBuffer>;
+  }
+  const subtle = (globalThis as unknown as { crypto: { subtle: Subtle } }).crypto.subtle;
   const enc = new TextEncoder();
   const key = subtle.importKey('raw', enc.encode(sha256hex(token)), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   return async (body) => {
