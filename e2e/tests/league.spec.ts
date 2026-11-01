@@ -74,6 +74,9 @@ test('My games, results, replay, league views, and an admin voids a game', async
     await expect(page.locator('.replay-result')).toContainText('wins');
     // at the showdown the players who reached it are shown; Devika always sees her own cards
     await expect(page.locator('.replay-stage .mini-cards').first().locator('[role=img]').first()).not.toHaveAttribute('aria-label', 'Face-down card');
+    // the shuffle seed never reached the phones during play; after the game a player checks the deal
+    await page.getByTestId('check-deal').click();
+    await expect(page.getByTestId('proof-result')).toHaveText('Fair deal: the deck matches the fingerprint shown before the cards were dealt.');
 
     // the crew league, three views
     await page.getByRole('button', { name: 'Back' }).click();

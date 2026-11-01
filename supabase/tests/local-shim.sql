@@ -11,6 +11,7 @@ create or replace function auth.uid() returns uuid language sql stable as $$
 $$;
 grant execute on function auth.uid() to anon, authenticated, service_role;
 create extension if not exists pgtap;
+create extension if not exists pgcrypto with schema extensions;
 
 -- Test helper: run a query as a signed-in phone (auth user u) and return its rows as JSON, or
 -- {"error": message, "code": sqlstate} if it fails. Runs with the phone's rights (role authenticated).
@@ -29,6 +30,11 @@ begin
   perform set_config('request.jwt.claim.sub', '', true);
   return r;
 end $$;
+-- a recorder call's signature, as the table servers make it (see private.recorder_ok)
+create or replace function testing.sign(token text, body text) returns text language sql as $$
+  select 'v1.' || t || '.' || encode(extensions.hmac(t || '.' || body, encode(extensions.digest(token, 'sha256'), 'hex'), 'sha256'), 'hex')
+  from (select ((extract(epoch from now()) * 1000)::bigint)::text t) x
+$$;
 -- first value of the first row, as text
 create or replace function testing.one(u uuid, q text) returns text language sql as $$
   select coalesce(r -> 0 ->> (select k from jsonb_object_keys(r -> 0) k limit 1), r ->> 'error')

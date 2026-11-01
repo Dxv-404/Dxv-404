@@ -11,8 +11,8 @@ select testing.one(:OWNER, $$select (public.ensure_account('Owner')).id$$);
 select testing.one(:OWNER, $$select public.new_recovery_code()$$) as code \gset
 -- ten wrong tries, each pretending to come from a different address
 select set_config('request.headers', json_build_object('cf-connecting-ip', '198.51.100.9', 'x-forwarded-for', '10.0.0.' || n || ', 198.51.100.9')::text, false),
-       testing.as_phone(:P1, $$select public.recover_account('$$ || (300000000000 + n)::text || $$')$$)
-  from generate_series(1, 10) n;
+       testing.as_phone(('00000000-0000-0000-0000-00000000e1' || k)::uuid, $$select public.recover_account('$$ || (300000000000 + n)::text || $$')$$)
+  from generate_series(10, 14) k, generate_series(1, 10) n;
 select set_config('request.headers', '{"cf-connecting-ip": "198.51.100.9", "x-forwarded-for": "203.0.113.250"}', false);
 select is(testing.one(:P2, $$select public.recover_account('$$ || :'code' || $$')$$), 'Too many wrong codes. Try again in an hour.', 'faking x-forwarded-for does not dodge the lock');
 select set_config('request.headers', '{"cf-connecting-ip": "198.51.100.10"}', false);
@@ -51,6 +51,9 @@ select testing.one(:ASK, $$select public.request_rescue('$$ || :'rinv' || $$', '
 -- after asking, the new phone made its own account and a crew while waiting
 select testing.one(:ASK, $$select (public.ensure_account('Waiting')).id$$);
 select testing.one(:ASK, $$select public.create_crew('Made while waiting')$$);
+-- (the crew can vouch only for a member of a week whose phones have been quiet a day: see 08)
+update crew_members set joined_at = now() - interval '8 days';
+update account_logins set last_seen = now() - interval '2 days';
 select testing.one(:ADM, $$select public.decide_rescue('$$ || :'req' || $$', true)$$);
 select is(testing.as_phone(:ASK, $$select name from crews order by name$$), '[{"name": "Made while waiting"}, {"name": "Rescue crew"}]', 'what the phone made while waiting is kept, on the rescued account');
 -- a phone whose account is also used on other phones: only the phone moves
@@ -59,6 +62,7 @@ select testing.one(:ASK2, $$select public.new_recovery_code()$$) as sharedcode \
 \set ASK2B '''00000000-0000-0000-0000-0000000000f7'''
 select testing.one(:ASK2B, $$select (public.recover_account('$$ || :'sharedcode' || $$')).id$$);
 select testing.one(:ASK2, $$select public.request_rescue('$$ || :'rinv' || $$', '$$ || :'lost_acc' || $$')$$) as req2 \gset
+update account_logins set last_seen = now() - interval '2 days' where account_id = :'lost_acc';
 select testing.one(:ADM, $$select public.decide_rescue('$$ || :'req2' || $$', true)$$);
 select is(testing.one(:ASK2B, $$select (public.ensure_account('x')).id$$), :'shared_acc', 'the other phone keeps its account');
 select is(testing.one(:ASK2, $$select (public.ensure_account('x')).id$$), :'lost_acc', 'and only the asking phone moved');

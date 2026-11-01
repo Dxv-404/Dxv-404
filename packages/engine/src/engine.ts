@@ -338,6 +338,13 @@ export class Engine {
   addPlayer(name: string, opts: { id?: PlayerId; chair?: number; waitForBB?: boolean } = {}): Player {
     const chair = opts.chair ?? this.freeChair();
     const p = Engine.fillPlayer({ id: opts.id ?? 'p' + rid(7), name: Engine.cleanName(name), stack: this.s.cfg.startStack }, chair, this.s.cfg);
+    // someone who left and comes back gets their own chips back (not a fresh stack): leaving must not wipe a
+    // loss or skip the rebuy limit
+    const old = opts.id ? (this.s.departed ?? []).find((d) => d.id === opts.id) : undefined;
+    if (old) {
+      p.stack = old.stack; p.buyins = old.buyins; p.rebuysUsed = old.rebuysUsed; p.busted = old.busted; p.bank = old.bank;
+      this.s.departed = this.s.departed!.filter((d) => d.id !== old.id);
+    }
     p.waitForBB = !!opts.waitForBB;
     this.s.players.push(p);
     this.reseat();

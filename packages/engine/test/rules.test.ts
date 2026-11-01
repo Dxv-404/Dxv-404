@@ -680,3 +680,23 @@ describe('pots: chips no live player can win', () => {
     expect(pots.reduce((s, p) => s + p.amount, 0)).toBe(600); // every chip is in a pot someone can win
   });
 });
+
+describe('leaving and coming back', () => {
+  it('a player who is removed and joins again gets their own chips back, not a fresh stack', () => {
+    const e = table(3, { startStack: 1000, rebuys: true, maxRebuys: 1 });
+    start(e);
+    // p0 loses chips by betting and folding
+    while (e.s.phase === 'hand' && toAct(e) !== 'p0') act(e, toAct(e), 'call');
+    act(e, 'p0', 'raise', 300);
+    foldOut(e);
+    expect(e.player('p0')!.stack).not.toBe(1000);
+    const before = { stack: e.player('p0')!.stack, buyins: e.player('p0')!.buyins, rebuysUsed: e.player('p0')!.rebuysUsed };
+    expect(e.apply({ t: 'host', cmd: 'remove', pid: 'p0', now: T0 }).error).toBeUndefined();
+    expect(e.player('p0')).toBeUndefined();
+    expect(e.apply({ t: 'join', id: 'p0', name: 'P0', now: T0 }).error).toBeUndefined();
+    const back = e.player('p0')!;
+    expect({ stack: back.stack, buyins: back.buyins, rebuysUsed: back.rebuysUsed }).toEqual(before);
+    expect((e.s.departed ?? []).some((d) => d.id === 'p0')).toBe(false); // counted once in the final standings
+    expect(total(e)).toBe(buyins(e));
+  });
+});

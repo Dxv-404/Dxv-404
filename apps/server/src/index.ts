@@ -199,8 +199,9 @@ export default {
       (e: unknown) => console.error('keep-alive failed', e),
     ));
     if (env.RECORDER_TOKEN) {
-      const call = (fn: string, body: string) => fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
-        method: 'POST', headers: { apikey: SUPABASE_KEY, 'content-type': 'application/json' }, body: JSON.stringify({ p_body: body, p_sig: env.RECORDER_TOKEN }),
+      const sign = tokenSigner(env.RECORDER_TOKEN);
+      const call = async (fn: string, body: string) => fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+        method: 'POST', headers: { apikey: SUPABASE_KEY, 'content-type': 'application/json' }, body: JSON.stringify({ p_body: body, p_sig: await sign(body) }),
       });
       // close finished seasons, drop replays older than 90 days
       ctx.waitUntil(call('daily_upkeep', JSON.stringify({ upkeep: new Date().toISOString() })).then(async (r) => console.log(`upkeep: ${await r.text()}`), (e: unknown) => console.error('upkeep failed', e)));

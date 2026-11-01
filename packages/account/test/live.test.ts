@@ -43,18 +43,23 @@ describe.skipIf(!process.env.LIVE_SUPABASE)('accounts on the live project', () =
     expect((await third.crews()).map((c) => c.name).sort()).toEqual(['Live test crew', 'Third phone crew']);
     await third.deleteCrew(own.id);
 
-    // crew rescue: Riya loses her phone and has no code; Rahul (owner) approves her new phone
+    // crew rescue: a new phone says it is Riya. She joined today, so the crew cannot vouch for her yet
+    // (a crew made to steal an account would otherwise work at once); her own phone sees it and says no
     const riyaNew = phone();
     const info = await riyaNew.inviteInfo(invite);
     const riyaId = info!.members.find((m) => m.name === 'Riya')!.id;
     const req = await riyaNew.requestRescue(invite, riyaId);
     const pending = await wiped.pendingRescues(crew.id);
     expect(pending.map((p) => [p.id, p.target_name])).toEqual([[req, 'Riya']]);
-    await wiped.decideRescue(req, true);
-    expect((await riyaNew.refresh())!.name).toBe('Riya');
+    await expect(wiped.decideRescue(req, true)).rejects.toThrow(/less than a week ago/);
+    expect((await riya.rescuesOfMe()).map((r) => [r.id, r.crew_name, r.status])).toEqual([[req, 'Live test crew', 'pending']]);
+    await riya.decideRescue(req, false);
+    expect(await riyaNew.rescueStatus(req)).toEqual({ status: 'denied', finishesAt: null });
+    expect(await riyaNew.refresh()).toBeNull(); // the asking phone got nothing
+    // (an approved rescue finishing a day after the old phone went quiet is in the database tests, 08)
 
     // tickets for a crew table
-    const t = await riyaNew.ticket('LIVE1');
+    const t = await riya.ticket('LIVE1');
     const who = await checkTicket(t, 'LIVE1');
     expect(who).toMatchObject({ account: riyaId, name: 'Riya' });
     expect(who!.crews).toContain(crew.id);
@@ -62,9 +67,9 @@ describe.skipIf(!process.env.LIVE_SUPABASE)('accounts on the live project', () =
     expect(await checkTicket('nope', 'LIVE1')).toBeNull();
 
     // log out other phones: the first phone's login stops working
-    expect(await wiped.logoutOtherPhones()).toBe(2);
+    expect(await wiped.logoutOtherPhones()).toBe(2); // the first phone and the merged third
     expect(await rahul.refresh()).toBeNull();
     await wiped.deleteCrew(crew.id);
-    made.splice(made.indexOf(rahul), 1); made.splice(made.indexOf(third), 1); made.splice(made.indexOf(riya), 1);
+    made.splice(made.indexOf(rahul), 1); made.splice(made.indexOf(third), 1);
   }, 120_000);
 });

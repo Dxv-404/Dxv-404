@@ -1,7 +1,7 @@
 -- Recovery code: wiped phone, merge, discard, new code, logout other phones, brute-force lock.
 begin;
 set search_path = public, extensions;
-select plan(23);
+select plan(24);
 
 \set OLD '''00000000-0000-0000-0000-0000000000a1'''
 \set WIPED '''00000000-0000-0000-0000-0000000000a2'''
@@ -62,7 +62,10 @@ select is(testing.one(:ATTACK, $$select public.recover_account('$$ || :'code2' |
 -- and per network: a second phone on the same connection is locked too
 select set_config('request.headers', '{"cf-connecting-ip": "203.0.113.7"}', false);
 \set NET1 '''00000000-0000-0000-0000-0000000000b1'''
+-- one wrong-code phone does not lock its whole network (a college Wi-Fi): 10 per phone, 50 per network
 select testing.as_phone(:NET1, $$select public.recover_account('$$ || (200000000000 + n)::text || $$')$$) from generate_series(1, 10) n;
+select isnt(testing.one(:SAMENET, $$select public.recover_account('$$ || :'code2' || $$')$$), 'Too many wrong codes. Try again in an hour.', 'ten wrong codes on a network do not lock the other phones on it');
+select testing.as_phone(('00000000-0000-0000-0000-0000000000b' || k)::uuid, $$select public.recover_account('$$ || (210000000000 + n)::text || $$')$$) from generate_series(2, 5) k, generate_series(1, 10) n;
 select is(testing.one(:SAMENET, $$select public.recover_account('$$ || :'code2' || $$')$$), 'Too many wrong codes. Try again in an hour.', 'another phone on the same network is locked as well');
 -- an hour later it works again
 update private.recovery_attempts set at = at - interval '61 minutes';

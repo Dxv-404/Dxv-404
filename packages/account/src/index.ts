@@ -153,12 +153,22 @@ export class Account {
   }
   decideRescue(requestId: string, approve: boolean): Promise<void> { return this.rpc('decide_rescue', { p_request: requestId, p_approve: approve }); }
 
-  /** The asking phone checks its own request: pending, approved or denied. */
-  async rescueStatus(requestId: string): Promise<string | null> {
-    const { data, error } = await this.db.from('rescue_requests').select('status').eq('id', requestId).maybeSingle();
-    if (error) throw new AccountError(error.message, error.code);
-    return (data as { status: string } | null)?.status ?? null;
+  /**
+   * The asking phone checks its own request: pending, approved (waiting until finishesAt: a day after the
+   * player's own phones were last used, so they can say no), done or denied. Checking finishes it when due.
+   */
+  async rescueStatus(requestId: string): Promise<{ status: string; finishesAt: string | null } | null> {
+    const r = await this.rpc<{ status: string; finishes_at: string | null } | null>('rescue_status', { p_request: requestId });
+    return r ? { status: r.status, finishesAt: r.finishes_at } : null;
   }
+
+  /** Requests from other phones to become this account (shown on this account's own phones, which can refuse them). */
+  rescuesOfMe(): Promise<{ id: string; crew_id: string; crew_name: string; status: string; created_at: string; finishes_at: string | null }[]> {
+    return this.rpc('rescues_of_me');
+  }
+
+  /** Withdraw every invite link of a crew (admins). */
+  revokeInvites(crewId: string): Promise<number> { return this.rpc<number>('revoke_invites', { p_crew: crewId }); }
 
   /** What happened in the crew (rescues, removals, role changes), newest first. */
   async crewLog(crewId: string, limit = 20): Promise<LogEntry[]> {
@@ -210,6 +220,11 @@ export class Account {
     const replay = (h.data as { record: unknown } | null)?.record ?? null;
     if (!replay) return null;
     return { replay, myCards: (c.data as { cards: string[] } | null)?.cards ?? null };
+  }
+
+  /** The shuffle proof of a hand I was dealt into, once the game is over (null when older than 90 days). */
+  handProof(gameId: string, handNo: number): Promise<{ dealerSeed: string; contributions: string[]; dealerSeedCommit: string | null; deckCommit: string } | null> {
+    return this.rpc('hand_proof', { p_game: gameId, p_hand: handNo });
   }
 
   async seasons(crewId: string): Promise<Season[]> {

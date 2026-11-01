@@ -5,7 +5,7 @@ set search_path = public, extensions;
 select plan(17);
 
 insert into private.settings values ('recorder_token_hash', encode(extensions.digest('t0k', 'sha256'), 'hex')) on conflict (key) do update set value = excluded.value;
-create function pg_temp.rec(fn text, body text) returns text language sql as $$ select testing.one(null, format('select public.%s(%L, %L)', fn, body, 't0k')) $$;
+create function pg_temp.rec(fn text, body text) returns text language sql as $$ select testing.one(null, format('select public.%s(%L, %L)', fn, body, testing.sign('t0k', body))) $$;
 
 \set A '''00000000-0000-0000-0000-00000000c001'''
 \set B '''00000000-0000-0000-0000-00000000c002'''

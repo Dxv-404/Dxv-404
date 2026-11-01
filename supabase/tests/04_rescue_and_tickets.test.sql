@@ -22,10 +22,13 @@ select is(testing.one(:OWNER, $$select status from rescue_requests$$), 'pending'
 select is(testing.one(:RAHUL, $$select count(*) from rescue_requests$$), '0', 'ordinary members do not');
 select is(testing.one(:THIEF, $$select public.decide_rescue('$$ || :'req' || $$', true)$$), 'No account yet', 'a stranger cannot decide it');
 select is(testing.one(:RAHUL, $$select public.decide_rescue('$$ || :'req' || $$', true)$$), 'Only a crew admin can do that', 'nor can a member');
+-- (the crew can vouch only for a member of a week whose phones have been quiet a day: see 08)
+update crew_members set joined_at = now() - interval '8 days';
+update account_logins set last_seen = now() - interval '2 days';
 select testing.one(:OWNER, $$select public.decide_rescue('$$ || :'req' || $$', true)$$);
 select is(testing.one(:RAHUL2, $$select (public.ensure_account('x')).id$$), :'rahul_acc', 'approved: the new phone is Rahul''s account');
 select is(testing.one(:RAHUL2, $$select count(*) from crews$$), '1', 'with his crew');
-select is(testing.as_phone(:OWNER, $$select what from crew_audit where what like 'rescue%' order by id$$), '[{"what": "rescue_requested"}, {"what": "rescue_approved"}]', 'the crew log shows the rescue, so it cannot happen quietly');
+select is(testing.as_phone(:OWNER, $$select what from crew_audit where what like 'rescue%' order by id$$), '[{"what": "rescue_requested"}, {"what": "rescue_approved"}, {"what": "rescue_done"}]', 'the crew log shows the rescue, so it cannot happen quietly');
 select is(testing.one(:OWNER, $$select public.decide_rescue('$$ || :'req' || $$', true)$$), 'This request is no longer open', 'a request is decided once');
 
 -- a thief asks to be the owner: refused, and an admin cannot approve their own rescue

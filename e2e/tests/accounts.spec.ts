@@ -77,29 +77,43 @@ test('no sign-up, crews by link, a wiped phone recovers everything, crew rescue'
   await expect(wiped.page.getByTestId('crews')).toContainText('Friday crew');
   await expect(wiped.page.getByTestId('crews')).toContainText('owner');
 
-  // Riya loses her phone and never saved a code: crew rescue from the invite link
+  // Riya gets a new phone and never saved a code: crew rescue from the invite link
   const riyaNew = await phone(browser, 'Riya (new phone)', baseURL!, MODELS.pixel7);
   await riyaNew.page.goto(link.replace(/^https?:\/\/[^/]+/, ''));
   await riyaNew.page.getByTestId('already-in').click();
   await riyaNew.page.getByTestId('rescue-Riya').click();
   await expect(riyaNew.page.getByTestId('rescue-status')).toContainText("Is this Riya's new phone?");
-  // Rahul (on his recovered phone) sees the question in the crew and says yes
+  // Rahul (on his recovered phone) sees the question in the crew. Riya joined today, so the crew cannot
+  // vouch for her yet (a crew made to steal an account would otherwise work at once): he is told plainly
   await wiped.page.getByTestId('crews').getByText('Friday crew').click();
   await wiped.page.getByTestId('rescue-yes').click();
-  await expect(wiped.page.getByTestId('rescues')).toHaveCount(0);
-  // the new phone moves on by itself and is Riya, in the crew
-  await expect(riyaNew.page.getByTestId('name')).toHaveValue('Riya', { timeout: 20_000 });
-  await expect(riyaNew.page.getByTestId('crews')).toContainText('Friday crew');
+  await expect(wiped.page.locator('#toast')).toContainText('joined this crew less than a week ago');
+  // Riya's own phone is told someone is asking to be her, and stops it
+  await riya.page.goto('/');
+  await riya.page.getByTestId('open-profile').click();
+  await expect(riya.page.getByTestId('rescue-alert')).toContainText('A new phone asked Friday crew to move your account to it');
+  await riya.page.getByTestId('rescue-alert-not-me').click();
+  await expect(riya.page.getByTestId('rescue-alert')).toHaveCount(0);
+  await expect(riyaNew.page.getByTestId('rescue-status')).toContainText("The crew said this isn't Riya's phone", { timeout: 20_000 });
   // the crew log shows what happened, so a rescue never goes unnoticed
   await openCrew(wiped.page, 'Friday crew');
-  await expect(wiped.page.getByTestId('crew-log')).toContainText('said yes: a new phone is now Riya');
   await expect(wiped.page.getByTestId('crew-log')).toContainText('A new phone asked to be Riya');
+  await expect(wiped.page.getByTestId('crew-log')).toContainText('Riya said a new phone asking to be them is not theirs');
+  // (an approved rescue waits a day after the old phone was last used, then finishes: database tests 08)
+  // how the waiting phone shows an approved rescue
+  const waiting = await phone(browser, 'Riya (approved)', baseURL!, MODELS.pixel7);
+  await waiting.page.route('**/rest/v1/rpc/rescue_status', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'approved', finishes_at: new Date(Date.now() + 20 * 3600_000).toISOString() }) }));
+  await waiting.page.goto(link.replace(/^https?:\/\/[^/]+/, ''));
+  await waiting.page.getByTestId('already-in').click();
+  await waiting.page.getByTestId('rescue-Riya').click();
+  await expect(waiting.page.getByTestId('rescue-status')).toContainText("The crew said yes. For safety, Riya's account moves to this phone", { timeout: 20_000 });
 
-  // Riya sees both her phones, and logs the old one out
-  await expect(riyaNew.page.getByTestId('phones').locator('li')).toHaveCount(2);
-  await riyaNew.page.getByTestId('phones').getByRole('button', { name: 'Log out' }).click();
-  await expect(riyaNew.page.getByTestId('phones').locator('li')).toHaveCount(1);
-  await expect(riyaNew.page.getByTestId('phones')).toContainText('This phone');
+  // Rahul sees both his phones (the wiped one came back with the code), and logs the old one out
+  await wiped.page.getByRole('button', { name: 'Back' }).click();
+  await expect(wiped.page.getByTestId('phones').locator('li')).toHaveCount(2);
+  await wiped.page.getByTestId('phones').getByRole('button', { name: 'Log out' }).click();
+  await expect(wiped.page.getByTestId('phones').locator('li')).toHaveCount(1);
+  await expect(wiped.page.getByTestId('phones')).toContainText('This phone');
 
   // a stranger claims to be Rahul from the link; Rahul says no; the stranger is told plainly
   const stranger = await phone(browser, 'Stranger', baseURL!, MODELS.smallAndroid);
@@ -107,9 +121,9 @@ test('no sign-up, crews by link, a wiped phone recovers everything, crew rescue'
   await stranger.page.getByTestId('already-in').click();
   await stranger.page.getByTestId('rescue-Rahul').click();
   await expect(stranger.page.getByTestId('rescue-status')).toContainText("Is this Rahul's new phone?");
-  await expect(riyaNew.page.getByTestId('crews')).toContainText('Friday crew');
-  await riyaNew.page.getByTestId('crews').getByText('Friday crew').click(); // Riya is a member: she cannot decide
-  await expect(riyaNew.page.getByTestId('rescues')).toHaveCount(0);
+  await expect(riya.page.getByTestId('crews')).toContainText('Friday crew');
+  await riya.page.getByTestId('crews').getByText('Friday crew').click(); // Riya is a member: she cannot decide
+  await expect(riya.page.getByTestId('rescues')).toHaveCount(0);
   await openCrew(wiped.page, 'Friday crew');
   await expect(wiped.page.getByTestId('rescues')).toContainText('A new phone says it is you.');
   await wiped.page.getByTestId('rescue-not-me').click();

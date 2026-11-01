@@ -72,7 +72,9 @@ export function accountScreens({ screen, openSheet, home }) {
     const codeBox = h('div', { class: 'block-inner' });
     const crewsBox = h('div', {});
     const phonesBox = h('div', {});
+    const alertBox = h('div', {});
     body.replaceChildren(
+      alertBox,
       h('section', { class: 'block' }, h('label', { class: 'field' }, h('span', {}, 'Name'), nameIn)),
       h('section', { class: 'block' }, h('h2', {}, 'Recovery code'), codeBox),
       h('section', { class: 'block' }, h('button', { class: 'btn secondary', 'data-testid': 'my-games', onclick: () => lg.history() }, 'My games', h('small', {}, 'Every game you played, with replays'))),
@@ -89,9 +91,25 @@ export function accountScreens({ screen, openSheet, home }) {
           if (!confirm('Delete your account? Your name and picture go; your past results stay in your crews as "Former player".')) return;
           try { await a.deleteAccount(); localStorage.removeItem(CODE_KEY); toast('Account deleted'); home(); } catch (err) { toast(err.message); }
         } }, 'Delete my account')));
+    drawRescueAlerts(alertBox, a);
     drawCode(codeBox, a);
     drawCrews(crewsBox, a);
     drawPhones(phonesBox, a);
+  }
+
+  // Another phone asked a crew to become this account: this phone is told, and can stop it
+  async function drawRescueAlerts(box, a) {
+    try {
+      const list = await a.rescuesOfMe();
+      box.replaceChildren(...list.map((r) => h('section', { class: 'block alert', role: 'alert', 'data-testid': 'rescue-alert' },
+        h('h2', {}, 'Someone is asking to be you'),
+        h('p', {}, r.status === 'approved'
+          ? `A new phone asked ${r.crew_name} to move your account to it, and an admin said yes. It happens ${new Date(r.finishes_at).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })} unless you stop it.`
+          : `A new phone asked ${r.crew_name} to move your account to it. If that is not you, say so.`),
+        h('button', { class: 'btn danger', 'data-testid': 'rescue-alert-not-me', onclick: async () => {
+          try { await a.decideRescue(r.id, false); toast('Stopped. Your crew can see this in its log.'); drawRescueAlerts(box, a); } catch (err) { toast(err.message); }
+        } }, 'That’s not me: stop it'))));
+    } catch { box.replaceChildren(); }
   }
 
   async function drawPhones(box, a) {
@@ -216,8 +234,10 @@ export function accountScreens({ screen, openSheet, home }) {
               const who = (k) => names.get(e.detail[k]) || 'a player';
               switch (e.what) {
                 case 'rescue_requested': return `A new phone asked to be ${who('for')}`;
-                case 'rescue_approved': return `${e.actor_name || 'An admin'} said yes: a new phone is now ${who('for')}`;
-                case 'rescue_denied': return `${e.actor_name || 'An admin'} said no to a new phone asking to be ${who('for')}`;
+                case 'rescue_approved': return `${e.actor_name || 'An admin'} said yes to a new phone asking to be ${who('for')} (it moves over after a day, unless ${who('for')} says no)`;
+                case 'rescue_done': return `A new phone is now ${who('for')}`;
+                case 'rescue_denied': return e.detail.by_target ? `${who('for')} said a new phone asking to be them is not theirs` : `${e.actor_name || 'An admin'} said no to a new phone asking to be ${who('for')}`;
+                case 'invites_revoked': return `${e.actor_name || 'An admin'} stopped the crew's invite links`;
                 case 'member_removed': return `${e.actor_name || 'An admin'} removed ${who('account')}`;
                 case 'member_approved': return `${e.actor_name || 'An admin'} let ${who('account')} in`;
                 case 'member_refused': return `${e.actor_name || 'An admin'} said no to someone asking to join`;
@@ -249,7 +269,7 @@ export function accountScreens({ screen, openSheet, home }) {
                 h('button', { class: 'btn small primary', 'data-testid': 'rescue-not-me', onclick: () => act(() => a.decideRescue(r.id, false)) }, 'That’s not me'))
               : h('div', { class: 'rescue' },
                 h('p', {}, `Is this ${r.target_name}'s new phone?`),
-                h('p', { class: 'hint small' }, 'Say yes only if they told you so. The new phone becomes their account, with everything on it.'),
+                h('p', { class: 'hint small' }, 'Say yes only if they told you so. A day after their old phone was last used, the new phone becomes their account, with everything on it; their old phone can still stop it until then.'),
                 h('div', { class: 'two' },
                   h('button', { class: 'btn small primary', 'data-testid': 'rescue-yes', onclick: () => act(() => a.decideRescue(r.id, true)) }, `Yes, it's ${r.target_name}`),
                   h('button', { class: 'btn small ghost', onclick: () => act(() => a.decideRescue(r.id, false)) }, 'No'))))),
@@ -269,6 +289,9 @@ export function accountScreens({ screen, openSheet, home }) {
                     h('p', { class: 'hint small' }, 'The link works for 7 days.')));
                 } catch (err) { e.target.disabled = false; toast(err.message); }
               } }, 'Make an invite link'),
+              h('button', { class: 'btn ghost small', 'data-testid': 'revoke-invites', onclick: async () => {
+                try { const n = await a.revokeInvites(id); toast(n ? `${n} link${n === 1 ? '' : 's'} stopped working` : 'There were no links'); } catch (err) { toast(err.message); }
+              } }, 'Stop all invite links', h('small', {}, 'Removing a member does this too')),
               h('label', { class: 'switch-row' }, h('span', {}, 'Approve new members', h('small', {}, 'An admin lets each new member in')),
                 h('input', { type: 'checkbox', role: 'switch', checked: crew.require_approval ? true : null, onchange: (e) => act(() => a.updateCrew(id, { requireApproval: e.target.checked })) }))),
             crew.status === 'active' && logBox,
@@ -346,9 +369,13 @@ export function accountScreens({ screen, openSheet, home }) {
         if (stop) return;
         try {
           const st = await a.rescueStatus(requestId);
-          if (st === 'denied') {
+          if (st?.status === 'denied') {
             status.textContent = `The crew said this isn't ${target.name}'s phone. If it is, ask them in your group, then try again from the link.`;
             return;
+          }
+          if (st?.status === 'approved' && st.finishesAt) {
+            const at = new Date(st.finishesAt).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+            status.textContent = `The crew said yes. For safety, ${target.name}'s account moves to this phone ${at}, unless ${target.name}'s old phone says no. You can close this; open the link again then.`;
           }
           const p = await a.refresh();
           if (p && p.id === target.id) {

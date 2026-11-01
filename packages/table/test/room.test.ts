@@ -288,7 +288,7 @@ describe('table room', () => {
     t.send(c.a, { t: 'host', cmd: 'deal' });
     expect(t.room.engine!.s.level.bb).toBe(40);
     expect(ok(t.send(c.a, { t: 'host', cmd: 'pause' })).ok).toBe(true);
-    expect(t.wake).toBeNull();
+    expect((t.room as unknown as { handDeadline(): number | null }).handDeadline()).toBeNull(); // no turn timer while paused
     expect(ok(t.send(c.a, { t: 'host', cmd: 'resume' })).ok).toBe(true);
     expect(t.wake).not.toBeNull();
     // the host leaves the table: hosting passes to someone still connected
@@ -421,5 +421,122 @@ describe('table room', () => {
     t.room.connect(quiet);
     expect(t.room.hasSaidHello(quiet)).toBe(false);
     expect(t.room.hasSaidHello(new FakeConn())).toBe(false);
+  });
+});
+
+describe('phase 4 deep review', () => {
+  it('phones never receive the shuffle seed (it would reveal folded hands); the deck fingerprint they do get', () => {
+    const t = setup();
+    const conns = { a: t.join('a'), b: t.join('b'), c: t.join('c') };
+    t.send(conns.a, { t: 'host', cmd: 'deal' });
+    for (let i = 0; i < 400 && t.hands.length < 5; i++) {
+      if (t.room.engine!.s.phase === 'hand' && t.room.engine!.s.hand!.toAct) actFor(t.room, conns, t.send); else t.advance(1000);
+    }
+    expect(t.hands.length).toBeGreaterThanOrEqual(5);
+    const seeds = t.hands.map((h) => h.proof.dealerSeed);
+    for (const c of Object.values(conns)) {
+      const all = JSON.stringify(c.inbox);
+      for (const sd of seeds) expect(all).not.toContain(sd);
+      expect(all).not.toContain('deckReveal');
+      expect(all).toContain(t.hands[0]!.deckCommit);
+    }
+    // a phone reconnecting late is sent the missed events: no seed there either
+    const late = t.join('b', { lastSeq: 1 });
+    const w = late.last('welcome')!;
+    for (const sd of seeds) expect(JSON.stringify(w)).not.toContain(sd);
+  });
+
+  it('a host whose phone dies hands hosting to a player who is here after a minute', () => {
+    const t = setup();
+    const a = t.join('a'), b = t.join('b');
+    t.send(a, { t: 'host', cmd: 'deal' });
+    t.room.disconnect(a);
+    const tick = () => { t.room.message(b, JSON.stringify({ t: 'ping', c: t.now })); t.advance(1000); }; // b's phone pings as phones do
+    for (let i = 0; i < 30; i++) tick();
+    expect(t.room.host).toBe('a'); // 30 s: still a
+    for (let i = 0; i < 40; i++) tick();
+    expect(t.room.host).toBe('b');
+    expect(b.last('update')!.host).toBe('b');
+    // b's phone stayed in step (no gap in the numbering)
+    const seqs = b.inbox.filter((m) => m.t === 'update').map((m) => (m as { seq: number }).seq);
+    seqs.forEach((s, i) => { if (i) expect(s).toBe(seqs[i - 1]! + 1); });
+    // the new host can end the night
+    const id = t.send(b, { t: 'host', cmd: 'end' });
+    expect(b.inbox.find((m) => m.t === 'ack' && m.actionId === id)).toMatchObject({ ok: true });
+    // a coming back does not take it back
+    t.join('a');
+    expect(t.room.host).toBe('b');
+  });
+
+  it('with nobody else here the host keeps hosting and the server does not spin', () => {
+    const t = setup();
+    const a = t.join('a');
+    t.room.disconnect(a);
+    let wakes = 0;
+    for (let i = 0; i < 200; i++) { const w = t.wake; t.advance(1000); if (w !== null && t.now >= w) wakes++; }
+    expect(t.room.host).toBe('a');
+    expect(wakes).toBeLessThan(20);
+  });
+
+  it('a phone that goes silent (vanished) is closed after 30 s; a socket that never says hello after 15 s', () => {
+    const t = setup();
+    const a = t.join('a'), b = t.join('b');
+    const quiet = new FakeConn(); t.room.connect(quiet);
+    for (let i = 0; i < 20; i++) { t.room.message(a, JSON.stringify({ t: 'ping', c: t.now })); t.advance(1000); }
+    expect(quiet.closed).toBe('no hello');
+    expect(b.closed).toBeNull();
+    for (let i = 0; i < 15; i++) { t.room.message(a, JSON.stringify({ t: 'ping', c: t.now })); t.advance(1000); }
+    expect(b.closed).toBe('silent');
+    expect(a.closed).toBeNull();
+    for (let i = 0; i < 5; i++) { t.room.message(a, JSON.stringify({ t: 'ping', c: t.now })); t.advance(1000); }
+    expect(t.room.engine!.player('b')!.connected).toBe(false);
+  });
+
+  it('a table takes at most 60 sockets', () => {
+    const t = setup();
+    t.join('a');
+    const extra: FakeConn[] = [];
+    for (let i = 0; i < 70; i++) { const c = new FakeConn(); t.room.connect(c); extra.push(c); }
+    expect(t.room.connectionCount).toBe(60);
+    expect(extra.at(-1)!.closed).toBe('table_full');
+  });
+});
+
+describe('names at the table', () => {
+  it('invisible characters cannot make a second Riya that looks like the first', () => {
+    const t = setup();
+    t.join('a', { name: 'Riya' });
+    t.join('b', { name: 'Ri​ya‮' });
+    t.join('c', { name: '  Riya   ' });
+    const names = t.room.engine!.s.players.map((p) => p.name);
+    expect(names).toEqual(['Riya', 'Riya 2', 'Riya 3']);
+  });
+});
+
+describe('a table with no turn timer', () => {
+  it('a player removed by the host mid-hand no longer holds the hand up', () => {
+    const t = setup();
+    const a = t.join('a', { settings: { turnTime: 0 } }), b = t.join('b'), c = t.join('c');
+    t.send(a, { t: 'host', cmd: 'deal' });
+    const e = t.room.engine!;
+    const stuck = e.s.hand!.toAct!;
+    const conns: Record<string, FakeConn> = { a, b, c };
+    t.room.disconnect(conns[stuck]!); // their phone died; nobody can act for them
+    for (let i = 0; i < 10; i++) t.advance(1000);
+    expect(e.s.hand!.toAct).toBe(stuck); // no timer: the hand waits
+    const host = stuck === 'a' ? 'b' : 'a';
+    if (stuck === 'a') { for (let i = 0; i < 70; i++) { t.room.message(b, JSON.stringify({ t: 'ping', c: t.now })); t.room.message(c, JSON.stringify({ t: 'ping', c: t.now })); t.advance(1000); } }
+    expect(t.room.host).toBe(host);
+    t.send(conns[host]!, { t: 'host', cmd: 'remove', pid: stuck });
+    expect(e.s.hand?.toAct ?? null).not.toBe(stuck);
+  });
+
+  it('a table opened and ended without a hand records nothing', () => {
+    const league: string[] = [];
+    const t = setup();
+    (t.store as unknown as { league: (k: string) => void }).league = (k) => league.push(k);
+    const a = t.join('a'); t.join('b');
+    t.send(a, { t: 'host', cmd: 'end' });
+    expect(league).toEqual([]);
   });
 });

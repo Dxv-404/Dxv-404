@@ -1,5 +1,6 @@
 // History, game results, hand replays, the crew league (three views), player cards and trophies.
 // Everything here is read from the cloud; results are only ever written by table servers.
+import { verifyDeck } from '@tp/engine';
 import { h, toast, fmt, cardEl } from './ui.js';
 
 const HAND_NAMES = ['High card', 'One pair', 'Two pair', 'Three of a kind', 'Straight', 'Flush', 'Full house', 'Four of a kind', 'Straight flush', 'Royal flush'];
@@ -140,8 +141,20 @@ export function leagueScreens({ screen, openSheet, account, back }) {
         const next = h('button', { class: 'btn ghost small', 'aria-label': 'Next step', 'data-testid': 'replay-next', onclick: () => { i = Math.min(frames.length - 1, i + 1); draw(); } }, '▶');
         const end = h('button', { class: 'btn ghost small', onclick: () => { i = frames.length - 1; draw(); } }, 'End');
         const counter = h('span', { class: 'hint' });
+        // the shuffle seed is never sent to phones during play (it would show folded hands); a player who
+        // was dealt in can fetch it afterwards and check the deck was the one promised before the deal
+        const proofOut = h('p', { class: 'hint small', role: 'status', 'data-testid': 'proof-result' });
+        const check = got.myCards && h('button', { class: 'btn ghost small', 'data-testid': 'check-deal', onclick: async (e) => {
+          e.target.disabled = true;
+          try {
+            const pr = await a.handProof(gameId, handNo);
+            if (!pr) { proofOut.textContent = 'The proof for this hand is no longer kept (older than 90 days).'; return; }
+            const v = verifyDeck({ dealerSeed: pr.dealerSeed, contributions: pr.contributions ?? [], commit: pr.deckCommit, dealerSeedCommit: pr.dealerSeedCommit ?? null });
+            proofOut.textContent = v.ok ? 'Fair deal: the deck matches the fingerprint shown before the cards were dealt.' : `This deal does not check out: ${v.reason}`;
+          } catch (err) { proofOut.textContent = err.message; e.target.disabled = false; }
+        } }, 'Check this deal was fair');
         body.replaceChildren(stage, h('div', { class: 'replay-controls' }, prev, counter, next, end),
-          h('p', { class: 'hint small' }, `Deck fingerprint ${rp.deckCommit.slice(0, 12)}…`));
+          h('p', { class: 'hint small' }, `Deck fingerprint ${rp.deckCommit.slice(0, 12)}…`), check || null, proofOut);
         draw();
       })();
     });

@@ -73,11 +73,19 @@ export interface RoomOptions {
   server?: GameInfo['server'];
   /** A started game nobody has been connected to for this long ends by itself (and is recorded). */
   autoEndAfterMs?: number;
+  /** The host has been gone this long while someone else is at the table: hosting passes to them. */
+  hostHandoverMs?: number;
+  /** Most sockets one table holds (players plus watchers); more are turned away, so nobody can flood it. */
+  maxConnections?: number;
+  /** A phone sends something (at least a ping) every few seconds; one silent this long has vanished and is closed. */
+  silentCloseMs?: number;
+  /** A socket that has not said hello by then is closed. */
+  helloWithinMs?: number;
   /** Checks an account ticket (phones that are signed in send one). Needed for crew-only tables. */
   identify?: (ticket: string, table: string) => Promise<Identity | null>;
 }
 
-interface ConnState { pid: PlayerId | null; hello: boolean; spectator: boolean; windowStart: number; count: number; lastReact: number; device?: string; checking?: boolean }
+interface ConnState { pid: PlayerId | null; hello: boolean; spectator: boolean; windowStart: number; count: number; lastReact: number; lastSeen: number; device?: string; checking?: boolean }
 
 /** Who a ticket belongs to, as the accounts database answers (see check_ticket). */
 export interface Identity { account: string; device: string; name: string; crews: string[] }
@@ -109,6 +117,8 @@ export class TableRoom {
   private minStacks: Record<PlayerId, number> = {};
   /** Since when no player has been connected (for ending abandoned games). */
   private emptySince: number | null = null;
+  /** When hosting passes on if the host is still gone (see hostHandoverMs). */
+  private hostHandoverAt: number | null = null;
   private conns = new Map<Conn, ConnState>();
   private acks = new Map<PlayerId, Map<string, Ack>>();
   private recent: { seq: number; events: GameEvent[] }[] = [];
@@ -122,14 +132,19 @@ export class TableRoom {
 
   constructor(code: string, private clock: RoomClock, private store: RoomStore, saved?: Persisted | null, opt: RoomOptions = {}) {
     this.code = code;
-    this.opt = { handPauseMs: 4000, rateLimit: 40, rateWindowMs: 2000, keepUpdates: 200, offlineAfterMs: 3000, seed: randomSeed, identify: async () => null, server: 'test', autoEndAfterMs: 20 * 60_000, ...opt };
+    this.opt = { handPauseMs: 4000, rateLimit: 40, rateWindowMs: 2000, keepUpdates: 200, offlineAfterMs: 3000, seed: randomSeed, identify: async () => null, server: 'test', autoEndAfterMs: 20 * 60_000, hostHandoverMs: 60_000, maxConnections: 60, silentCloseMs: 30_000, helloWithinMs: 15_000, ...opt };
     this.createdAt = clock.now();
     if (saved) this.restore(saved);
   }
 
   // ---------------- doors in ----------------
   connect(conn: Conn): void {
-    this.conns.set(conn, { pid: null, hello: false, spectator: false, windowStart: this.clock.now(), count: 0, lastReact: 0 });
+    if (this.conns.size >= this.opt.maxConnections) {
+      this.send(conn, { t: 'error', code: 'table_full', message: 'This table has too many phones connected' });
+      return conn.close(4000, 'table_full');
+    }
+    this.conns.set(conn, { pid: null, hello: false, spectator: false, windowStart: this.clock.now(), count: 0, lastReact: 0, lastSeen: this.clock.now() });
+    this.reschedule();
   }
 
   disconnect(conn: Conn): void {
@@ -151,6 +166,7 @@ export class TableRoom {
     const st = this.conns.get(conn);
     if (!st) return;
     const now = this.clock.now();
+    st.lastSeen = now;
     if (now - st.windowStart >= this.opt.rateWindowMs) { st.windowStart = now; st.count = 0; }
     if (++st.count > this.opt.rateLimit) return this.send(conn, { t: 'error', code: 'rate_limited', message: 'Too many messages' });
     const p = parseClient(raw);
@@ -175,6 +191,14 @@ export class TableRoom {
 
   private onWake(): void {
     const now = this.clock.now();
+    // vanished phones (no signal, app killed) and sockets that never said hello are closed here, so every
+    // server finds them the same way (a sleeping Cloudflare table has no ping timer of its own)
+    for (const [c, st] of [...this.conns]) {
+      const limit = st.hello ? this.opt.silentCloseMs : this.opt.helloWithinMs;
+      if (now - st.lastSeen < limit || st.checking) continue;
+      try { c.close(4004, st.hello ? 'silent' : 'no hello'); } catch { /* already gone */ }
+      this.disconnect(c);
+    }
     const e = this.engine;
     if (e && e.s.phase === 'hand' && !e.s.paused) {
       const due = this.handDeadline();
@@ -343,7 +367,9 @@ export class TableRoom {
     const e = this.engine!;
     const r = e.apply(input);
     if (r.error !== undefined) return r.error;
-    const events = r.events;
+    // the shuffle seed stays on the server (it would let any phone work out folded hands); the database keeps it
+    // for a fairness check on request
+    const events = r.events.filter((ev) => ev.t !== 'deckReveal');
     if (e.s.phase === 'hand') this.inputs.push(input);
     else { this.base = e.snapshot(); this.inputs = []; }
     this.seq++;
@@ -359,8 +385,21 @@ export class TableRoom {
     }
     for (const [c, st] of this.conns) if (st.hello) this.send(c, { t: 'update', seq: this.seq, events: events as unknown as Record<string, unknown>[], view: this.view(st.pid), host: this.host, at: input.now });
     this.persist();
+    this.foldLeaving(input.now);
     this.reschedule();
     return null;
+  }
+
+  /**
+   * A player the host removed mid-hand leaves when the hand ends, but the hand would wait for them to act
+   * (for ever at a table with no turn timer). When it is their turn they fold (or check) at once.
+   */
+  private foldLeaving(now: number): void {
+    const e = this.engine!;
+    const pid = e.s.phase === 'hand' && !e.s.paused ? e.s.hand?.toAct : null;
+    if (!pid || !e.player(pid)?.leaving) return;
+    const L = e.legal(pid);
+    this.apply({ t: 'act', pid, action: { type: L?.canCheck ? 'check' : 'fold' }, now });
   }
 
   private deal(now: number): string | null {
@@ -383,8 +422,47 @@ export class TableRoom {
   }
 
   private reschedule(): void {
-    const times = [this.handDeadline(), this.nextDealAt, this.autoEndAt(), ...this.goingOffline.values()].filter((x): x is number => x !== null);
+    this.checkHost(this.clock.now());
+    const times = [this.handDeadline(), this.nextDealAt, this.autoEndAt(), this.hostHandoverAt, this.nextSilentCheck(), ...this.goingOffline.values()].filter((x): x is number => x !== null);
     this.clock.schedule(times.length ? Math.min(...times) : null);
+  }
+
+  /**
+   * A host whose phone died would leave the table with nobody able to deal, pause or end the game. After
+   * hostHandoverMs gone, hosting passes to a player who is here (the old host does not get it back).
+   */
+  private checkHost(now: number): void {
+    const e = this.engine;
+    const away = !!e && e.s.phase !== 'ended' && !!this.host && !this.connsOf(this.host).length;
+    if (!away) { this.hostHandoverAt = null; return; }
+    if (this.hostHandoverAt === null) { this.hostHandoverAt = now + this.opt.hostHandoverMs; return; }
+    if (now < this.hostHandoverAt) return;
+    const next = e!.s.players.find((p) => p.id !== this.host && !p.leaving && this.connsOf(p.id).length);
+    // nobody here to take over: look again later (the game ends by itself if everyone stays gone)
+    if (!next) { this.hostHandoverAt = now + this.opt.hostHandoverMs; return; }
+    this.hostHandoverAt = null;
+    this.host = next.id;
+    this.announce();
+  }
+
+  /** A change outside the rules engine (who hosts): numbered like any other update so phones keep in step. */
+  private announce(): void {
+    this.seq++;
+    this.recent.push({ seq: this.seq, events: [] });
+    if (this.recent.length > this.opt.keepUpdates) this.recent.shift();
+    const at = this.clock.now();
+    for (const [c, st] of this.conns) if (st.hello) this.send(c, { t: 'update', seq: this.seq, events: [], view: this.view(st.pid), host: this.host, at });
+    this.persist();
+  }
+
+  /** When the quietest socket would count as vanished (see onWake). */
+  private nextSilentCheck(): number | null {
+    let at: number | null = null;
+    for (const st of this.conns.values()) {
+      const t = st.lastSeen + (st.hello ? this.opt.silentCloseMs : this.opt.helloWithinMs);
+      if (at === null || t < at) at = t;
+    }
+    return at;
   }
 
   /** Notice when the last player leaves, or someone comes back. */
@@ -426,6 +504,7 @@ export class TableRoom {
     if (!this.store.league || !this.game || this.game.ended) return;
     this.game.ended = true;
     const e = this.engine!;
+    if (e.s.handNo === 0) { this.persist(); return; } // opened and closed without a hand: nothing to record
     const everyone = e.s.players.concat(e.s.departed ?? []);
     const seen = new Set<PlayerId>();
     const players: EndPlayerRow[] = [];
@@ -440,13 +519,16 @@ export class TableRoom {
 
   /** Two players called Riya at one table: the second becomes "Riya 2" (names are cut to 14 at the table). */
   private uniqueName(name: string): string {
-    const taken = new Set(this.engine!.s.players.map((p) => p.name.toLowerCase()));
-    const base = Engine.cleanName(name);
-    if (!taken.has(base.toLowerCase())) return base;
+    const key = (n: string): string => n.normalize('NFKC').toLowerCase();
+    const taken = new Set(this.engine!.s.players.map((p) => key(p.name)));
+    // invisible and control characters (zero-width spaces, right-to-left marks) could make a second "Riya"
+    // look exactly like the first, or break other phones' layouts: they go, and so do runs of spaces
+    const base = Engine.cleanName(name.normalize('NFKC').replace(/[\p{C}]/gu, '').replace(/\s+/g, ' '));
+    if (!taken.has(key(base))) return base;
     for (let n = 2; ; n++) {
       const tag = ` ${n}`;
       const candidate = base.slice(0, 14 - tag.length).trimEnd() + tag;
-      if (!taken.has(candidate.toLowerCase())) return candidate;
+      if (!taken.has(key(candidate))) return candidate;
     }
   }
 
@@ -457,7 +539,9 @@ export class TableRoom {
 
   // ---------------- doors out ----------------
   private view(pid: PlayerId | null): Record<string, unknown> {
-    return this.engine!.viewFor(pid) as unknown as Record<string, unknown>;
+    const v = this.engine!.viewFor(pid);
+    if (v.hand) v.hand = { ...v.hand, proof: null }; // see apply(): the seed never goes to phones
+    return v as unknown as Record<string, unknown>;
   }
 
   private welcome(conn: Conn, pid: PlayerId | null, lastSeq: number): void {
@@ -531,7 +615,7 @@ export class TableRoom {
    * sockets) are handed back with the seat they had said hello for.
    */
   adopt(conn: Conn, pid: PlayerId | null): void {
-    this.conns.set(conn, { pid, hello: true, spectator: pid === null, windowStart: this.clock.now(), count: 0, lastReact: 0 });
+    this.conns.set(conn, { pid, hello: true, spectator: pid === null, windowStart: this.clock.now(), count: 0, lastReact: 0, lastSeen: this.clock.now() });
   }
 
   /** Call once after a restore (and any adopt calls): players with no connection are shown as gone. */

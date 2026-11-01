@@ -75,7 +75,7 @@ select testing.one(:OWNER, $$select (public.create_crew('Second')).id$$) as crew
 select testing.one(:OWNER, $$select public.create_invite('$$ || :'crew2' || $$')$$) as inv3 \gset
 select testing.one(:MEM, $$select public.join_crew('$$ || :'inv3' || $$')$$);
 select testing.one(:OWNER, $$select public.delete_my_account()$$);
-select is(testing.as_phone(:MEM, $$select a.name, m.role from crew_members m join accounts a on a.id = m.account_id order by a.name$$), '[{"name": "Former player", "role": "member"}, {"name": "Member", "role": "owner"}]', 'a deleted account shows as Former player; ownership passed on');
+select is(testing.as_phone(:MEM, $$select a.name, m.role from crew_members m join accounts a on a.id = m.account_id order by a.name$$), '[{"name": "Member", "role": "owner"}]', 'a deleted account leaves its crews; ownership passed on');
 
 -- limits: 10 crews per person
 select testing.as_phone(:LATE, $$select public.create_crew('Crew ' || n) from generate_series(1, 10) n$$);

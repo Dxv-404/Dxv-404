@@ -1,7 +1,7 @@
 // Turning finished hands and games into league records, and getting them to the database exactly once.
 // The table server builds a payload from the engine's own hand record (never from what phones say),
 // signs it with the recorder key, and keeps it in an outbox until the database says "ok" or "duplicate".
-import { CATEGORY, Engine, cardStr, type GameState, type HandRecord, type Input, type PlayerId } from '@tp/engine';
+import { CATEGORY, Engine, cardStr, sha256hex, toHex, type GameState, type HandRecord, type Input, type PlayerId } from '@tp/engine';
 
 export interface GameInfo {
   id: string; crew: string | null; table: string; server: 'oracle' | 'cloudflare' | 'host' | 'test';
@@ -122,8 +122,19 @@ export function handPlayers(rec: HandRecord, accountOf: (pid: PlayerId) => strin
 export interface Signer { (body: string): Promise<string> }
 
 /** Table servers prove who they are with their recorder token (the database keeps only its hash). */
-export function tokenSigner(token: string): Signer {
-  return async () => token;
+/**
+ * Signs each database call: "v1.<ms>.<HMAC-SHA256 of '<ms>.<body>'>", keyed with the token's SHA-256 (what the
+ * database keeps). The token itself never leaves the server, and a signed call is only good for 10 minutes.
+ */
+export function tokenSigner(token: string, now: () => number = Date.now): Signer {
+  const subtle = (globalThis as unknown as { crypto: { subtle: SubtleCrypto } }).crypto.subtle;
+  const enc = new TextEncoder();
+  const key = subtle.importKey('raw', enc.encode(sha256hex(token)), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return async (body) => {
+    const t = String(Math.floor(now()));
+    const mac = new Uint8Array(await subtle.sign('HMAC', await key, enc.encode(`${t}.${body}`)));
+    return `v1.${t}.${toHex(mac)}`;
+  };
 }
 
 export interface OutboxItem { id: string; fn: 'record_hand' | 'record_game_end'; body: string; tries: number; nextAt: number; /** Send order (stores list items alphabetically, which is not the order they were made). */ order?: number }

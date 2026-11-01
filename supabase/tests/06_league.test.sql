@@ -5,7 +5,7 @@ set search_path = public, extensions;
 select plan(42);
 
 insert into private.settings values ('recorder_token_hash', encode(extensions.digest('test-recorder-token', 'sha256'), 'hex')) on conflict (key) do update set value = excluded.value;
-create function pg_temp.sign(body text) returns text language sql as $$ select 'test-recorder-token'::text $$;
+create function pg_temp.sign(body text) returns text language sql as $$ select testing.sign('test-recorder-token', body) $$;
 -- a recorder call as the table server makes it: the public key (anon) plus the signature
 create function pg_temp.rec(fn text, body text) returns text language sql as $$
   select testing.one(null, format('select public.%s(%L, %L)', fn, body, pg_temp.sign(body))) $$;

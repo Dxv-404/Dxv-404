@@ -104,7 +104,7 @@ describe('Oracle table server (real sockets)', () => {
   it('a stranger cannot take a seat; an unknown path is refused; a silent socket is closed', async () => {
     const code = 'SEAT' + Math.floor(Math.random() * 1e4);
     const errors: string[] = [];
-    const a = new TableClient({ url: `ws://127.0.0.1:${port}/table/${code}`, table: code, player: 'owner', token: newSeatToken(), name: 'Owner', open: (u) => new WebSocket(u) as unknown as SocketLike });
+    const a = new TableClient({ url: `ws://127.0.0.1:${port}/table/${code}`, table: code, player: 'owner', token: newSeatToken(), name: 'Owner', settings: { turnTime: 20, startStack: 1000 }, open: (u) => new WebSocket(u) as unknown as SocketLike });
     expect(await until(() => a.status === 'live', 5000)).toBe(true);
     const b = new TableClient({ url: `ws://127.0.0.1:${port}/table/${code}`, table: code, player: 'owner', token: newSeatToken(), name: 'Thief', open: (u) => new WebSocket(u) as unknown as SocketLike, onError: (c) => errors.push(c) });
     expect(await until(() => b.status === 'closed', 5000)).toBe(true);

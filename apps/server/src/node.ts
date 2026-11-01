@@ -22,6 +22,11 @@ const VERSION = (() => { try { return readFileSync(process.env.VERSION_FILE ?? '
 const HELLO_WITHIN_MS = 15_000;
 const IDLE_EVICT_MS = 30 * 60_000;
 const SAVE_EVERY_MS = 100;
+// one free machine: a cap on sockets overall and from one address, so nobody can exhaust it
+const MAX_SOCKETS = Number(process.env.MAX_SOCKETS ?? 1000);
+const MAX_PER_ADDRESS = Number(process.env.MAX_PER_ADDRESS ?? 40);
+const MAX_ECHO_PER_ROOM = 20;
+const perAddress = new Map<string, number>();
 mkdirSync(join(DATA, 'tables'), { recursive: true });
 mkdirSync(join(DATA, 'hands'), { recursive: true });
 mkdirSync(join(DATA, 'outbox'), { recursive: true });
@@ -168,7 +173,15 @@ server.on('upgrade', (req, socket, head) => {
   const m = /^\/(table|echo)\/([A-Z0-9]{4,12})$/.exec(path);
   if (!m) { socket.destroy(); return; }
   const [, kind, code] = m as unknown as [string, 'table' | 'echo', string];
+  // Caddy in front sets X-Forwarded-For to the address it saw (it does not trust one sent by a phone)
+  const addr = String(req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? '').split(',').pop()!.trim();
+  if (wss.clients.size >= MAX_SOCKETS || (perAddress.get(addr) ?? 0) >= MAX_PER_ADDRESS || (kind === 'echo' && (echo.get(code)?.size ?? 0) >= MAX_ECHO_PER_ROOM)) {
+    socket.end('HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n');
+    return;
+  }
   wss.handleUpgrade(req, socket, head, (ws) => {
+    perAddress.set(addr, (perAddress.get(addr) ?? 0) + 1);
+    ws.on('close', () => { const n = (perAddress.get(addr) ?? 1) - 1; if (n > 0) perAddress.set(addr, n); else perAddress.delete(addr); });
     alive.set(ws, true);
     ws.on('pong', () => alive.set(ws, true));
     if (kind === 'echo') return echoRoom(ws, code);
@@ -177,7 +190,13 @@ server.on('upgrade', (req, socket, head) => {
     l.room.connect(conn);
     const helloTimer = setTimeout(() => { if (!l.room.hasSaidHello(conn)) ws.close(4004, 'no hello'); }, HELLO_WITHIN_MS);
     ws.on('message', (data) => { try { l.room.message(conn, data.toString()); } catch (e) { console.error(`table ${code}:`, e); } });
-    ws.on('close', () => { clearTimeout(helloTimer); l.room.disconnect(conn); if (!l.room.connectionCount) l.idleSince = Date.now(); });
+    ws.on('close', () => {
+      clearTimeout(helloTimer); l.room.disconnect(conn);
+      if (l.room.connectionCount) return;
+      l.idleSince = Date.now();
+      // a code nobody opened a table at (a typo, or someone trying codes) leaves nothing behind
+      if (!l.room.engine && live.get(code) === l) { if (l.timer) clearTimeout(l.timer); live.delete(code); }
+    });
   });
 });
 

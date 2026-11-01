@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Engine, cardStr, randomSeed, type HandRecord } from '@tp/engine';
+import { Engine, cardStr, sha256hex, type HandRecord } from '@tp/engine';
 import { decide, rng, STRATEGIES } from '@tp/bots';
 import { publicReplay, slimRecord, handPlayers, Recorder, type OutboxItem, type Send } from '../src/record';
 
@@ -12,7 +12,7 @@ function play(n: number, seed: number): HandRecord[] {
   let now = 1;
   while (out.length < n) {
     for (const p of e.s.players) if (p.stack === 0) e.apply({ t: 'rebuy', pid: p.id, now });
-    e.apply({ t: 'start', seed: randomSeed(), now: now++ });
+    e.apply({ t: 'start', seed: sha256hex(`deal-${seed}-${now}`), now: now++ }); // repeatable shuffles: sizes and counts do not vary run to run
     let guard = 0;
     while (e.s.phase === 'hand' && guard++ < 300) {
       const h = e.s.hand!;
