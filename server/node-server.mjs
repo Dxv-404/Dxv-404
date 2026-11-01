@@ -3645,6 +3645,7 @@ var require_websocket_server = __commonJS({
 
 // src/node.ts
 import { createServer } from "node:http";
+import { readFileSync } from "node:fs";
 
 // ../../node_modules/.pnpm/ws@8.18.3/node_modules/ws/wrapper.mjs
 var import_stream = __toESM(require_stream(), 1);
@@ -16282,7 +16283,13 @@ var LATENCY_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><
 // src/node.ts
 var PORT = Number(process.env.PORT ?? 8080);
 var SITE = process.env.SITE_NAME ?? "HYD";
-var VERSION = process.env.BUILD_VERSION ?? "dev";
+var VERSION = (() => {
+  try {
+    return readFileSync(process.env.VERSION_FILE ?? "", "utf8").trim();
+  } catch {
+    return "dev";
+  }
+})();
 var rooms = /* @__PURE__ */ new Map();
 var server = createServer((req, res) => {
   const url2 = new URL(req.url ?? "/", "http://local");
