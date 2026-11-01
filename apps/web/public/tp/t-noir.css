@@ -1,0 +1,52 @@
+/* Noir: black lacquer, champagne gold hairlines, Cormorant + Jost. Quiet, slow, expensive. */
+.th-noir{
+  --bg:#0b0b0c;--tx:#ede6d6;--mut:#8c8579;--line:rgba(200,169,106,.26);--chipbg:rgba(237,230,214,.035);
+  --ui:'Jost',system-ui,sans-serif;--dsp:'Cormorant Garamond',Georgia,serif;--dspw:500;--num:'Jost',sans-serif;--numw:400;
+  --acc:#c8a96a;--acctx:#0b0b0c;--hot:#8e1f2b;
+  --rimbg:#0b0b0c;--rimsh:0 0 0 1px rgba(200,169,106,.55),0 0 0 6px #0b0b0c,0 0 0 7px rgba(200,169,106,.22),0 30px 60px rgba(0,0,0,.7);--rimw:7px;
+  --feltbg:radial-gradient(60% 50% at 50% 40%,#1a1a1c,#111113 60%,#0c0c0d);
+  --feltsh:inset 0 0 0 1px rgba(200,169,106,.18),inset 0 0 60px rgba(0,0,0,.8);
+  --potbg:transparent;--pottx:#ede6d6;--plbg:#0b0b0c;--plsh:inset 0 0 0 1px rgba(200,169,106,.3);--stack:#c8a96a;
+  --tagbg:transparent;--tagtx:#ede6d6;--foldbg:transparent;--foldtx:#5f5a52;
+  --cardbg:#f4efe6;--cardsh:inset 0 0 0 1px rgba(255,255,255,.6),0 6px 16px rgba(0,0,0,.6);
+  --spade:#141414;--red:#8e1f2b;--dia:#233e6e;--club:#1f4d3a;--cardf:'Cormorant Garamond',serif;--cardw:600;--cr:.06;
+  --backbg:#0d0d0e;--backsh:inset 0 0 0 1px #c8a96a,0 6px 16px rgba(0,0,0,.6);
+  --herobg:#0b0b0c;--herosh:inset 0 1px 0 rgba(200,169,106,.22);--sidebg:#0d0d0e;--sidesh:inset 1px 0 0 rgba(200,169,106,.2);
+  --bubbg:#0b0b0c;--bubtx:#ede6d6;
+  --b-fold:transparent;--b-foldtx:#ede6d6;--b-foldsh:inset 0 0 0 1px rgba(237,230,214,.3);
+  --b-call:#ede6d6;--b-calltx:#0b0b0c;--b-raise:linear-gradient(180deg,#d9be84,#b8955a);--b-raisetx:#0b0b0c;
+  --dbtnbg:#0b0b0c;--dbtntx:#c8a96a;
+  --winsh:0 0 0 1px #c8a96a,0 0 0 4px #0b0b0c,0 0 0 5px rgba(200,169,106,.6),0 10px 24px rgba(0,0,0,.6);
+  --r-btn:2px;--r-pl:2px;--r-card:2px;--r-panel:2px;--panel:transparent;--panelsh:inset 0 0 0 1px rgba(200,169,106,.3);
+}
+.th-noir .act{font:500 14px 'Jost';letter-spacing:.22em;text-transform:uppercase}
+.th-noir .act small{letter-spacing:.06em;text-transform:none;font-size:13px}
+.th-noir .tag{border-radius:0;font:500 9.5px 'Jost';letter-spacing:.18em;text-transform:uppercase;box-shadow:inset 0 -1px 0 rgba(200,169,106,.5);padding:1px 4px}
+.th-noir .tag.raise{background:transparent;color:#c8a96a}.th-noir .tag.allin{background:transparent;color:#d0606c;box-shadow:inset 0 -1px 0 #8e1f2b}
+.th-noir .tag.fold{box-shadow:none}
+.th-noir .plate{border-radius:0}
+.th-noir .plate b{font:500 10.5px 'Jost';letter-spacing:.12em;text-transform:uppercase}
+.th-noir .plate i{font:400 12.5px 'Jost';letter-spacing:.04em}
+.th-noir .hstack{font:300 30px 'Jost';letter-spacing:.02em}
+.th-noir .hm b{font:500 15px 'Jost';letter-spacing:.2em;text-transform:uppercase}
+.th-noir .pot{gap:10px;font:500 10px 'Jost';letter-spacing:.24em;text-transform:uppercase;color:#8c8579}
+.th-noir .pot strong{font:300 22px 'Jost';letter-spacing:.04em;color:#ede6d6}
+.th-noir .sidepot span{background:transparent;color:#8c8579;font:500 9.5px 'Jost';letter-spacing:.16em;text-transform:uppercase}
+.th-noir .mono{display:grid!important;place-items:center;border-radius:50%;background:#0b0b0c;box-shadow:inset 0 0 0 1px #c8a96a,0 0 0 3px #0b0b0c,0 0 0 4px rgba(200,169,106,.25);font:italic 500 calc(var(--av,42px)*.42) 'Cormorant Garamond',serif;color:#ede6d6;letter-spacing:.02em}
+.th-noir .mono.photo{background:radial-gradient(circle at 50% 42%,#cfae8f 0 19%,transparent 20%),radial-gradient(circle at 50% 34%,#1a1412 0 25%,transparent 26%),radial-gradient(ellipse 72% 48% at 50% 100%,#2c2a28 0 97%,transparent 100%),#77706a;color:transparent;filter:grayscale(.35)}
+.th-noir .seat.turn .av::after{background:conic-gradient(#c8a96a var(--left,70%),transparent 0)}
+.th-noir .whisper{font:italic 500 17px 'Cormorant Garamond';color:#c8a96a;letter-spacing:.02em}
+.th-noir .whisper small{display:block;font:500 9px 'Jost';letter-spacing:.3em;text-transform:uppercase;color:#6f6a62;font-style:normal;margin-bottom:3px}
+.lap.th-noir .whisper{font-size:24px}
+.th-noir .deco svg{position:absolute;inset:0;width:100%;height:100%}
+.th-noir .lg{font:italic 500 50px/1 'Cormorant Garamond';color:#ede6d6;letter-spacing:.01em}
+.th-noir .lg small{display:block;font:500 10px 'Jost';letter-spacing:.5em;text-transform:uppercase;color:#c8a96a;margin-top:14px;font-style:normal}
+.th-noir .lg::before{content:"";display:block;width:1px;height:46px;margin:0 auto 18px;background:linear-gradient(transparent,#c8a96a)}
+.th-noir .tabs span.on{background:transparent;color:#c8a96a;box-shadow:inset 0 -1px 0 #c8a96a;border-radius:0}
+.th-noir .tabs{border-radius:0;background:transparent}
+.th-noir .sh{font:500 10px 'Jost';letter-spacing:.3em}
+.th-noir .pill{border-radius:0;font:500 10px 'Jost';letter-spacing:.2em;text-transform:uppercase;background:transparent}
+.th-noir .ib{border-radius:0;background:transparent}
+.th-noir .ldbar{height:1px}
+.th-noir .cd .r{font-weight:600}
+.th-noir .slot{--slot:rgba(200,169,106,.2)}

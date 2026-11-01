@@ -1,0 +1,38 @@
+/* Classic: the current Train Poker look, unchanged in spirit */
+.th-classic{
+  --bg:#1b120d;--tx:#f3ead7;--mut:#b9a88b;--line:rgba(201,161,91,.28);--chipbg:rgba(246,240,225,.06);
+  --ui:'Figtree',system-ui,sans-serif;--dsp:'Fraunces',Georgia,serif;--dspw:600;--num:'Fraunces',Georgia,serif;--numw:600;
+  --acc:#ecd39b;--acctx:#2a1a0e;--hot:#a83c32;
+  --rimbg:radial-gradient(120% 60% at 50% 0%,#5a3724,transparent 60%),linear-gradient(180deg,#3d2518,#26160d);
+  --rimsh:0 0 0 1px #120a06,0 24px 50px rgba(0,0,0,.6),inset 0 2px 0 rgba(255,255,255,.08),inset 0 -3px 8px rgba(0,0,0,.4);--rimw:12px;
+  --feltbg:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .22 0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E"),radial-gradient(70% 55% at 50% 45%,#1b6b55,#0f4a3b 55%,#072a21);
+  --feltsh:0 0 0 2px rgba(201,161,91,.55),0 0 0 4px rgba(0,0,0,.35),inset 0 10px 30px rgba(0,0,0,.55);
+  --potbg:rgba(0,0,0,.32);--plbg:rgba(15,9,6,.86);--plsh:inset 0 0 0 1px rgba(201,161,91,.25);--stack:#ecd39b;
+  --tagbg:#f6f0e1;--tagtx:#2a1a0e;--foldbg:#3d2518;--foldtx:#b9a88b;
+  --c1:#efe6d0;--c2:#8a2f27;
+  --cardbg:linear-gradient(160deg,#fffaf0,#f6f0e1 40%,#e8dfc9);--cardsh:inset 0 1px 0 rgba(255,255,255,.7),0 3px 9px rgba(0,0,0,.45);
+  --spade:#1e1a16;--red:#c2362b;--dia:#2563a8;--club:#2c7a4b;--cardf:'Fraunces',Georgia,serif;--cardw:650;--cr:.1;
+  --backbg:radial-gradient(circle at 50% 40%,#a33a2f,#6e211b);--backsh:inset 0 0 0 2.5px #f6f0e1,inset 0 0 0 3.5px #c9a15b,0 3px 9px rgba(0,0,0,.45);
+  --herobg:linear-gradient(#24170f,#1b120d);--sidebg:#160e0a;
+  --bubbg:rgba(15,9,6,.9);--bubtx:#f3ead7;
+  --b-fold:linear-gradient(180deg,#9a3a31,#8a2f27);--b-foldtx:#fbe9e5;--b-foldsh:inset 0 1px 0 rgba(255,255,255,.18),0 6px 14px rgba(0,0,0,.35);
+  --b-call:linear-gradient(180deg,#3a9a70,#23714f);--b-calltx:#f0fbf5;--b-callsh:inset 0 1px 0 rgba(255,255,255,.18),0 6px 14px rgba(0,0,0,.35);
+  --b-raise:linear-gradient(180deg,#ecd39b,#c9a15b 60%,#ae8644);--b-raisetx:#2a1a0e;--b-raisesh:inset 0 1px 0 rgba(255,255,255,.3),0 6px 14px rgba(0,0,0,.35);
+  --dbtnbg:radial-gradient(circle at 40% 35%,#fff,#f6f0e1 50%,#e8dfc9);--dbtntx:#1e1a16;
+  --winsh:0 0 0 2px #ecd39b,0 0 18px rgba(236,211,155,.6),0 6px 14px rgba(0,0,0,.4);
+  --r-btn:14px;--r-pl:9px;--r-card:14px;
+  background:radial-gradient(120% 70% at 50% 38%,#3a2416 0%,transparent 70%),radial-gradient(80% 50% at 50% 110%,#24150e 0%,transparent 70%),#1b120d;
+}
+.th-classic .ini{display:grid!important;place-items:center;border-radius:50%;font:600 calc(var(--av,42px)*.38) 'Fraunces',serif;color:rgba(255,255,255,.92);background:radial-gradient(circle at 35% 30%,hsl(var(--h) 35% 46%),hsl(var(--h) 40% 24%));box-shadow:0 0 0 2px #1b120d,0 6px 14px rgba(0,0,0,.55)}
+.th-classic .ini.photo{background:radial-gradient(circle at 50% 40%,#f1c9a5 0 19%,transparent 20%),radial-gradient(circle at 50% 33%,#2a1d16 0 25%,transparent 26%),radial-gradient(ellipse 72% 48% at 50% 100%,#8a2f27 0 97%,transparent 100%),#cfd8e3;color:transparent}
+.th-classic .h1{--h:28}.th-classic .h2{--h:350}.th-classic .h3{--h:160}.th-classic .h4{--h:210}.th-classic .h5{--h:45}.th-classic .h6{--h:280}
+.th-classic .felt::before{content:"";position:absolute;inset:9%;border-radius:999px;border:1px solid rgba(236,211,155,.14)}
+.th-classic .mark{position:absolute;left:0;right:0;top:60%;text-align:center;font:italic 600 40px 'Fraunces',serif;color:rgba(0,0,0,.14);pointer-events:none}
+.lap.th-classic .mark{font-size:84px;top:58%}
+.th-classic .dealer .dv{border-radius:50%;object-fit:cover;box-shadow:0 0 0 2px #c9a15b,0 8px 20px rgba(0,0,0,.6)}
+.th-classic .dealer .dn{color:#ecd39b;font-family:'Fraunces';font-style:italic;letter-spacing:.02em;font-size:12px;margin-top:4px}
+.th-classic .lg{font:italic 600 44px/1 'Fraunces',serif;color:#ecd39b;letter-spacing:-.01em;text-shadow:0 2px 0 rgba(0,0,0,.4)}
+.th-classic .lg small{display:block;font:600 11px 'Figtree';letter-spacing:.3em;color:#b9a88b;font-style:normal;margin-top:8px;text-transform:uppercase}
+.th-classic .tag{font-family:'Figtree'}
+.th-classic .dvw{border-radius:50%;overflow:hidden;box-shadow:0 0 0 2px #c9a15b,0 8px 20px rgba(0,0,0,.6)}
+.th-classic .dvw img{width:100%;height:100%;object-fit:cover;display:block}

@@ -1,0 +1,60 @@
+/* The live table on top of the design's CSS (public/tp/base2.css and the theme): the design pages looped
+   their animations to show them off; at a real table they run when something happens. */
+.screen.tp-screen{position:fixed;inset:0;padding:0;margin:0;max-width:none;overflow:hidden;background:#111;touch-action:manipulation;-webkit-user-select:none;user-select:none}
+.tp-stage{position:absolute;inset:0;display:flex;justify-content:center;align-items:flex-start}
+.tp-sprite{position:absolute;width:0;height:0;overflow:hidden}
+.tp-over{position:absolute;inset:0;pointer-events:none;z-index:50}
+.tp-over>*{pointer-events:auto}
+.tp-wait{margin:auto;color:#ddd;font:600 16px system-ui}
+
+/* your cards: face down until held */
+.tp.live .hc .flip,.tp.live .hc .flip>.cd,.tp.live .act.tap,.tp.live .thumb,.tp.live .hhint .s1{animation:none}
+.tp.live .hc .flip:nth-child(1){transform:rotate(-7deg);transition:transform .18s}
+.tp.live .hc .flip:nth-child(2){transform:rotate(7deg);transition:transform .18s}
+.tp.live .hc .flip>.cd:not(.dn){transform:rotateY(180deg);transition:transform .22s}
+.tp.live .hc .flip>.cd.dn{transform:rotateY(0);transition:transform .22s}
+.tp.live .hc.peek .flip:nth-child(1){transform:translateY(-14px) rotate(-11deg)}
+.tp.live .hc.peek .flip:nth-child(2){transform:translateY(-14px) rotate(12deg)}
+.tp.live .hc.peek .flip>.cd:not(.dn){transform:rotateY(0)}
+.tp.live .hc.peek .flip>.cd.dn{transform:rotateY(-180deg)}
+.tp.live .hc{cursor:pointer;touch-action:none}
+.tp.live .hc.none{visibility:hidden}
+.tp.live .hhint .s1{opacity:1}
+.tp.live .bubble.live{animation:bubIn .25s ease-out both}
+@keyframes bubIn{from{opacity:0;transform:translateY(6px) scale(.95)}to{opacity:1;transform:none}}
+.tp.live .seat.turn .av{animation:turnPulse 1.4s ease-in-out infinite}
+@keyframes turnPulse{50%{box-shadow:0 0 0 4px var(--acc)}}
+.tp.live .seat.win{animation:winp .6s ease-in-out 2}
+.tp.live .board .cd{animation:dealIn .3s ease-out both}
+@keyframes dealIn{from{opacity:0;transform:translateY(-10px) scale(.9)}to{opacity:1;transform:none}}
+.tp.live button[data-act]{cursor:pointer}
+.tp.live .net.weak i:nth-child(3),.tp.live .net.lost i{opacity:.25}
+.waitline{flex:1;min-height:56px;display:grid;place-items:center;color:var(--mut);font-size:15px;text-align:center}
+.tp.still *, .tp.still *::before, .tp.still *::after{animation:none!important;transition:none!important}
+
+/* raise */
+.tp-raise{position:absolute;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center}
+.tp-raise-in{width:min(520px,100%);background:#1c1612;color:#f3ead7;border-radius:18px 18px 0 0;padding:18px 16px 22px;display:grid;gap:14px;box-shadow:0 -10px 30px rgba(0,0,0,.4)}
+.tp-raise .amt{display:grid;justify-items:center}.tp-raise .amt b{font:800 34px system-ui}.tp-raise .amt small{opacity:.75}
+.tp-raise input[type=range]{width:100%;height:36px;accent-color:#d9a441}
+.tp-raise .presets{display:flex;gap:8px}.tp-raise .presets button{flex:1;min-height:44px;border-radius:10px;background:rgba(255,255,255,.08);color:inherit;font-weight:700}
+.tp-raise .presets button.on{background:#d9a441;color:#1c1612}
+.tp-raise .row{display:flex;gap:8px}.tp-raise .act{min-height:56px;border-radius:14px;flex:1;font-weight:800;font-size:16px}
+.tp-raise .act.ghost{background:rgba(255,255,255,.1);color:inherit}.tp-raise .act.raise{background:#d9a441;color:#1c1612}
+
+/* win tiers */
+.tp-tier{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);display:grid;justify-items:center;gap:4px;padding:16px 26px;border-radius:18px;background:rgba(10,8,6,.82);color:#fff;text-align:center;pointer-events:none;animation:tierIn 2.8s ease both}
+.tp-tier b{font:900 30px system-ui;letter-spacing:.02em}.tp-tier span{font:600 15px system-ui;opacity:.9}
+.tp-tier.t3 b{font-size:38px;color:#ffd36a}.tp-tier.t4 b{font-size:44px;color:#ffd36a;text-shadow:0 0 18px rgba(255,200,80,.8)}
+.tp-tier.t4{box-shadow:0 0 0 2px #ffd36a,0 0 60px rgba(255,200,80,.45)}
+@keyframes tierIn{0%{opacity:0;transform:translate(-50%,-40%) scale(.8)}10%{opacity:1;transform:translate(-50%,-50%) scale(1.04)}16%{transform:translate(-50%,-50%) scale(1)}85%{opacity:1}100%{opacity:0}}
+
+/* you are away / reconnecting */
+.tp-presence{position:absolute;left:50%;top:64px;transform:translateX(-50%);max-width:calc(100% - 32px);padding:10px 16px;border-radius:12px;background:rgba(20,14,10,.92);color:#f6e7c8;font:600 14px system-ui;box-shadow:0 6px 18px rgba(0,0,0,.35);text-align:center}
+
+/* first time */
+.tp-intro{position:absolute;inset:0;background:rgba(0,0,0,.55);display:grid;place-items:center;padding:16px}
+.tp-intro-in{max-width:360px;background:#1c1612;color:#f3ead7;border-radius:18px;padding:22px;display:grid;gap:10px}
+.tp-intro-in h2{margin:0;font:800 22px system-ui}.tp-intro-in p{margin:0;opacity:.85;line-height:1.45}.tp-intro-in small{opacity:.6}
+.tp-intro-in .act{min-height:52px;border-radius:14px;background:#d9a441;color:#1c1612;font-weight:800;font-size:16px}
+body[data-playing] #info-btn{display:none}

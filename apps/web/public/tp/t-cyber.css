@@ -1,0 +1,70 @@
+/* Cyber: anime cyberpunk card room. Deep plum, one hot magenta, chamfered panels, small data labels. Glitch is saved for big moments. */
+.th-cyber{
+  --bg:#120a18;--tx:#f1e9ff;--mut:#9d8bb4;--line:rgba(196,160,255,.18);--chipbg:rgba(241,233,255,.04);
+  --ui:'Chakra Petch',sans-serif;--dsp:'Chakra Petch',sans-serif;--dspw:700;--num:'Share Tech Mono',monospace;--numw:400;
+  --acc:#ff2e88;--acctx:#fff;--hot:#ff2e88;
+  --rimbg:linear-gradient(180deg,#3a2348,#251530 50%,#1c1024);
+  --rimsh:inset 0 1px 0 rgba(255,255,255,.08),0 0 0 1.5px #0b0610,0 30px 60px rgba(0,0,0,.6);--rimw:16px;
+  --feltbg:radial-gradient(70% 60% at 50% 45%,#3a1d48,#2a1435 60%,#1e0f27);
+  --feltsh:inset 0 0 0 1.5px #0b0610,inset 0 0 40px rgba(0,0,0,.5);
+  --potbg:rgba(12,6,16,.8);--pottx:#f1e9ff;--plbg:rgba(12,6,16,.92);--plsh:inset 0 0 0 1px rgba(196,160,255,.22);--stack:#ff7ab3;
+  --tagbg:#f1e9ff;--tagtx:#120a18;--foldbg:#2a1d36;--foldtx:#7d6c93;
+  --cardbg:linear-gradient(170deg,#fbf8ff,#ece4f7);--cardsh:inset 0 0 0 1px rgba(26,15,34,.15);
+  --spade:#1a0f22;--red:#e8186f;--dia:#6d38ff;--club:#0f9a7a;--cardf:'Chakra Petch',sans-serif;--cardw:700;--cr:.06;
+  --backbg:#1b0f24;--backsh:none;
+  --herobg:linear-gradient(180deg,#1a0f22,#120a18);--herosh:inset 0 1px 0 rgba(255,46,136,.35);--sidebg:#150c1c;--sidesh:inset 1px 0 0 rgba(255,46,136,.25);
+  --bubbg:#1b0f24;--bubtx:#f1e9ff;
+  --b-fold:#22152c;--b-foldtx:#d9cbe9;--b-foldsh:inset 0 0 0 1px rgba(196,160,255,.25);
+  --b-call:#f1e9ff;--b-calltx:#120a18;--b-raise:#ff2e88;--b-raisetx:#fff;--b-raisesh:0 0 22px rgba(255,46,136,.35);
+  --dbtnbg:#f1e9ff;--dbtntx:#120a18;
+  --winsh:0 0 0 2px #ff2e88,0 0 18px rgba(255,46,136,.7);
+  --r-btn:0;--r-pl:0;--r-card:0;--r-panel:0;--panel:rgba(241,233,255,.035);--panelsh:inset 0 0 0 1px rgba(196,160,255,.2);
+  background:radial-gradient(60% 40% at 50% 30%,rgba(255,46,136,.12),transparent 70%),radial-gradient(80% 50% at 50% 100%,#1e0f28,transparent),#120a18;
+}
+.th-cyber .cut,.th-cyber .act,.th-cyber .plate,.th-cyber .ib,.th-cyber .card2,.th-cyber .crew,.th-cyber .rejoin,.th-cyber .bigb,.th-cyber .tabs span.on,.th-cyber .presets span{clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px)}
+.th-cyber .cd:not(.dn){clip-path:polygon(14% 0,100% 0,100% 90%,86% 100%,0 100%,0 10%)}
+.th-cyber .cd.dn{clip-path:polygon(14% 0,100% 0,100% 90%,86% 100%,0 100%,0 10%)}
+.th-cyber .act{font:700 15px 'Chakra Petch';letter-spacing:.12em;text-transform:uppercase}
+.th-cyber .act small{font:400 13px 'Share Tech Mono';letter-spacing:.04em}
+.th-cyber .act.raise{box-shadow:none;background:linear-gradient(90deg,#ff2e88,#ff5aa2)}
+.th-cyber .hm b{font:700 15px 'Chakra Petch';letter-spacing:.14em;text-transform:uppercase}
+.th-cyber .hm small{font:400 11px 'Share Tech Mono';letter-spacing:.06em}
+.th-cyber .pill{border-radius:0;font:400 11px 'Share Tech Mono'}
+.th-cyber .tag{border-radius:0;font:700 9.5px 'Chakra Petch';letter-spacing:.1em;text-transform:uppercase;clip-path:polygon(5px 0,100% 0,100% calc(100% - 5px),calc(100% - 5px) 100%,0 100%,0 5px)}
+.th-cyber .plate b{font:700 10.5px 'Chakra Petch';letter-spacing:.06em;text-transform:uppercase}
+.th-cyber .plate i{font:400 12.5px 'Share Tech Mono'}
+.th-cyber .hstack{font:400 30px 'Share Tech Mono';color:#fff}
+.th-cyber .pot{border-radius:0;font:700 10px 'Chakra Petch';letter-spacing:.2em;text-transform:uppercase;color:#9d8bb4;box-shadow:inset 0 0 0 1px rgba(255,46,136,.4)}
+.th-cyber .pot strong{font:400 20px 'Share Tech Mono';color:#fff}
+.th-cyber .sidepot span{border-radius:0;font:400 10.5px 'Share Tech Mono';color:#ff7ab3}
+.th-cyber .bet span{border-radius:0;font-family:'Share Tech Mono'}
+.th-cyber .id{display:block;position:relative;background:linear-gradient(160deg,#2c1838,#1a0f22);clip-path:polygon(22% 0,100% 0,100% 78%,78% 100%,0 100%,0 22%)}
+.th-cyber .id svg{width:100%;height:100%;display:block}
+.th-cyber .av::before{content:"";position:absolute;inset:-3px;z-index:3;pointer-events:none;background:linear-gradient(var(--hc),var(--hc)) 0 0/9px 2px no-repeat,linear-gradient(var(--hc),var(--hc)) 0 0/2px 9px no-repeat,linear-gradient(var(--hc),var(--hc)) 100% 100%/9px 2px no-repeat,linear-gradient(var(--hc),var(--hc)) 100% 100%/2px 9px no-repeat}
+.th-cyber .av{--hc:rgba(241,233,255,.5)}
+.th-cyber .seat.hot .av{--hc:#ff2e88}
+.th-cyber .seat.turn .av::after{border-radius:0;background:conic-gradient(#ff2e88 var(--left,70%),transparent 0)}
+.th-cyber .hotb{border-radius:0;font:700 8.5px 'Chakra Petch';letter-spacing:.12em}
+.th-cyber .dealer .dn{font:700 10px 'Chakra Petch';letter-spacing:.3em;color:#ff2e88}
+.th-cyber .bubble{border-radius:0;font:500 12px 'Chakra Petch';box-shadow:inset 2px 0 0 #ff2e88,0 10px 24px rgba(0,0,0,.5);clip-path:polygon(0 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%)}
+.th-cyber .bubble small{display:block;font:400 9.5px 'Share Tech Mono';color:#ff7ab3;letter-spacing:.08em}
+/* table: segmented rail with LED strips like a real smart table */
+.th-cyber .table::before{content:"";position:absolute;inset:-1px;border-radius:inherit;background:repeating-conic-gradient(from 0deg,transparent 0 28deg,rgba(0,0,0,.55) 28deg 29deg);pointer-events:none;-webkit-mask:radial-gradient(closest-side,transparent calc(100% - 17px),#000 calc(100% - 16px));mask:radial-gradient(closest-side,transparent calc(100% - 17px),#000 calc(100% - 16px))}
+.th-cyber .led{position:absolute;width:30px;height:4px;border-radius:2px;background:#ff2e88;box-shadow:0 0 10px #ff2e88,0 0 22px rgba(255,46,136,.6);animation:led 3.6s ease-in-out infinite;z-index:1}
+@keyframes led{50%{opacity:.45}}
+.th-cyber .felt .deco svg{position:absolute;inset:0;width:100%;height:100%}
+.th-cyber .star{animation:spin 30s linear infinite;transform-box:fill-box;transform-origin:center}
+@keyframes spin{to{transform:rotate(360deg)}}
+.th-cyber .slats{position:absolute;inset:0;background:repeating-linear-gradient(90deg,transparent 0 46px,rgba(255,46,136,.05) 46px 48px,transparent 48px 120px);mask-image:linear-gradient(transparent,#000 30%,transparent)}
+.th-cyber .hud{position:absolute;font:400 9px 'Share Tech Mono';color:rgba(196,160,255,.45);letter-spacing:.12em}
+.th-cyber .lg{font:700 40px/1 'Chakra Petch';letter-spacing:.08em;text-transform:uppercase;color:#fff}
+.th-cyber .lg em{display:block;font:400 12px 'Share Tech Mono';font-style:normal;letter-spacing:.3em;color:#ff2e88;margin-top:12px}
+.th-cyber .lg svg{width:58px;height:58px;display:block;margin:0 auto 16px;filter:drop-shadow(0 0 12px rgba(255,46,136,.7))}
+.th-cyber .tabs{border-radius:0}.th-cyber .tabs span{border-radius:0;font-family:'Chakra Petch';letter-spacing:.08em;text-transform:uppercase;font-size:11px}
+.th-cyber .sh{font:700 10.5px 'Chakra Petch';letter-spacing:.24em}
+.th-cyber .slot{--slot:rgba(255,46,136,.3)}
+.th-cyber .ldbar{height:2px;border-radius:0}
+.th-cyber .menu .slots span{border-radius:0;font-family:'Share Tech Mono';clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px)}
+.th-cyber .live{border-radius:0}
+.menu.th-cyber .lg{font-size:30px}.menu.th-cyber .lg svg{width:38px;height:38px;margin-bottom:8px}.menu.th-cyber .lg br{display:none}
+.th-cyber .hero{--herobg2:#150c1c}

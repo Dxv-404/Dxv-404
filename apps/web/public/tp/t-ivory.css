@@ -1,0 +1,45 @@
+/* Ivory: cream letterpress, forest green felt, tan saddle leather with stitching. Daylight luxury. */
+.th-ivory{
+  --bg:#f3eee4;--tx:#22261f;--mut:#6f6a5e;--line:rgba(34,38,31,.16);--chipbg:rgba(255,253,248,.7);
+  --ui:'DM Sans',system-ui,sans-serif;--dsp:'DM Serif Display',Georgia,serif;--dspw:400;--num:'DM Sans',sans-serif;--numw:600;
+  --acc:#1f4a3a;--acctx:#fffdf8;--hot:#a0452e;
+  --rimbg:linear-gradient(180deg,#b88a5d,#9a6c42);
+  --rimsh:inset 0 0 0 1px rgba(255,240,215,.4),0 0 0 1px #6e4a2b,0 18px 36px rgba(60,45,25,.28);--rimw:13px;
+  --feltbg:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .14 0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E"),radial-gradient(70% 60% at 50% 42%,#2c6450,#1f4a3a 60%,#163a2d);
+  --feltsh:0 0 0 1.5px #163a2d,inset 0 8px 24px rgba(0,0,0,.35);
+  --potbg:#fffdf8;--pottx:#22261f;--plbg:#fffdf8;--plsh:0 1px 0 rgba(255,255,255,.8),0 3px 10px rgba(60,45,25,.18),inset 0 0 0 1px rgba(34,38,31,.08);--stack:#1f4a3a;
+  --tagbg:#22261f;--tagtx:#fffdf8;--foldbg:#e4ddd0;--foldtx:#7d776a;
+  --cardbg:linear-gradient(180deg,#fffefb,#fbf8f1);--cardsh:inset 0 0 0 1px rgba(34,38,31,.08),0 1px 0 #fff,0 4px 12px rgba(40,30,15,.22);
+  --spade:#22261f;--red:#a0452e;--dia:#2b5a86;--club:#1f4a3a;--cardf:'DM Serif Display',serif;--cardw:400;--cr:.08;
+  --backbg:#1f4a3a;--backsh:inset 0 0 0 3px #fffdf8,inset 0 0 0 4px #b88a5d,0 4px 12px rgba(40,30,15,.22);
+  --herobg:#fbf8f1;--herosh:0 -1px 0 rgba(34,38,31,.1),0 -10px 30px rgba(60,45,25,.06);--sidebg:#fbf8f1;
+  --b-fold:#fffdf8;--b-foldtx:#22261f;--b-foldsh:inset 0 0 0 1px rgba(34,38,31,.22);
+  --b-call:#1f4a3a;--b-calltx:#fffdf8;--b-callsh:0 6px 14px rgba(31,74,58,.3);
+  --b-raise:#b88a5d;--b-raisetx:#fffdf8;--b-raisesh:0 6px 14px rgba(150,105,60,.3);
+  --dbtnbg:#fffdf8;--dbtntx:#22261f;
+  --winsh:0 0 0 2px #fffdf8,0 0 0 3.5px #b88a5d,0 12px 24px rgba(40,30,15,.35);
+  --r-btn:12px;--r-pl:10px;--r-card:18px;--r-panel:18px;--panel:#fffdf8;--panelsh:0 1px 0 #fff,0 8px 24px rgba(60,45,25,.1),inset 0 0 0 1px rgba(34,38,31,.06);
+  background:radial-gradient(90% 60% at 50% 0%,#faf6ee,transparent 70%),#f3eee4;
+}
+.th-ivory .table::after{content:"";position:absolute;inset:5px;border-radius:999px;border:1.5px dashed rgba(255,240,215,.75);pointer-events:none}
+.th-ivory .felt::before{content:"";position:absolute;inset:7%;border-radius:999px;border:1px solid rgba(255,253,248,.16)}
+.th-ivory .emb{display:grid!important;place-items:center;border-radius:50%;background:radial-gradient(circle at 40% 30%,#fffefb,#efe7d8);box-shadow:inset 0 1px 1px #fff,inset 0 -2px 3px rgba(60,45,25,.12),0 0 0 1.5px var(--hc),0 4px 10px rgba(60,45,25,.25);font:400 calc(var(--av,42px)*.42) 'DM Serif Display',serif;color:#22261f}
+.th-ivory .emb.photo{background:radial-gradient(circle at 50% 42%,#d9a98a 0 19%,transparent 20%),radial-gradient(circle at 50% 34%,#3a2a20 0 25%,transparent 26%),radial-gradient(ellipse 72% 48% at 50% 100%,#1f4a3a 0 97%,transparent 100%),#e9dfcf;color:transparent}
+.th-ivory .h1{--hc:#1f4a3a}.th-ivory .h2{--hc:#a0452e}.th-ivory .h3{--hc:#b88a5d}.th-ivory .h4{--hc:#2b5a86}.th-ivory .h5{--hc:#7a6a3a}.th-ivory .h6{--hc:#6a4a6e}
+.th-ivory .tag{font-size:9.5px;letter-spacing:.06em}
+.th-ivory .tag.away{background:#fffdf8}
+.th-ivory .pot{box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.th-ivory .sidepot span{background:rgba(255,253,248,.92);color:#1f4a3a}
+.th-ivory .bet span{box-shadow:0 2px 6px rgba(0,0,0,.25)}
+.th-ivory .hm b{font:400 19px 'DM Serif Display'}
+.th-ivory .hstack{font:400 30px 'DM Serif Display';color:#22261f}
+.th-ivory .lg{font:400 46px/1 'DM Serif Display';color:#22261f}
+.th-ivory .lg small{display:block;font:600 11px 'DM Sans';letter-spacing:.32em;text-transform:uppercase;color:#1f4a3a;margin-top:10px}
+.th-ivory .lg svg{width:54px;height:54px;display:block;margin:0 auto 14px}
+.th-ivory .whisper{font:italic 400 16px 'DM Serif Display';color:rgba(255,253,248,.82)}
+.lap.th-ivory .whisper{font-size:22px}
+.th-ivory .whisper small{display:block;font:600 9px 'DM Sans';font-style:normal;letter-spacing:.3em;text-transform:uppercase;color:rgba(255,253,248,.5);margin-bottom:2px}
+.th-ivory .seat.turn .av::after{background:conic-gradient(#1f4a3a var(--left,70%),transparent 0)}
+.th-ivory .ib{background:#fffdf8}
+.th-ivory .cd .r{font-weight:400}
+.th-ivory .slot{--slot:rgba(255,253,248,.25)}

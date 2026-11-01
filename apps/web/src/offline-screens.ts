@@ -1,6 +1,8 @@
 // Screens for offline tables (see offline.ts for how they work).
 import { h, toast, fmt } from './legacy/ui.js';
-import { TableView } from './legacy/table.js';
+import { TableScreen, setTheme, currentTheme } from './table/screen';
+import { THEME_KEYS, THEMES } from './table/render';
+import { infoContent } from './legacy/info.js';
 import type { TableSettings } from '@tp/protocol';
 import {
   codeToAddress, formatCode, handOverUrl, myIdentity, rememberLastOffline, lastOffline, hostInfo, takeHandOver, carryOn,
@@ -155,34 +157,26 @@ export async function hostPhoneTable(ui: Ui): Promise<void> {
 }
 
 // ---------------- the table screen for network tables ----------------
-export function playNet(ui: Ui, net: NetTable, o: { offline: boolean; me?: Me; onLeave?: () => void }): void {
+export function playNet(ui: Ui, net: NetTable, o: { offline: boolean; me?: Me; code?: string; onLeave?: () => void }): void {
   document.body.dataset.playing = '1';
   ui.screen((el) => {
     let lostSince: number | null = null;
     let sheetOpen: { close(): void } | null = null;
-    const table = new TableView(el, {
-      get isHost() { return net.isHost; },
-      act: (a: Parameters<NetTable['act']>[0]) => net.act(a),
-      show: () => net.show(),
-      rebuy: () => net.rebuy(),
-      sitOut: (v: boolean) => net.sitOut(v),
-      dealNow: () => net.dealNow(),
+    const table = new TableScreen(el, net, {
+      code: o.code ?? (o.offline ? 'OFFLINE' : ''),
       menu: () => tableMenu(ui, net, o),
+      info: () => ui.openSheet(infoContent(), { label: 'Poker hands', tall: true }),
+      offline: o.offline,
     });
     let ended = false;
-    const offView = net.subscribe((events, v) => {
-      if (v.phase === 'ended' && !ended) { ended = true; standings(ui, v, o); return; }
-      table.update(events, v);
-    });
-    if (net.view) table.update([{ t: 'sync' }], net.view);
-    else table.say(o.offline ? 'Connecting to the host phone…' : 'Connecting…');
+    const offView = net.subscribe((_events, v) => { if (v.phase === 'ended' && !ended) { ended = true; standings(ui, v, o); } });
     const offErr = net.onError((code, m) => {
-      if (code === 'table_full' || code === 'not_allowed' || code === 'version') { toast(m, 6000); }
+      if (code === 'table_full' || code === 'not_allowed' || code === 'version' || code === 'no_table') toast(m, 6000);
       else if (code === 'refused') toast(m);
     });
     const offNotice = net.onNotice((t) => toast(t, 6000));
     const offStatus = net.onStatus((s) => {
-      table.setHostQuiet(s !== 'live');
+      table.setConnection(s === 'live' ? 'good' : s === 'connecting' ? 'weak' : 'lost');
       if (s === 'live') { lostSince = null; sheetOpen?.close(); sheetOpen = null; return; }
       lostSince ??= Date.now();
     });
@@ -232,6 +226,11 @@ function tableMenu(ui: Ui, net: NetTable, o: { offline: boolean; onLeave?: () =>
       h('div', { class: 'who' }, h('strong', {}, p.name), h('small', {}, `${fmt(p.stack)} chips${p.connected ? '' : ', away'}${p.sittingOut ? ', sitting out' : ''}`)),
       h('div', { class: 'p-btns' }, h('button', { class: 'btn small danger', onclick: () => { if (confirm(`Remove ${p.name}? Their chips leave with them.`)) { net.host('remove', { pid: p.id }); close(); } } }, 'Remove'))))));
   }
+  const themeRow = h('div', { class: 'theme-grid', role: 'radiogroup', 'aria-label': 'Table theme' }, ...THEME_KEYS.map((k) => h('button', {
+    role: 'radio', 'aria-checked': currentTheme() === k ? 'true' : 'false', class: 'theme-pick' + (currentTheme() === k ? ' on' : ''), 'data-theme': k,
+    onclick: () => { setTheme(k); close(); },
+  }, THEMES[k]!.name)));
+  body.append(h('section', { class: 'block' }, h('h3', {}, 'Theme'), themeRow));
   body.append(h('section', { class: 'block' }, h('div', { class: 'menu-actions' },
     meP && h('button', { class: 'btn ghost', onclick: () => { net.sitOut(!meP.sittingOut); close(); } }, meP.sittingOut ? 'Sit back in' : 'Sit out from next hand'),
     meP && v.cfg.rebuys && meP.stack < v.cfg.startStack && v.phase !== 'hand' && h('button', { class: 'btn ghost', onclick: () => { net.rebuy(); close(); } }, `Top up to ${fmt(v.cfg.startStack)}`))),

@@ -1,0 +1,72 @@
+/* Night Train: the last train home. Navy carriage, brushed-steel table, line-green and amber signage. */
+.th-train{
+  --bg:#12263a;--tx:#eaf2f0;--mut:#a9bec0;--line:rgba(200,225,230,.2);--chipbg:rgba(255,255,255,.05);
+  --ui:'Zen Kaku Gothic New',sans-serif;--dsp:'Zen Kaku Gothic New',sans-serif;--dspw:900;--num:'Zen Kaku Gothic New',sans-serif;--numw:900;
+  --acc:#8fc93a;--acctx:#0d1a12;--hot:#ff7a3d;
+  --rimbg:linear-gradient(180deg,#d5dfe1,#93a6a8 45%,#b8c7c9 70%,#7d8f91);
+  --rimsh:0 0 0 2px #0b1620,0 20px 40px rgba(0,0,0,.5),inset 0 2px 0 rgba(255,255,255,.7),inset 0 -2px 0 rgba(0,0,0,.25);--rimw:13px;
+  --feltbg:radial-gradient(70% 60% at 50% 45%,rgba(255,255,255,.07),transparent 70%),repeating-linear-gradient(45deg,rgba(255,255,255,.035) 0 2px,transparent 2px 9px),repeating-linear-gradient(-45deg,rgba(0,0,0,.09) 0 2px,transparent 2px 9px),#2c5a4d;
+  --feltsh:inset 0 0 0 2px rgba(0,0,0,.4),inset 0 10px 30px rgba(0,0,0,.35);
+  --potbg:#0a0f14;--pottx:#ffb23e;--plbg:#0a0f14;--plsh:inset 0 0 0 1px rgba(255,178,62,.25);--stack:#ffb23e;
+  --tagbg:#eaf2f0;--tagtx:#12263a;--foldbg:#2d3e4a;--foldtx:#9fb1b6;
+  --cardbg:linear-gradient(180deg,#eef6e9,#dde9d4);--cardsh:0 0 0 1px rgba(0,0,0,.25),0 3px 8px rgba(0,0,0,.4);
+  --spade:#1d2b26;--red:#c9302c;--dia:#1f6fb8;--club:#2f7d46;--cardf:'Zen Kaku Gothic New',sans-serif;--cardw:900;--cr:.07;
+  --backbg:#0f2134;--backsh:0 0 0 1px rgba(0,0,0,.4),inset 0 0 0 2px #dde9d4,0 3px 8px rgba(0,0,0,.4);
+  --herobg:linear-gradient(#173049,#0f2134);--sidebg:#0f2134;
+  --bubbg:#0a0f14;--bubtx:#ffb23e;
+  --b-fold:#2d3e4a;--b-foldtx:#eaf2f0;--b-foldsh:inset 0 -3px 0 rgba(0,0,0,.3);
+  --b-call:#8fc93a;--b-calltx:#0d1a12;--b-callsh:inset 0 -3px 0 rgba(0,0,0,.2);
+  --b-raise:#ffb23e;--b-raisetx:#2a1a05;--b-raisesh:inset 0 -3px 0 rgba(0,0,0,.2);
+  --dbtnbg:#eaf2f0;--dbtntx:#12263a;
+  --winsh:0 0 0 2px #ffb23e,0 0 18px rgba(255,178,62,.7);
+  --r-btn:10px;--r-pl:4px;--r-card:12px;--r-panel:12px;
+  background:linear-gradient(#0f2134,#12263a 30%,#162c42);
+}
+.th-train .bubble{font-family:'VT323',monospace;font-size:18px;line-height:1.05;border-radius:6px;box-shadow:0 0 0 2px #2b3a44;text-shadow:0 0 6px rgba(255,178,62,.6)}
+.th-train .pot strong{font:400 24px 'VT323';color:#ffb23e;text-shadow:0 0 6px rgba(255,178,62,.6)}
+.th-train .pot{font:400 15px 'VT323';box-shadow:0 0 0 2px #2b3a44}
+.th-train .bet span{font:400 16px 'VT323';color:#ffb23e}
+.th-train .plate i{font:400 15px 'VT323';color:#ffb23e}
+.th-train .plate{border-radius:3px;box-shadow:inset 0 0 0 1px rgba(255,178,62,.25),0 2px 0 #0b1620}
+.th-train .plate b{color:#eaf2f0}
+.th-train .tag{border-radius:3px}
+.th-train .hstack{color:#ffb23e;font:400 36px 'VT323'}
+.lap.th-train .hstack{font-size:42px}
+.th-train .dealer .dn{color:#8fc93a;font-weight:900}
+/* passengers: each player sits in their own lit carriage window */
+.th-train .pwin{display:block;position:relative;border-radius:30%/24%;overflow:hidden;background:linear-gradient(180deg,#0b1626,#1d2e4a 60%,#2a3b58);box-shadow:inset 0 0 0 2.5px #c9d6d8,inset 0 0 0 4px #0b1620,0 3px 6px rgba(0,0,0,.4)}
+.th-train .pwin svg{width:100%;height:100%;display:block}
+.th-train .pwin::after{content:"";position:absolute;inset:0;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.18) 38%,transparent 46%)}
+.th-train .pwin::before{content:"";position:absolute;left:0;right:0;bottom:24%;height:2px;background:radial-gradient(circle,#ffb23e 1px,transparent 1.4px) 0 0/7px 2px;opacity:.6;animation:winscroll 3s linear infinite}
+@keyframes winscroll{to{background-position:-14px 0}}
+.th-train .seat.hot .pwin{box-shadow:inset 0 0 0 2.5px #ff7a3d,inset 0 0 0 4px #0b1620,0 0 14px rgba(255,122,61,.6)}
+.th-train .seat.turn .av::after{border-radius:30%/24%;background:conic-gradient(#8fc93a var(--left,70%),transparent 0)}
+.th-train .hotb{border-radius:3px}
+/* carriage */
+.th-train .t-win{position:absolute;left:0;right:0;overflow:hidden;background:linear-gradient(#060b14,#14223a 70%,#1d2a40);box-shadow:inset 0 -6px 0 #0b1620,inset 0 6px 0 #0b1620}
+.th-train .t-city{position:absolute;left:0;bottom:6px;height:70%;width:200%;animation:tsc 9s linear infinite;background:repeating-linear-gradient(90deg,#0b1628 0 34px,transparent 34px 46px,#0d1a2e 46px 70px,transparent 70px 84px,#0b1628 84px 110px,transparent 110px 128px)}
+.th-train .t-city::after{content:"";position:absolute;inset:0;background:radial-gradient(circle,#ffb23e 1px,transparent 1.5px) 0 0/14px 11px,radial-gradient(circle,#cfe3ff 1px,transparent 1.5px) 7px 5px/14px 11px;opacity:.5;mask-image:repeating-linear-gradient(90deg,#000 0 34px,transparent 34px 46px,#000 46px 70px,transparent 70px 84px,#000 84px 110px,transparent 110px 128px)}
+.th-train .t-pole{position:absolute;inset:0;background:repeating-linear-gradient(90deg,transparent 0 220px,rgba(255,255,255,.08) 220px 226px,transparent 226px 420px);animation:tpl .8s linear infinite}
+@keyframes tsc{to{transform:translateX(-50%)}}@keyframes tpl{to{background-position:-420px 0}}
+.th-train .t-mull{position:absolute;top:0;bottom:0;width:6px;background:#0b1620}
+.th-train .strap{position:absolute;width:2px;height:24px;background:#5a6b74;transform-origin:50% 0;animation:strap 2.6s ease-in-out infinite;z-index:0}
+.th-train .strap::after{content:"";position:absolute;left:-8px;top:22px;width:18px;height:18px;border-radius:50%;border:3px solid #c9d6d8}
+@keyframes strap{50%{transform:rotate(-6deg)}}
+.th-train .sway{animation:sway 4s ease-in-out infinite}@keyframes sway{50%{transform:translateY(1.5px) rotate(.12deg)}}
+/* table detail: rivets, a route line around the felt, roundel in the middle */
+.th-train .table::before{content:"";position:absolute;inset:4px;border-radius:999px;background:radial-gradient(circle,#5f7275 1.4px,transparent 1.8px) 0 0/34px 34px;-webkit-mask:radial-gradient(closest-side,transparent calc(100% - 8px),#000 calc(100% - 7px));mask:radial-gradient(closest-side,transparent calc(100% - 8px),#000 calc(100% - 7px));opacity:.9}
+.th-train .felt .deco svg{position:absolute;inset:0;width:100%;height:100%}
+.th-train .led{position:relative;z-index:1;overflow:hidden;background:#0a0f14;border-radius:4px;box-shadow:0 0 0 2px #2b3a44;height:26px;width:210px}
+.th-train .led span{display:block;white-space:nowrap;font:400 19px/26px 'VT323';color:#ffb23e;text-shadow:0 0 6px rgba(255,178,62,.7);padding-left:100%;animation:marq 12s linear infinite}
+@keyframes marq{to{transform:translateX(-100%)}}
+.lap.th-train .led{width:320px;height:30px}.lap.th-train .led span{font-size:22px;line-height:30px}
+.th-train .lg{display:inline-block;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 18px 40px rgba(0,0,0,.6);text-align:left}
+.th-train .lg b{display:block;padding:16px 24px 6px;font:900 40px/1 'Zen Kaku Gothic New';color:#12263a}
+.th-train .lg small{display:block;padding:0 24px 10px;font:700 12px 'Zen Kaku Gothic New';color:#4a5a66;letter-spacing:.2em}
+.th-train .lg i{display:block;background:#8fc93a;padding:6px 24px;font:900 11px 'Zen Kaku Gothic New';font-style:normal;color:#0d1a12}
+.th-train .tabs span.on{background:#8fc93a;color:#0d1a12}
+.th-train .slot{--slot:rgba(221,233,212,.3)}
+.th-train .cd:not(.dn)::after{content:"";position:absolute;right:8%;top:5%;width:8%;aspect-ratio:1;border-radius:50%;background:#12263a;opacity:.85}
+.th-train .cd.s:not(.dn)::after{right:auto;left:62%;top:6%}
+.th-train .cd .mag{position:absolute;left:0;right:0;bottom:12%;height:6%;background:#3a4b57;opacity:.5}
+.th-train .hero{--herobg2:#12263a}

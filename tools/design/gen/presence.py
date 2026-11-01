@@ -1,0 +1,105 @@
+"""Leaving, dropping out and coming back, drawn in every theme. Same four states and the same rules as the system board;
+the copy, shapes, type and little touches change with the theme (a dealer line, a sleeping sprite, a station announcement...)."""
+from builders import *
+
+# per theme: banner title, banner sub, toast title, toast kicker, pause title, sheet title, dealer line during the pause, away-seat touch
+COPY = {
+ 'classic': ('Reconnecting…', 'your seat and cards are safe', 'Welcome back, Dev', 'While you were away', 'Game paused', 'Arjun is away', 'Marco: "We wait for Riya. Nobody touches the cards."', ''),
+ 'noir': ('Reconnecting', 'your seat is held', 'Welcome back', 'While you were away', 'The table rests', 'Arjun has stepped out', '', ''),
+ 'ivory': ('Reconnecting', 'nothing is lost: seat, chips and cards are kept', 'Welcome back, Dev', 'A note while you were away', 'Game paused', 'Arjun is away', '', ''),
+ 'velvet': ('Reconnecting', 'your seat and cards are held for you', 'Welcome back, Dev', 'While you were away', 'The room pauses', 'Arjun has stepped out', '', ''),
+ 'cyber': ('SIGNAL LOST // RELINKING', 'seat + cards locked server side', 'RELINKED', '// MISSED WHILE OFFLINE', 'HOST OFFLINE', 'SEAT 05 // IDLE', 'VEX: "Host dropped. Holding the table. Nobody move."', ''),
+ 'ink': ('BZZT… reconnecting!', 'your seat and cards are safe', 'You\'re back!!', 'Previously…', 'PAUSE!!', 'Arjun went AWOL', 'KAGE: "Host is gone. We. Wait."', '<span class="pz-ink">zzz</span>'),
+ 'pixel': ('CONNECTION LOST', 'retrying… seat and cards kept', 'WELCOME BACK, HERO', 'WHILE YOU WERE AWAY', 'GAME PAUSED', 'ARJUN IS AFK', 'BRAM: "Riya fell off the map. The inn waits."', '<span class="pz-zz">Z</span><span class="pz-zz b">z</span>'),
+ 'train': ('Signal lost in the tunnel', 'your seat and ticket are safe', 'Welcome back aboard', 'Stops you missed', 'Train held at the platform', 'Arjun stepped off', 'HOSHI: "This train will wait for Riya."', ''),
+ 'edo': ('The lantern flickers…', 'your seat and cards are kept', 'Welcome back, Dev', 'While you were away', 'The den pauses', 'Arjun has wandered off', 'KITSUNE: "The host has vanished. We wait a while."', ''),
+}
+
+CSS = '''
+.pz-col{display:grid;gap:12px;width:390px}.pz-col .cap{display:grid;gap:4px;min-height:96px;align-content:start}
+.pz-col .cap b{font:var(--dspw,700) 21px var(--dsp)}.pz-col .cap small{font-size:13px;color:var(--mut);line-height:1.45}
+.pz-col .cap em{font-style:normal;font:700 11px var(--num);letter-spacing:.1em;color:var(--acc);text-transform:uppercase}
+.pz-col>.tp{border-radius:28px;overflow:hidden;box-shadow:0 0 0 1px var(--line),0 18px 40px rgba(0,0,0,.35)}
+.pz-row{display:flex;gap:30px;align-items:flex-start}
+.pz-pnl{background:var(--panel);box-shadow:var(--panelsh);border-radius:var(--r-panel);color:var(--tx)}
+.pz-bn{position:absolute;left:12px;right:12px;top:62px;z-index:40;display:flex;align-items:center;gap:10px;padding:10px 12px;font-size:12.5px;line-height:1.3;animation:pzb 2s ease-in-out infinite}
+.pz-bn b{display:block;font:var(--dspw,700) 14px var(--dsp);color:var(--acc)}.pz-bn .t{margin-left:auto;font:var(--numw,600) 18px var(--num);color:var(--acc)}
+@keyframes pzb{50%{filter:brightness(1.15)}}
+.pz-dots{display:flex;gap:3px}.pz-dots i{width:6px;height:6px;border-radius:50%;background:var(--acc);animation:pzd 1s ease-in-out infinite}.pz-dots i:nth-child(2){animation-delay:.15s}.pz-dots i:nth-child(3){animation-delay:.3s}
+@keyframes pzd{0%,100%{opacity:.25;transform:translateY(0)}50%{opacity:1;transform:translateY(-3px)}}
+.pz-dim{position:absolute;inset:0;z-index:39;background:rgba(0,0,0,.45)}
+.pz-toast{position:absolute;left:14px;right:14px;bottom:192px;z-index:40;padding:16px;display:grid;gap:6px;animation:pzt .6s cubic-bezier(.2,1.3,.3,1) both}
+@keyframes pzt{from{transform:translateY(30px);opacity:0}}
+.pz-toast small.k{font:700 10px var(--ui);letter-spacing:.24em;text-transform:uppercase;color:var(--mut)}.pz-toast b{font:var(--dspw,700) 22px var(--dsp);color:var(--tx)}
+.pz-toast ul{margin:2px 0 0;padding:0;list-style:none;display:grid;gap:4px;font-size:12.5px;line-height:1.4;color:var(--mut)}.pz-toast li::before{content:"·";margin-right:6px;color:var(--acc)}
+.pz-btns{display:flex;gap:8px;margin-top:8px}.pz-btns span{flex:1;text-align:center;padding:11px 6px;border-radius:var(--r-btn);font:700 13.5px var(--ui);background:var(--b-fold);color:var(--b-foldtx);box-shadow:var(--b-foldsh)}
+.pz-btns span.p{background:var(--b-call);color:var(--b-calltx);box-shadow:var(--b-callsh,none)}
+.pz-pause{position:absolute;inset:0;z-index:40;display:grid;place-items:center;padding:20px;background:rgba(0,0,0,.6)}
+.pz-pc{display:grid;justify-items:center;gap:8px;text-align:center;padding:22px 18px}
+.pz-ring{width:78px;height:78px;border-radius:50%;display:grid;place-items:center;position:relative;background:conic-gradient(var(--acc) 78%,rgba(127,127,127,.18) 0);animation:pzr 4s linear infinite}
+.pz-ring::before{content:"";position:absolute;inset:5px;border-radius:50%;background:var(--pzbg,var(--bg))}.pz-ring span{position:relative;font:var(--numw,600) 19px var(--num);color:var(--tx)}
+@keyframes pzr{to{filter:hue-rotate(0deg)}}
+.pz-pc>b{font:var(--dspw,700) 26px var(--dsp);color:var(--tx)}.pz-pc>small{font-size:13px;color:var(--mut);line-height:1.45}
+.pz-opts{display:grid;gap:8px;margin-top:6px;text-align:left}.pz-opts div{font-size:12px;color:var(--mut);line-height:1.4;padding:10px 12px;border-radius:calc(var(--r-panel) * .6);background:var(--chipbg);box-shadow:inset 0 0 0 1px var(--line)}
+.pz-opts b{display:block;font:700 12.5px var(--ui);color:var(--tx);margin-bottom:2px}
+.pz-dl{font:600 12.5px/1.4 var(--ui);color:var(--acc);max-width:280px}
+.pz-sheet{position:absolute;left:0;right:0;bottom:0;z-index:40;padding:18px 18px 24px;border-radius:var(--r-panel) var(--r-panel) 0 0;display:grid;gap:12px;animation:pzt .6s cubic-bezier(.2,1.3,.3,1) both}
+.pz-sheet .hd{display:flex;gap:12px;align-items:center}.pz-sheet .hd .av{--av:46px;position:relative}.pz-sheet .hd b{display:block;font:var(--dspw,700) 20px var(--dsp);color:var(--tx)}.pz-sheet .hd small{font-size:12px;color:var(--mut)}
+.pz-row2{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;padding:10px 12px;border-radius:calc(var(--r-panel) * .6);background:var(--chipbg);box-shadow:inset 0 0 0 1px var(--line)}
+.pz-row2 span{font:700 14px var(--ui);color:var(--tx)}.pz-row2 small{grid-column:1;font-size:11.5px;color:var(--mut)}.pz-row2 i,.pz-row2 em{grid-row:1/span 2;grid-column:2}
+.pz-row2 i{width:44px;height:26px;border-radius:13px;background:var(--acc);position:relative}.pz-row2 i::after{content:"";position:absolute;right:3px;top:3px;width:20px;height:20px;border-radius:50%;background:var(--acctx)}
+.pz-row2 em{font:var(--numw,600) 16px var(--num);font-style:normal;color:var(--acc)}
+.pz-seatfx{position:absolute;z-index:6;pointer-events:none}
+.pz-zz{position:absolute;font:400 12px 'Silkscreen';color:#cfe0ff;animation:pzz 2.4s steps(6) infinite}.pz-zz.b{animation-delay:-1.2s;font-size:9px}
+@keyframes pzz{0%{transform:translate(0,0);opacity:0}20%{opacity:1}100%{transform:translate(12px,-26px);opacity:0}}
+.pz-ink{position:absolute;font:400 16px 'Reggae One';color:#111;text-shadow:2px 2px 0 #fff,-2px -2px 0 #fff;animation:pzz 2.4s ease infinite}
+'''
+
+THEME_CSS = {
+ 'classic': '.th-classic{--pzbg:#1b120d}.th-classic .pz-pnl{background:#1f150f;box-shadow:inset 0 0 0 1px rgba(201,161,91,.45),0 16px 40px rgba(0,0,0,.6)}.th-classic .pz-bn{background:#3a2a10;box-shadow:inset 0 0 0 1px #f0b429}.th-classic .pz-bn b,.th-classic .pz-bn .t{color:#f0b429}',
+ 'noir': '.th-noir{--pzbg:#0b0b0c}.th-noir .pz-pnl{background:#0b0b0c;box-shadow:inset 0 0 0 1px rgba(200,169,106,.5)}.th-noir .pz-toast b,.th-noir .pz-pc>b{font:italic 500 28px "Cormorant Garamond"}.th-noir .pz-bn b{font:500 11px Jost;letter-spacing:.24em;text-transform:uppercase}.th-noir .pz-btns span{letter-spacing:.16em;text-transform:uppercase;font:500 12px Jost}',
+ 'ivory': '.th-ivory{--pzbg:#fffdf8}.th-ivory .pz-pause{background:rgba(34,38,31,.45)}.th-ivory .pz-dim{background:rgba(34,38,31,.25)}.th-ivory .pz-pnl{box-shadow:0 20px 40px rgba(60,45,25,.25),inset 0 0 0 1px rgba(34,38,31,.08)}.th-ivory .pz-toast::before,.th-ivory .pz-pc::before{content:"";position:absolute;inset:6px;border:1px solid rgba(31,74,58,.25);border-radius:12px;pointer-events:none}.th-ivory .pz-toast,.th-ivory .pz-pc{position:relative}',
+ 'velvet': '.th-velvet{--pzbg:#22090f}.th-velvet .pz-toast b,.th-velvet .pz-pc>b,.th-velvet .pz-sheet .hd b{font:italic 500 26px "Bodoni Moda"}.th-velvet .pz-pnl{box-shadow:inset 0 0 0 1px rgba(230,201,149,.5),0 20px 40px rgba(0,0,0,.6)}',
+ 'cyber': '.th-cyber{--pzbg:#120a18}.th-cyber .pz-pnl{background:rgba(12,6,16,.95);box-shadow:inset 0 0 0 1px #ff2e88;clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px)}.th-cyber .pz-bn{animation:pzg 1.4s steps(1) infinite}@keyframes pzg{0%,100%{transform:none}92%{transform:translateX(-3px)}94%{transform:translateX(2px)}}.th-cyber .pz-bn b,.th-cyber .pz-toast b,.th-cyber .pz-pc>b{letter-spacing:.1em}.th-cyber .pz-btns span{clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);letter-spacing:.12em;text-transform:uppercase}.th-cyber .pz-sheet{clip-path:none;box-shadow:inset 0 1px 0 #ff2e88}.th-cyber .pz-ring{border-radius:0;clip-path:polygon(20% 0,100% 0,100% 80%,80% 100%,0 100%,0 20%)}.th-cyber .pz-ring::before{border-radius:0}',
+ 'ink': '.th-ink{--pzbg:#fff}.th-ink .pz-pnl{background:#fff;box-shadow:0 0 0 3px #111,6px 6px 0 #111;border-radius:0;color:#111}.th-ink .pz-bn{transform:rotate(-1.5deg)}.th-ink .pz-bn b{font:400 16px "Reggae One";color:#e8202a}.th-ink .pz-toast b,.th-ink .pz-pc>b{font:400 26px "Reggae One"}.th-ink .pz-pause{background:radial-gradient(circle,#999 1px,transparent 1.4px) 0 0/5px 5px,rgba(255,255,255,.6)}.th-ink .pz-btns span{border-radius:0;box-shadow:0 0 0 2.5px #111}.th-ink .pz-btns span.p{background:#e8202a;color:#fff}.th-ink .pz-dl{color:#111;font-weight:800}.th-ink .pz-ring::before{background:#fff}',
+ 'pixel': '.th-pixel{--pzbg:#1a1220}.th-pixel .pz-pnl{background:#22182a;border:6px solid transparent;border-image:url(img/px-frame.png) 3 fill / 6px;image-rendering:pixelated;box-shadow:none;border-radius:0}.th-pixel .pz-bn b,.th-pixel .pz-toast b,.th-pixel .pz-pc>b,.th-pixel .pz-sheet .hd b{font:700 15px Silkscreen;color:#ffe08a}.th-pixel .pz-pc>b{font-size:22px}.th-pixel .pz-toast small.k{font:400 10px Silkscreen}.th-pixel .pz-dots i{border-radius:0;animation-timing-function:steps(2)}.th-pixel .pz-ring{border-radius:0;animation:none}.th-pixel .pz-ring::before{border-radius:0}.th-pixel .pz-btns span{border-radius:0;font:400 12px Silkscreen}.th-pixel .pz-row2,.th-pixel .pz-opts div{border-radius:0}.th-pixel .pz-row2 i,.th-pixel .pz-row2 i::after{border-radius:0}',
+ 'train': '.th-train{--pzbg:#0a0f14}.th-train .pz-pnl{background:#0a0f14;box-shadow:0 0 0 3px #2b3a44,0 16px 30px rgba(0,0,0,.5)}.th-train .pz-bn{background:#0a0f14}.th-train .pz-bn b{font:900 13px "Zen Kaku Gothic New";color:#ffb23e}.th-train .pz-bn .t{font:400 24px VT323;color:#ffb23e}.th-train .pz-toast b,.th-train .pz-pc>b{font:900 22px "Zen Kaku Gothic New";color:#eaf2f0}.th-train .pz-toast small.k{color:#8fc93a}.th-train .pz-toast::before,.th-train .pz-pc::before{content:"";display:block;height:6px;margin:-16px -16px 6px;background:#8fc93a;border-radius:12px 12px 0 0}.th-train .pz-pc::before{width:calc(100% + 36px);margin:-22px -18px 8px}.th-train .pz-ring span{font:400 26px VT323;color:#ffb23e}',
+ 'edo': '.th-edo{--pzbg:#f6eedc}.th-edo .pz-pnl{background:#f6eedc;box-shadow:0 0 0 1.5px #1e2a4a,0 0 0 4px #f6eedc,0 0 0 5px #c9a23a,0 16px 30px rgba(30,20,10,.35);color:#1e2a4a}.th-edo .pz-pnl{--tx:#1e2a4a;--mut:#6b6450;--line:rgba(34,53,107,.22);--chipbg:rgba(34,53,107,.06);--acc:#d2422d;--acctx:#fff6e6;--b-fold:transparent;--b-foldtx:#1e2a4a;--b-foldsh:inset 0 0 0 1.5px #1e2a4a;--b-call:#d2422d;--b-calltx:#fff6e6}.th-edo .pz-toast b,.th-edo .pz-pc>b,.th-edo .pz-bn b,.th-edo .pz-sheet .hd b{font:400 24px "Yuji Syuku"}.th-edo .pz-bn b{font-size:16px}.th-edo .pz-pause{background:rgba(30,42,74,.6)}',
+}
+
+def build(th):
+    key = th.key
+    bt, bs, tt, tk, pt, sh, dline, seatfx = COPY[key]
+    def frame(overlay, acts=None, hint=None, extra=''):
+        inner = phone_body(th, bubble=False, actions=acts, hero_hint=hint or ('Hold your cards to look', 'Two pair, Aces and Kings'), extra_arena=extra)
+        return f'<div class="tp phone dense th-{key}">{inner}{overlay}</div>'
+    ax, ay = seat_xy(4); ay -= 56
+    seat_extra = f'<div class="pz-seatfx" style="left:{ax + 16}px;top:{ay - 30}px">{seatfx}</div>' if seatfx else ''
+    banner = (f'<div class="pz-bn pz-pnl"><span class="pz-dots"><i></i><i></i><i></i></span><span><b>{bt}</b>{bs}</span><span class="t">0:07</span></div>')
+    f1 = frame(banner, extra=seat_extra)
+    toast = (f'<div class="pz-dim"></div><div class="pz-toast pz-pnl"><small class="k">{tk}</small><b>{tt}</b>'
+             '<ul><li>Hand 21: your timer ran out, you checked, then folded to a bet</li><li>Hand 22: you sat out and the blinds skipped you</li><li>You are dealt in from hand 24, same seat, 1,840 chips</li></ul>'
+             '<div class="pz-btns"><span class="p">Deal me in</span><span>Sit out a bit</span></div></div>')
+    f2 = frame(toast, acts='<button class="act ghost">Waiting for the next hand</button>', extra=seat_extra)
+    dl = f'<p class="pz-dl">{dline}</p>' if dline else ''
+    pause = (f'<div class="pz-pause"><div class="pz-pc pz-pnl"><span class="pz-ring"><span>1:36</span></span><b>{pt}</b>'
+             '<small>Riya (host) lost connection. Nothing is lost: the table is saved on every phone.</small>' + dl +
+             '<div class="pz-opts"><div><b>Online game</b>If Riya is not back in 2 minutes, the server keeps the table running and Meera becomes host.</div>'
+             '<div><b>Offline game</b>The host phone is the table, so everyone waits. When Riya returns the hand resumes exactly where it stopped.</div></div></div></div>')
+    f3 = frame(pause, acts='<button class="act ghost">Paused</button>', extra=seat_extra)
+    sheet = (f'<div class="pz-dim"></div><div class="pz-sheet pz-pnl"><div class="hd"><span class="av">{th.avatar(P[4], "menu")}</span><span><b>{sh}</b><small>Away 2:41 · missed 3 hands · 1,000 chips</small></span></div>'
+             '<div class="pz-row2"><span>Hold his seat</span><small>Chips stay, he sits out and posts no blinds</small><i></i></div>'
+             '<div class="pz-row2"><span>Auto-remove after</span><small>Seat freed, chips saved to the league</small><em>10 min</em></div>'
+             '<div class="pz-row2"><span>Let him back mid-hand?</span><small>Never: he is dealt in from the next hand</small><em>Next hand</em></div>'
+             '<div class="pz-btns"><span>Remove now</span><span class="p">Keep waiting</span></div></div>')
+    f4 = frame(sheet, acts='<button class="act ghost">Host tools</button>', extra=seat_extra)
+    col = lambda n, t, s, body: f'<div class="pz-col"><div class="cap"><em>{n}</em><b>{t}</b><small>{s}</small></div>{body}</div>'
+    body = (f'<div class="tp sheet th-{key}" style="width:1730px;height:1120px"><div><h1>{th.name}: leaving, dropping out and coming back</h1>'
+            '<p class="lede">The same four situations and the same rules in every theme; only the look and the voice change. Nobody is ever forced into a hand they missed, and a dropped phone never freezes the table.</p></div>'
+            '<div class="pz-row">'
+            + col('State 1', 'Your signal drops', 'A banner on your phone; everyone else sees a "!" on your seat. Your timer keeps running: check if free, otherwise fold.', f1)
+            + col('State 2', 'You come back', 'Same seat, same chips. Missed hands are explained once, and you choose when to be dealt back in.', f2)
+            + col('State 3', 'The host drops', 'The table pauses instead of breaking. Online: the server takes over after 2 minutes. Offline: everyone waits.', f3)
+            + col('State 4', 'Someone stays away', 'After 2 missed turns a player is set to Away. The host decides how long the seat is held.', f4)
+            + '</div></div>')
+    return write(f'{key}-presence.dc.html', doc(th, f'{th.name} presence', 1730, 1120, body, CSS + THEME_CSS.get(key, '') + th.board_css('presence')))

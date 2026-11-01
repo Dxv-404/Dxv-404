@@ -1,0 +1,60 @@
+/* Edo: woodblock print. Washi paper, indigo seigaiha felt, lacquered wood rail, vermilion and gold. */
+.th-edo{
+  --bg:#efe3c8;--tx:#1e2a4a;--mut:#6b6450;--line:rgba(34,53,107,.22);--chipbg:rgba(34,53,107,.06);
+  --ui:'Shippori Mincho',serif;--dsp:'Yuji Syuku',serif;--dspw:400;--num:'Shippori Mincho',serif;--numw:800;
+  --acc:#d2422d;--acctx:#fff6e6;--hot:#d2422d;
+  --rimbg:linear-gradient(#7a3a22,#4a1e12 55%,#6b301c);
+  --rimsh:0 0 0 2px #2a120a,inset 0 0 0 3px #c9a23a,0 16px 28px rgba(60,40,10,.35),inset 0 2px 0 rgba(255,220,160,.35);--rimw:13px;
+  --feltbg:radial-gradient(circle at 50% 100%,transparent 0 16%,rgba(239,227,200,.13) 16% 21%,transparent 21% 36%,rgba(239,227,200,.13) 36% 41%,transparent 41% 56%,rgba(239,227,200,.16) 56% 61%,#24386f 61% 70%,transparent 70%) 0 0/34px 17px,radial-gradient(circle at 50% 100%,transparent 0 16%,rgba(239,227,200,.13) 16% 21%,transparent 21% 36%,rgba(239,227,200,.13) 36% 41%,transparent 41% 56%,rgba(239,227,200,.16) 56% 61%,#24386f 61% 70%,transparent 70%) 17px 8.5px/34px 17px,#24386f;
+  --feltsh:inset 0 0 0 2px rgba(0,0,0,.35),inset 0 0 40px rgba(8,14,40,.7);
+  --potbg:#1e2a4a;--pottx:#efe3c8;--plbg:#f6eedc;--plsh:0 0 0 1px #1e2a4a,2px 2px 0 rgba(30,42,74,.25);--stack:#b0331f;
+  --tagbg:#1e2a4a;--tagtx:#efe3c8;--foldbg:#cfc3a6;--foldtx:#5c5440;
+  --cardbg:radial-gradient(120% 90% at 50% 40%,rgba(255,255,255,.55),transparent 60%),repeating-linear-gradient(17deg,rgba(120,90,40,.05) 0 1px,transparent 1px 7px),#f6eedc;
+  --cardsh:0 0 0 1px rgba(60,40,10,.35),0 3px 8px rgba(30,20,10,.35);
+  --spade:#1e2a4a;--red:#d2422d;--dia:#a87512;--club:#2f6b4f;--cardf:'Shippori Mincho',serif;--cardw:800;--cr:.07;
+  --backbg:#c23a26;--backsh:0 0 0 1px #5a1a10,inset 0 0 0 3px #c9a23a,0 3px 8px rgba(30,20,10,.35);
+  --herobg:linear-gradient(#22356b,#1a2954);--herosh:inset 0 3px 0 #c9a23a;--sidebg:#f4ead3;
+  --bubbg:#f6eedc;--bubtx:#1e2a4a;
+  --b-fold:rgba(239,227,200,.14);--b-foldtx:#efe3c8;--b-foldsh:inset 0 0 0 1.5px rgba(239,227,200,.4);
+  --b-call:#c9a23a;--b-calltx:#1e2a4a;--b-callsh:inset 0 -3px 0 rgba(0,0,0,.18);
+  --b-raise:#d2422d;--b-raisetx:#fff6e6;--b-raisesh:inset 0 -3px 0 rgba(0,0,0,.2);
+  --dbtnbg:#d2422d;--dbtntx:#fff6e6;
+  --winsh:0 0 0 2px #c9a23a,0 0 0 4px #d2422d,0 0 18px rgba(201,162,58,.8);
+  --r-btn:6px;--r-pl:4px;--r-card:8px;--r-panel:6px;--panel:#f6eedc;--panelsh:0 0 0 1px #1e2a4a,3px 3px 0 rgba(30,42,74,.2);
+  background:radial-gradient(70% 40% at 50% 0,rgba(255,255,255,.35),transparent 70%),repeating-linear-gradient(103deg,rgba(120,90,40,.035) 0 1px,transparent 1px 9px),#efe3c8;
+}
+.th-edo .hero,.th-edo .actions,.th-edo .dock{--tx:#efe3c8;--mut:#c9b994;--line:rgba(239,227,200,.25);--chipbg:rgba(239,227,200,.08);--acc:#c9a23a;--acctx:#1e2a4a;color:var(--tx)}
+.th-edo .hstack{color:#e9c25a}
+.th-edo .act{font-family:'Shippori Mincho';font-weight:800}
+.th-edo .kamon{display:block;border-radius:50%;overflow:hidden;background:#f6eedc;box-shadow:0 0 0 1.5px #1e2a4a,0 0 0 3.5px #f6eedc,0 0 0 4.5px var(--kc,#c9a23a),0 3px 6px rgba(30,20,10,.3)}
+.th-edo .kamon svg{width:100%;height:100%;display:block}
+.th-edo .h1{--kc:#22356b}.th-edo .h2{--kc:#d2422d}.th-edo .h3{--kc:#c9a23a}.th-edo .h4{--kc:#2f6b4f}.th-edo .h5{--kc:#7a3b69}.th-edo .h6{--kc:#e9a9b4}
+.th-edo .seat.hot .kamon{box-shadow:0 0 0 1.5px #1e2a4a,0 0 0 3.5px #f6eedc,0 0 0 5px #d2422d,0 0 16px rgba(210,66,45,.6)}
+.th-edo .seat.turn .av::after{background:conic-gradient(#d2422d var(--left,70%),transparent 0)}
+.th-edo .plate{border-radius:3px}.th-edo .plate b{font-weight:800}
+.th-edo .tag{border-radius:3px;font-family:'Shippori Mincho';font-weight:800}
+.th-edo .hotb{border-radius:3px;font-family:'Yuji Syuku';font-weight:400}
+.th-edo .bubble{font-family:'Shippori Mincho';font-weight:600;border-radius:3px;box-shadow:0 0 0 1px #1e2a4a,3px 3px 0 rgba(30,42,74,.25)}
+.th-edo .pot{box-shadow:0 0 0 1px #c9a23a}.th-edo .pot strong{color:#e9c25a}
+.th-edo .sidepot span{color:#e9c25a;box-shadow:0 0 0 1px rgba(201,162,58,.6)}
+.th-edo .bet span{color:#efe3c8;box-shadow:0 0 0 1px rgba(201,162,58,.6)}
+.th-edo .dealer .dn{font-family:'Yuji Syuku';color:#b0331f;font-size:12px;letter-spacing:.1em}
+.th-edo .code{background:#d2422d;color:#fff6e6}
+.th-edo .tabs span.on{background:#1e2a4a;color:#efe3c8}
+.th-edo .cd:not(.dn)::after{content:"";position:absolute;inset:3px;border-radius:inherit;border:1px solid rgba(201,162,58,.55);pointer-events:none}
+.th-edo .slot{--slot:rgba(239,227,200,.25)}
+.th-edo .felt .deco svg{position:absolute;inset:0;width:100%;height:100%}
+.th-edo .petal{position:absolute;top:-20px;left:var(--x);width:10px;height:8px;border-radius:80% 0 80% 0;background:linear-gradient(135deg,#f5c6ce,#e9a9b4);animation:fall var(--t,10s) linear infinite;animation-delay:var(--d,0s);z-index:9}
+@keyframes fall{0%{transform:translate(0,0) rotate(0)}25%{transform:translate(22px,25%) rotate(120deg)}100%{transform:translate(4px,940px) rotate(460deg)}}
+.th-edo .lantern{position:absolute;width:28px;transform-origin:50% 0;animation:swing 3.4s ease-in-out infinite;z-index:7}
+.th-edo .lantern::before{content:"";display:block;margin:0 auto;width:2px;height:var(--cord,14px);background:#1e2a4a}
+.th-edo .lantern i{display:block;width:28px;height:38px;border-radius:45%;background:repeating-linear-gradient(#d2422d 0 5px,#b83420 5px 6px);box-shadow:inset 0 0 10px rgba(255,200,100,.7),0 0 18px rgba(255,170,80,.5);font:400 13px/38px 'Yuji Syuku';font-style:normal;color:#1e2a4a;text-align:center}
+@keyframes swing{50%{transform:rotate(7deg)}}
+.th-edo .cloud{position:absolute;height:11px;border-radius:11px;background:#c9a23a;opacity:.85;box-shadow:22px -9px 0 -2px #c9a23a,56px 0 0 0 #c9a23a;animation:drift 16s ease-in-out infinite alternate}
+@keyframes drift{to{transform:translateX(40px)}}
+.th-edo .lg{writing-mode:vertical-rl;display:inline-flex;gap:10px;font:400 64px/1 'Yuji Syuku';color:#1e2a4a}
+.th-edo .lg small{font:800 22px 'Shippori Mincho';letter-spacing:.3em;color:#b0331f}
+.th-edo .lg i{writing-mode:horizontal-tb;align-self:flex-end;width:42px;height:42px;border-radius:6px;background:#d2422d;color:#fff6e6;display:grid;place-items:center;font:400 24px 'Yuji Syuku';font-style:normal;box-shadow:inset 0 0 0 3px #d2422d,inset 0 0 0 4.5px #fff6e6;transform:rotate(-6deg)}
+.th-edo .ldbar{height:10px;border-radius:5px;background:rgba(30,42,74,.15)}.th-edo .ldbar i{background:#d2422d;border-radius:5px}
+.th-edo .hero{--herobg2:#1a2954}
+.th-edo .lgm{font:400 40px/1 'Yuji Syuku';color:#1e2a4a;letter-spacing:.06em}.th-edo .lgm small{display:block;margin-top:10px;font:800 11px 'Shippori Mincho';letter-spacing:.3em;color:#b0331f}

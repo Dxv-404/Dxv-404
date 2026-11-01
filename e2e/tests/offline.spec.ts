@@ -58,16 +58,27 @@ test('the app hands over to the host phone; three phones play; a closed page com
   await screen.page.goto(`http://127.0.0.1:${PORT}/`);
   for (const n of ['Dev', 'Riya', 'Kabir']) await expect(screen.page.getByTestId('host-players')).toContainText(n);
 
-  await dev.page.getByRole('button', { name: 'Deal next hand' }).click();
+  for (const p of [dev, riya, kabir]) await p.page.evaluate(() => localStorage.setItem('tp-intro-done', '1'));
+  // the first-time intro (three steps), once per phone
+  for (const p of [dev, riya, kabir]) for (let i = 0; i < 3; i++) await p.page.locator('.tp-intro [data-i]').click({ timeout: 3000 }).catch(() => {});
+  await dev.page.locator('[data-act=deal]').click();
   const phones = [dev, riya, kabir];
   // everyone sees their own two cards
-  for (const p of phones) await expect(p.page.locator('.hero-cards .card')).toHaveCount(2, { timeout: 20_000 }); // (face down until held, by design)
+  for (const p of phones) await expect(p.page.locator('.hero .hc .flip')).toHaveCount(2, { timeout: 20_000 }); // face down until held
+  // holding the cards shows them; letting go hides them
+  const box = await riya.page.locator('.hero .hc').boundingBox();
+  await riya.page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  await riya.page.mouse.down();
+  await expect(riya.page.locator('.hero .hc.peek')).toHaveCount(1);
+  await riya.page.mouse.up();
+  await expect(riya.page.locator('.hero .hc.peek')).toHaveCount(0);
   // play some actions with the real buttons
   let acted = 0;
   const until = Date.now() + 90_000;
   while (acted < 12 && Date.now() < until) {
     for (const p of phones) {
-      const b = p.page.locator('.actions button.act:not([disabled])').filter({ hasText: /^(Check|Call)/ }).first();
+      for (const x of await p.page.locator('.tp-intro [data-i]').all()) await x.click().catch(() => {});
+      const b = p.page.locator('[data-act=check], [data-act=call]').first();
       if (await b.isVisible().catch(() => false)) { await b.click().catch(() => {}); acted++; }
     }
     await dev.page.waitForTimeout(300);
@@ -78,7 +89,7 @@ test('the app hands over to the host phone; three phones play; a closed page com
   await kabir.page.close();
   const again = await kabir.ctx.newPage();
   await again.goto(`http://127.0.0.1:${PORT}/join`);
-  await expect(again.locator('.table-screen')).toBeVisible();
+  await expect(again.locator('.tp.live')).toBeVisible();
   await expect.poll(async () => (await screen.page.getByTestId('host-players').textContent())?.match(/Kabir[^·]*· here/) !== null, { timeout: 20_000 }).toBe(true);
   void before;
   for (const p of [dev, riya, app]) expect(p.errors.filter((e) => !/Failed to load resource|ERR_|net::/.test(e))).toEqual([]);

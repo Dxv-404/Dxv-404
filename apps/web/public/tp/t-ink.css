@@ -1,0 +1,54 @@
+/* Ink: a manga page. Paper white, heavy brush ink, screentone, one red. */
+.th-ink{
+  --bg:#f5f2ea;--tx:#111;--mut:#555;--line:#111;--chipbg:#fff;
+  --ui:'M PLUS 1p',sans-serif;--dsp:'Reggae One',sans-serif;--dspw:400;--num:'M PLUS 1p',sans-serif;--numw:800;
+  --acc:#e8202a;--acctx:#fff;--hot:#e8202a;
+  --rimbg:#111;--rimsh:6px 7px 0 #111,0 0 0 3px #111;--rimw:11px;
+  --feltbg:radial-gradient(circle,rgba(0,0,0,.2) 1px,transparent 1.4px) 0 0/6px 6px,radial-gradient(70% 60% at 50% 45%,#fff 30%,#ececec);
+  --feltsh:inset 0 0 0 3px #fff,inset 0 0 0 5.5px #111;
+  --potbg:#fff;--pottx:#111;--plbg:#fff;--plsh:0 0 0 2.5px #111,3px 3px 0 #111;--stack:#111;
+  --tagbg:#111;--tagtx:#fff;--foldbg:#ddd;--foldtx:#444;
+  --cardbg:#fff;--cardsh:0 0 0 2.5px #111,3px 4px 0 #111;
+  --spade:#111;--red:#e8202a;--dia:#2357c6;--club:#127a45;--cardf:'Reggae One',sans-serif;--cardw:400;--cr:.07;
+  --backbg:#fff;--backsh:0 0 0 2.5px #111,3px 4px 0 #111;
+  --herobg:#fff;--herosh:0 -3px 0 #111;--sidebg:#fff;--sidesh:-3px 0 0 #111;
+  --bubbg:#fff;--bubtx:#111;
+  --b-fold:#fff;--b-foldtx:#111;--b-foldsh:0 0 0 3px #111,4px 4px 0 #111;
+  --b-call:#111;--b-calltx:#fff;--b-callsh:0 0 0 3px #111,4px 4px 0 #888;
+  --b-raise:#e8202a;--b-raisetx:#fff;--b-raisesh:0 0 0 3px #111,4px 4px 0 #111;
+  --dbtnbg:#fff;--dbtntx:#111;
+  --winsh:0 0 0 3px #e8202a,4px 5px 0 #111;
+  --r-btn:6px;--r-pl:4px;--r-card:4px;--r-panel:4px;--panel:#fff;--panelsh:0 0 0 3px #111,5px 5px 0 #111;
+  background:radial-gradient(circle,rgba(0,0,0,.05) 1px,transparent 1.3px) 0 0/5px 5px,#f5f2ea;
+}
+.th-ink .act{font:800 16px 'M PLUS 1p'}
+.th-ink .act.call{font-family:'Reggae One';font-weight:400}
+.th-ink .ib,.th-ink .pill{box-shadow:0 0 0 2.5px #111,3px 3px 0 #111;background:#fff}
+.th-ink .plate b{font-weight:800}
+.th-ink .tag{border-radius:3px;font-weight:800;transform:translate(-50%,-4px) rotate(-3deg)}
+.th-ink .tag.raise{box-shadow:0 0 0 2px #111}.th-ink .tag.allin{box-shadow:0 0 0 2px #111}
+.th-ink .panel{display:block;background:#fff;box-shadow:0 0 0 2.5px #111,3px 3px 0 #111;transform:rotate(var(--tilt,-3deg));overflow:hidden;border-radius:2px}
+.th-ink .panel svg{width:100%;height:100%;display:block}
+.th-ink .panel.photo{background:#ddd}
+.th-ink .seat.hot .panel{box-shadow:0 0 0 2.5px #e8202a,3px 3px 0 #111}
+.th-ink .seat.turn .av::after{border-radius:2px;background:conic-gradient(#e8202a var(--left,70%),transparent 0)}
+.th-ink .hotb{border-radius:3px;font-family:'Reggae One';font-weight:400;box-shadow:0 0 0 2px #111;transform:translateX(-50%) rotate(-6deg)}
+.th-ink .pot{box-shadow:0 0 0 2.5px #111,3px 3px 0 #111}
+.th-ink .pot strong{font-family:'Reggae One';font-weight:400}
+.th-ink .sidepot span{box-shadow:0 0 0 2px #111;color:#111}
+.th-ink .bet span{box-shadow:0 0 0 2px #111;font-weight:800}
+.th-ink .dbtn{box-shadow:0 0 0 2.5px #111,2px 2px 0 #111}
+.th-ink .bubble{border-radius:18px;box-shadow:0 0 0 2.5px #111,3px 3px 0 #111;font-weight:700}
+.th-ink .dealer .dn{color:#111;font-family:'Reggae One';letter-spacing:.2em}
+.th-ink .hstack{font-family:'Reggae One';font-weight:400;color:#111}
+.th-ink .hm b{font-family:'Reggae One';font-weight:400;font-size:18px}
+/* table detail: brush rim highlights, gutter ring, corner speed lines, tiny SFX */
+.th-ink .table::before{content:"";position:absolute;inset:3px;border-radius:999px;border:1.5px dashed rgba(255,255,255,.55);pointer-events:none}
+.th-ink .felt .deco svg{position:absolute;inset:0;width:100%;height:100%}
+.th-ink .sfx{position:absolute;font:400 15px 'Reggae One';color:#111;opacity:.18;transform:rotate(-12deg)}
+.th-ink .lg{font:400 52px/1 'Reggae One';color:#111;-webkit-text-stroke:0;text-shadow:4px 4px 0 #e8202a}
+.th-ink .lg small{text-shadow:none;display:inline-block;margin-top:14px;font:800 12px 'M PLUS 1p';letter-spacing:.24em;background:#111;color:#fff;padding:4px 10px;transform:rotate(-2deg)}
+.th-ink .tabs span.on{background:#111;color:#fff}
+.th-ink .slot{--slot:rgba(0,0,0,.3)}
+.th-ink .ldbar{height:8px;border-radius:0;box-shadow:0 0 0 2.5px #111;background:#fff}.th-ink .ldbar i{background:#111}
+.th-ink .speedbg{position:absolute;inset:-30%;background:repeating-conic-gradient(from 0deg at 50% 50%,rgba(0,0,0,.09) 0 1.2deg,transparent 1.2deg 6deg);mask-image:radial-gradient(circle,transparent 25%,#000 65%)}
