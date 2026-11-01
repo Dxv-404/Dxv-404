@@ -1,7 +1,7 @@
 // The Cloudflare table server (the backup to the Oracle server in Hyderabad): one Durable Object per table.
 import { DurableObject } from 'cloudflare:workers';
 import { PROTOCOL_VERSION } from '@tp/protocol';
-import { TableRoom, Recorder, tokenSigner, supabaseSend, type Conn, type Persisted, type OutboxItem } from '@tp/table';
+import { TableRoom, Recorder, tokenSigner, supabaseSend, checkOfflineUpload, MAX_UPLOAD_BYTES, type Conn, type Persisted, type OutboxItem } from '@tp/table';
 import { cachedTicketChecker, checkTicket, SUPABASE_KEY, SUPABASE_URL } from '@tp/account/ticket';
 
 // signed-in phones show a ticket; the accounts database says whose it is (cached while this isolate lives)
@@ -84,6 +84,19 @@ export class Table extends DurableObject<Env> {
     return room;
   }
 
+  /** A night played offline: checked here (every hand replayed), then sent by this object's recorder. */
+  private async offlineUpload(request: Request): Promise<Response> {
+    const text = await request.text();
+    if (text.length > MAX_UPLOAD_BYTES + 1024) return Response.json({ error: 'Too large' }, { status: 413 });
+    if (!this.recorder) return Response.json({ error: 'This server cannot record games' }, { status: 503 });
+    let up;
+    try { up = checkOfflineUpload(JSON.parse(text) as { id?: unknown; fn?: unknown; body?: unknown }); }
+    catch (e) { return Response.json({ error: (e as Error).message }, { status: 422 }); }
+    await this.recorder.add(up.fn, up.id, up.payload);
+    this.setAlarm();
+    return Response.json({ queued: up.id });
+  }
+
   private conn(ws: WebSocket): Conn {
     let c = this.conns.get(ws);
     if (!c) {
@@ -94,6 +107,7 @@ export class Table extends DurableObject<Env> {
   }
 
   override async fetch(request: Request): Promise<Response> {
+    if (new URL(request.url).pathname === '/offline/upload') return this.offlineUpload(request);
     if (request.headers.get('Upgrade') !== 'websocket') return new Response('Expected a WebSocket', { status: 426 });
     const code = new URL(request.url).pathname.split('/').pop()!;
     if (!this.room) {
@@ -172,6 +186,8 @@ export default {
       const cf = (request as Request & { cf?: { colo?: string; country?: string } }).cf;
       return Response.json({ ok: true, protocol: PROTOCOL_VERSION, colo: cf?.colo, country: cf?.country }, { headers: cors });
     }
+    // nights played offline go through one table object (it has a recorder and an outbox)
+    if (url.pathname === '/offline/upload' && request.method === 'POST') return env.TABLES.get(env.TABLES.idFromName('__offline_uploads__'), { locationHint: 'apac' }).fetch(request);
     const echo = url.pathname.match(/^\/echo\/([A-Z0-9]{4,12})$/);
     if (echo) {
       const cf = (request as Request & { cf?: { country?: string; continent?: string } }).cf;

@@ -4,9 +4,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build:js": "vite build -c vite.engine.config.ts",
+    "build:js": "vite build -c vite.engine.config.ts && vite build -c vite.runtime.config.ts && pnpm build:node",
     "build:apk": "pnpm build:js && node scripts/copy-assets.mjs && cd android && gradle assembleDebug --no-daemon -q",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "build:node": "../server/node_modules/.bin/esbuild src/node-host.ts --bundle --platform=node --target=node22 --format=esm --external:ws --outfile=dist/node-host.mjs"
   },
-  "dependencies": { "@tp/engine": "workspace:*" }
+  "dependencies": {
+    "@tp/engine": "workspace:*",
+    "@tp/table": "workspace:*"
+  },
+  "devDependencies": {
+    "@tp/bots": "workspace:*"
+  }
 }

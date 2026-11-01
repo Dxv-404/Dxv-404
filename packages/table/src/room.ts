@@ -8,7 +8,7 @@
 // - each phone gets its own view (only its own hole cards), so nothing secret is ever broadcast;
 // - the table is saved after every change as "the table at the start of the hand + the inputs since",
 //   which is also exactly the hand's replay log.
-import { Engine, randomSeed, sha256hex, toHex, type GameEvent, type GameState, type HandRecord, type Input, type PlayerId } from '@tp/engine';
+import { Engine, isSeed, randomSeed, seedCommit, sha256hex, toHex, type GameEvent, type GameState, type HandRecord, type Input, type PlayerId } from '@tp/engine';
 import { PROTOCOL_VERSION, encode, parseClient, versionOk, type ClientMessage, type ServerMessage, type TableSettings } from '@tp/protocol';
 import { handPlayers, publicReplay, slimRecord, type EndPlayerRow, type GameInfo } from './record';
 
@@ -55,6 +55,8 @@ export interface Persisted {
   game?: { id: string; startedAt: string; casual: boolean; bigBlind: number; startStack: number; ended: boolean };
   /** Lowest stack each player had (for the comeback trophy). */
   minStacks?: Record<PlayerId, number>;
+  /** Offline: the checkpoint this table was carried on from (phones holding another copy are pointed out). */
+  continuedFrom?: string | null;
 }
 
 export interface RoomOptions {
@@ -81,6 +83,17 @@ export interface RoomOptions {
   silentCloseMs?: number;
   /** A socket that has not said hello by then is closed. */
   helloWithinMs?: number;
+  /**
+   * The offline host phone. Phones say who they are (no internet to check tickets: the league counts the
+   * night only once players confirm it online), at most 10 players (a hotspot's limit), every phone keeps a
+   * checkpoint of the table between hands (so another phone can carry the night on), and the shuffle is
+   * shared (each phone adds randomness, so the host phone alone cannot choose the deck).
+   */
+  offline?: boolean;
+  /** Each phone adds a random seed to every deck (on by default offline). */
+  sharedShuffle?: boolean;
+  /** How long the shared shuffle waits for phones' seeds before dealing anyway. */
+  shuffleWaitMs?: number;
   /** Checks an account ticket (phones that are signed in send one). Needed for crew-only tables. */
   identify?: (ticket: string, table: string) => Promise<Identity | null>;
 }
@@ -96,6 +109,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ACKS_KEPT = 64;
 const ACKS_SAVED = 16;
 const REACT_GAP_MS = 800;
+/** Many phones' hotspots take only 8 to 10 devices: offline tables stop at 10 players. */
+export const OFFLINE_MAX_PLAYERS = 10;
+const OFFLINE_FULL = 'This offline table is full. For more than 10 players, play online.';
 
 export class TableRoom {
   readonly code: string;
@@ -119,6 +135,13 @@ export class TableRoom {
   private emptySince: number | null = null;
   /** When hosting passes on if the host is still gone (see hostHandoverMs). */
   private hostHandoverAt: number | null = null;
+  /** Shared shuffle: the dealer's seed is promised; phones' seeds are collected until `until`. */
+  private pendingDeal: { seed: string; handNo: number; got: Map<PlayerId, string>; until: number } | null = null;
+  /** Offline: the checkpoint phones last got, and the one this table was continued from. */
+  private checkpointHash: string | null = null;
+  private checkpointLater = false;
+  private checkpointCache: { seq: number; data: string; hash: string } | null = null;
+  private continuedFrom: string | null = null;
   private conns = new Map<Conn, ConnState>();
   private acks = new Map<PlayerId, Map<string, Ack>>();
   private recent: { seq: number; events: GameEvent[] }[] = [];
@@ -132,7 +155,8 @@ export class TableRoom {
 
   constructor(code: string, private clock: RoomClock, private store: RoomStore, saved?: Persisted | null, opt: RoomOptions = {}) {
     this.code = code;
-    this.opt = { handPauseMs: 4000, rateLimit: 40, rateWindowMs: 2000, keepUpdates: 200, offlineAfterMs: 3000, seed: randomSeed, identify: async () => null, server: 'test', autoEndAfterMs: 20 * 60_000, hostHandoverMs: 60_000, maxConnections: 60, silentCloseMs: 30_000, helloWithinMs: 15_000, ...opt };
+    this.opt = { handPauseMs: 4000, rateLimit: 40, rateWindowMs: 2000, keepUpdates: 200, offlineAfterMs: 3000, seed: randomSeed, identify: async () => null, server: 'test', autoEndAfterMs: 20 * 60_000, hostHandoverMs: 60_000, maxConnections: 60, silentCloseMs: 30_000, helloWithinMs: 15_000, offline: false, sharedShuffle: !!opt.offline, shuffleWaitMs: 1500, ...opt };
+    if (this.opt.offline) this.opt.maxConnections = Math.min(this.opt.maxConnections, OFFLINE_MAX_PLAYERS + 4);
     this.createdAt = clock.now();
     if (saved) this.restore(saved);
   }
@@ -176,7 +200,7 @@ export class TableRoom {
     if (m.t === 'hello') return this.hello(conn, st, m);
     if (!st.hello) return this.send(conn, { t: 'error', code: 'need_hello', message: 'Say hello first' });
     if (m.t === 'react') return this.react(conn, st, m.reaction);
-    if (m.t === 'seed') return; // Shared shuffle arrives in a later phase
+    if (m.t === 'seed') return this.onSeed(st, m.handNo, m.seed);
     if (!st.pid || !this.engine) return this.ack(conn, null, m.actionId, 'Spectators cannot play');
     const pid = st.pid;
     const done = this.acks.get(pid)?.get(m.actionId);
@@ -215,6 +239,7 @@ export class TableRoom {
       this.running = false; this.nextDealAt = null;
       if (!this.apply({ t: 'host', cmd: 'end', now })) this.endToLeague();
     }
+    if (this.pendingDeal && now >= this.pendingDeal.until) this.finishDeal(now); // phones that did not answer in time are left out
     if (this.nextDealAt !== null && now >= this.nextDealAt) {
       this.nextDealAt = null;
       this.tryDeal(now);
@@ -228,6 +253,14 @@ export class TableRoom {
     if (!versionOk(m.v)) return fail('version', 'Please update the app');
     if (m.table !== this.code) return fail('no_table', 'Wrong table');
     if (st.hello || st.checking) return this.send(conn, { t: 'error', code: 'bad_message', message: 'Already said hello' });
+    if (this.opt.offline) {
+      // no internet to check who this is: the phone's word is taken here, and confirmed online later
+      if (m.cp && this.continuedFrom && m.cp !== this.continuedFrom) {
+        this.broadcastRaw({ t: 'notice', text: `${(m.name ?? 'A player').slice(0, 20)}'s phone has a different copy of the last hand than the phone carrying the table on.` });
+      }
+      const c = m.claim;
+      return this.seat(conn, st, m, c && c.account === m.player ? { account: c.account, device: c.device, name: m.name ?? 'Player', crews: c.crews } : null);
+    }
     if (!m.ticket) return this.seat(conn, st, m, null);
     // a signed-in phone: ask the accounts database who it is, then carry on
     st.checking = true;
@@ -275,7 +308,7 @@ export class TableRoom {
       const name = m.name ?? who?.name;
       if (!name) return fail('bad_message', 'A name is needed to join');
       const r = this.apply({ t: 'join', id: m.player, name: this.uniqueName(name), now });
-      if (r) return fail(r === 'The table is full' ? 'table_full' : 'not_allowed', r);
+      if (r) return fail(r === 'The table is full' ? 'table_full' : 'not_allowed', r === 'The table is full' && this.opt.offline ? OFFLINE_FULL : r);
       if (m.token && !who) this.tokens[m.player] = hashToken(m.token);
       if (who) this.accountSeats.add(m.player);
       if (!this.host) this.host = m.player;
@@ -293,6 +326,7 @@ export class TableRoom {
     st.hello = true; st.pid = m.player; if (who) st.device = who.device;
     this.trackEmpty();
     this.welcome(conn, m.player, m.lastSeq);
+    if (this.opt.offline) this.sendCheckpoint(conn);
     this.tryDeal(now); // a returning or new player may be all a waiting table needs
     this.reschedule();
   }
@@ -355,6 +389,7 @@ export class TableRoom {
     const rules = { ...settings };
     delete rules.crew; // the crew belongs to the room, not the rules
     delete rules.casual;
+    if (this.opt.offline) rules.maxPlayers = Math.min(rules.maxPlayers ?? OFFLINE_MAX_PLAYERS, OFFLINE_MAX_PLAYERS);
     this.engine = Engine.create(this.code, rules, now);
     const c = this.engine.s.cfg;
     this.game = { id: newGameId(), startedAt: new Date(now).toISOString(), casual: !!settings?.casual, bigBlind: c.bb, startStack: c.startStack, ended: false };
@@ -382,9 +417,11 @@ export class TableRoom {
       this.store.appendHand(rec);
       this.toLeague(rec);
       if (this.running && e.s.phase !== 'ended') this.nextDealAt = input.now + this.opt.handPauseMs;
+      if (this.opt.offline) this.checkpointLater = true;
     }
     for (const [c, st] of this.conns) if (st.hello) this.send(c, { t: 'update', seq: this.seq, events: events as unknown as Record<string, unknown>[], view: this.view(st.pid), host: this.host, at: input.now });
     this.persist();
+    if (this.checkpointLater) { this.checkpointLater = false; for (const c of this.conns.keys()) this.sendCheckpoint(c); }
     this.foldLeaving(input.now);
     this.reschedule();
     return null;
@@ -403,12 +440,46 @@ export class TableRoom {
   }
 
   private deal(now: number): string | null {
-    return this.apply({ t: 'start', seed: this.opt.seed(), now });
+    if (!this.opt.sharedShuffle) return this.apply({ t: 'start', seed: this.opt.seed(), now });
+    if (this.pendingDeal) return null; // already collecting seeds for this deal
+    // shared shuffle: promise the dealer's seed first, then let every phone add one of its own
+    const seed = this.opt.seed();
+    const commit = seedCommit(seed);
+    const r = this.apply({ t: 'commitSeed', commit, now });
+    if (r) return r;
+    const handNo = this.engine!.s.handNo + 1;
+    this.pendingDeal = { seed, handNo, got: new Map(), until: now + this.opt.shuffleWaitMs };
+    for (const [c, st] of this.conns) if (st.hello && st.pid) this.send(c, { t: 'seedRequest', handNo, dealerSeedCommit: commit });
+    if (!this.seedsExpected().length) return this.finishDeal(now);
+    this.reschedule();
+    return null;
+  }
+
+  /** Players whose phones should add a seed: connected players who will be dealt in. */
+  private seedsExpected(): PlayerId[] {
+    const e = this.engine!;
+    return e.s.players.filter((p) => p.stack > 0 && !p.sittingOut && this.connsOf(p.id).length).map((p) => p.id);
+  }
+
+  private onSeed(st: ConnState, handNo: number, seed: string): void {
+    const p = this.pendingDeal;
+    if (!p || !st.pid || handNo !== p.handNo || p.got.has(st.pid) || !isSeed(seed)) return;
+    p.got.set(st.pid, seed);
+    if (this.seedsExpected().every((pid) => p.got.has(pid))) this.finishDeal(this.clock.now());
+  }
+
+  private finishDeal(now: number): string | null {
+    const p = this.pendingDeal!;
+    this.pendingDeal = null;
+    const r = this.apply({ t: 'start', seed: p.seed, contributions: [...p.got.values()], now });
+    if (r && this.running) this.nextDealAt = now + this.opt.handPauseMs; // someone left meanwhile: try again shortly
+    this.reschedule();
+    return r;
   }
 
   private tryDeal(now: number): void {
     const e = this.engine;
-    if (!e || !this.running || e.s.paused || e.s.phase === 'hand' || e.s.phase === 'ended') return;
+    if (!e || !this.running || e.s.paused || e.s.phase === 'hand' || e.s.phase === 'ended' || this.pendingDeal) return;
     if (this.nextDealAt !== null && now < this.nextDealAt) return;
     this.nextDealAt = null;
     if (e.canStartHand()) this.deal(now);
@@ -423,7 +494,7 @@ export class TableRoom {
 
   private reschedule(): void {
     this.checkHost(this.clock.now());
-    const times = [this.handDeadline(), this.nextDealAt, this.autoEndAt(), this.hostHandoverAt, this.nextSilentCheck(), ...this.goingOffline.values()].filter((x): x is number => x !== null);
+    const times = [this.handDeadline(), this.nextDealAt, this.autoEndAt(), this.hostHandoverAt, this.nextSilentCheck(), this.pendingDeal?.until ?? null, ...this.goingOffline.values()].filter((x): x is number => x !== null);
     this.clock.schedule(times.length ? Math.min(...times) : null);
   }
 
@@ -443,6 +514,46 @@ export class TableRoom {
     this.hostHandoverAt = null;
     this.host = next.id;
     this.announce();
+  }
+
+  // ---------------- offline checkpoints ----------------
+  /**
+   * The table between hands, as every phone keeps it: no cards (the finished hand is left out), no
+   * answers to old taps. Another phone with the host app can carry the night on from it.
+   */
+  checkpoint(): { handNo: number; data: string; hash: string } | null {
+    if (!this.engine || !this.base) return null;
+    if (this.checkpointCache?.seq === this.seq) return { handNo: this.base.handNo, data: this.checkpointCache.data, hash: this.checkpointCache.hash };
+    const base: GameState = { ...this.base, hand: null, log: [] };
+    const cp: Persisted = {
+      v: 1, code: this.code, base, inputs: [], seq: 0, host: this.host, tokens: this.tokens, running: false, nextDealAt: null, createdAt: this.createdAt,
+      crew: this.crew, accountSeats: [...this.accountSeats], ...(this.game ? { game: { ...this.game } } : {}), minStacks: this.minStacks,
+    };
+    const data = JSON.stringify(cp);
+    const hash = sha256hex(data);
+    this.checkpointCache = { seq: this.seq, data, hash };
+    return { handNo: base.handNo, data, hash };
+  }
+
+  private sendCheckpoint(conn: Conn): void {
+    const st = this.conns.get(conn);
+    if (!st?.hello || !st.pid) return; // players keep it, watchers do not
+    const cp = this.checkpoint();
+    if (!cp) return;
+    this.checkpointHash = cp.hash;
+    this.send(conn, { t: 'checkpoint', handNo: cp.handNo, hash: cp.hash, data: cp.data });
+  }
+
+  /**
+   * Carry a night on from a checkpoint a phone kept (the host phone died). The hand in progress when it
+   * died is gone: stacks are as they were before it. `host` is the player whose phone carries it on.
+   */
+  static fromCheckpoint(data: string, host: PlayerId): Persisted {
+    const p = JSON.parse(data) as Persisted;
+    if (p.v !== 1 || !p.base || !Array.isArray(p.base.players) || p.base.hand !== null) throw new Error('Not a table checkpoint');
+    if (!p.base.players.some((x) => x.id === host)) throw new Error('That player is not at this table');
+    Engine.replay(p.base, []); // must load
+    return { ...p, inputs: [], acks: {}, host, running: false, nextDealAt: null, continuedFrom: sha256hex(data) } as Persisted;
   }
 
   /** A change outside the rules engine (who hosts): numbered like any other update so phones keep in step. */
@@ -584,6 +695,7 @@ export class TableRoom {
     return {
       v: 1, code: this.code, base: this.base, inputs: this.inputs, seq: this.seq, host: this.host, tokens: this.tokens,
       running: this.running, nextDealAt: this.nextDealAt, createdAt: this.createdAt, acks, crew: this.crew, accountSeats: [...this.accountSeats], ...(this.game ? { game: this.game } : {}), minStacks: this.minStacks,
+      ...(this.continuedFrom ? { continuedFrom: this.continuedFrom } : {}),
     };
   }
 
@@ -606,7 +718,7 @@ export class TableRoom {
     this.lastRecord = this.engine.lastHandRecord;
     this.base = p.base; this.inputs = p.inputs.slice();
     this.seq = p.seq; this.host = p.host; this.tokens = { ...p.tokens };
-    this.running = p.running; this.nextDealAt = p.nextDealAt; this.createdAt = p.createdAt; this.crew = p.crew ?? null; this.accountSeats = new Set(p.accountSeats ?? []); this.game = p.game ?? null; this.minStacks = { ...(p.minStacks ?? {}) };
+    this.running = p.running; this.nextDealAt = p.nextDealAt; this.createdAt = p.createdAt; this.crew = p.crew ?? null; this.accountSeats = new Set(p.accountSeats ?? []); this.game = p.game ?? null; this.minStacks = { ...(p.minStacks ?? {}) }; this.continuedFrom = p.continuedFrom ?? null;
     for (const [pid, list] of Object.entries(p.acks ?? {})) this.acks.set(pid, new Map(list.map((a) => [a.actionId, a])));
   }
 

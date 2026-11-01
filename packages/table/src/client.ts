@@ -5,8 +5,8 @@
 // - the server numbers its updates; a gap (a lost update) or a pong showing a newer seq makes the phone
 //   reconnect and resume, so it never sits on a stale table;
 // - after a drop the phone reconnects with backoff (0.5 s, 1 s, 2 s, ... up to 5 s) and says the last seq it saw.
-import { PROTOCOL_VERSION, encode, parseServer, type ClientMessage, type ServerMessage, type TableSettings } from '@tp/protocol';
-import type { Action, GameEvent, View } from '@tp/engine';
+import { PROTOCOL_VERSION, encode, parseServer, type ClientMessage, type ServerMessage, type TableSettings, type OfflineClaim } from '@tp/protocol';
+import { randomSeed, type Action, type GameEvent, type View } from '@tp/engine';
 
 /** The parts of a WebSocket the client uses (browser WebSocket, Node's global WebSocket, or a test fake). */
 export interface SocketLike {
@@ -51,6 +51,14 @@ export interface ClientOptions {
   onAck?(actionId: string, ok: boolean, error?: string): void;
   onStatus?(s: Status): void;
   onError?(code: string, message: string): void;
+  /** Offline: who this phone says it is (see OfflineClaim). */
+  claim?: OfflineClaim;
+  /** Offline: the fingerprint of the checkpoint this phone holds, sent with every hello. */
+  checkpointHash?(): string | null;
+  /** Offline: the table between hands, to keep (see TableRoom.checkpoint). */
+  onCheckpoint?(handNo: number, hash: string, data: string): void;
+  /** Something the table wants everyone to know (not part of the game). */
+  onNotice?(text: string): void;
 }
 
 type Outgoing = Extract<ClientMessage, { actionId: string }>;
@@ -148,10 +156,12 @@ export class TableClient {
       this.lastHeard = this.t.now();
       const hello = (ticket?: string) => {
         if (this.ws !== ws) return;
+        const cp = this.o.checkpointHash?.() ?? null;
         this.raw({
           t: 'hello', v: PROTOCOL_VERSION, table: this.o.table, player: this.o.player, lastSeq: this.seq,
           ...(ticket ? { ticket } : {}), ...(this.o.token ? { token: this.o.token } : {}), ...(this.o.name ? { name: this.o.name } : {}),
           ...(this.o.spectate ? { spectate: true } : {}), ...(this.o.settings ? { settings: this.o.settings } : {}),
+          ...(this.o.claim ? { claim: this.o.claim } : {}), ...(cp ? { cp } : {}),
         });
       };
       if (!this.o.getTicket) return hello();
@@ -216,7 +226,15 @@ export class TableClient {
         if (FATAL.has(m.code)) this.close();
         return;
       case 'seedRequest':
-        return; // Shared shuffle arrives in a later phase
+        // shared shuffle: this phone adds its own randomness to the deck the dealer promised
+        this.raw({ t: 'seed', handNo: m.handNo, seed: randomSeed() });
+        return;
+      case 'checkpoint':
+        this.o.onCheckpoint?.(m.handNo, m.hash, m.data);
+        return;
+      case 'notice':
+        this.o.onNotice?.(m.text);
+        return;
     }
   }
 

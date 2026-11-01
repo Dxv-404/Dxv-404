@@ -9,7 +9,7 @@ import { gzipSync } from 'node:zlib';
 import { dirname, join } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { PROTOCOL_VERSION } from '@tp/protocol';
-import { TableRoom, Recorder, tokenSigner, supabaseSend, type Conn, type Persisted, type OutboxItem } from '@tp/table';
+import { TableRoom, Recorder, tokenSigner, supabaseSend, checkOfflineUpload, MAX_UPLOAD_BYTES, type Conn, type Persisted, type OutboxItem } from '@tp/table';
 import { cachedTicketChecker, SUPABASE_KEY, SUPABASE_URL } from '@tp/account/ticket';
 import { LATENCY_PAGE } from './latency-page';
 import { TAP_PAGE } from './tap-page';
@@ -156,6 +156,7 @@ const server = createServer((req, res) => {
     res.end(JSON.stringify({ ok: true, protocol: PROTOCOL_VERSION, colo: SITE, country: req.headers['cf-ipcountry'] ?? null, version: VERSION, rooms: live.size, connections, league: recorder ? { waiting: recorder.pending, refused: recorder.refused.length } : null }));
     return;
   }
+  if (url.pathname === '/offline/upload' && req.method === 'POST') { offlineUpload(req, res, cors); return; }
   if (url.pathname === '/latency' || url.pathname === '/tap') {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', ...cors });
     res.end(url.pathname === '/tap' ? TAP_PAGE : LATENCY_PAGE);
@@ -164,6 +165,31 @@ const server = createServer((req, res) => {
   res.writeHead(404, cors);
   res.end('Not found');
 });
+
+// ---------------- nights played offline ----------------
+// The host phone uploads its table's records when it is back online; each hand is replayed and checked
+// here before this server's recorder signs it (see offline-upload.ts). At most 3,000 items an hour from
+// one address (a long night is about 300).
+const uploadsFrom = new Map<string, { n: number; since: number }>();
+function offlineUpload(req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse, cors: Record<string, string>): void {
+  const addr = String(req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? '').split(',').pop()!.trim();
+  const u = uploadsFrom.get(addr) ?? { n: 0, since: Date.now() };
+  if (Date.now() - u.since > 3600_000) { u.n = 0; u.since = Date.now(); }
+  uploadsFrom.set(addr, u);
+  const reply = (code: number, o: unknown) => { res.writeHead(code, { 'content-type': 'application/json', ...cors }); res.end(JSON.stringify(o)); };
+  if (++u.n > 3000) return reply(429, { error: 'Too many uploads; try again later' });
+  let text = '';
+  req.on('data', (c: Buffer) => { text += c; if (text.length > MAX_UPLOAD_BYTES + 1024) { reply(413, { error: 'Too large' }); req.destroy(); } });
+  req.on('end', () => {
+    if (res.headersSent) return;
+    let up;
+    try { up = checkOfflineUpload(JSON.parse(text) as { id?: unknown; fn?: unknown; body?: unknown }); }
+    catch (e) { return reply(422, { error: (e as Error).message }); }
+    if (recorder) void recorder.add(up.fn, up.id, up.payload);
+    else void outboxStore.put({ id: up.id, fn: up.fn, body: JSON.stringify(up.payload), tries: 0, nextAt: 0, order: Date.now() });
+    reply(200, { queued: up.id });
+  });
+}
 
 const wss = new WebSocketServer({ noServer: true, maxPayload: 8 * 1024 });
 const alive = new WeakMap<WebSocket, boolean>();

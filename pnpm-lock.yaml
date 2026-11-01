@@ -59,6 +59,13 @@ importers:
       '@tp/engine':
         specifier: workspace:*
         version: link:../../packages/engine
+      '@tp/table':
+        specifier: workspace:*
+        version: link:../../packages/table
+    devDependencies:
+      '@tp/bots':
+        specifier: workspace:*
+        version: link:../../tools/bots
 
   apps/server:
     dependencies:

@@ -43,8 +43,21 @@ export type TableSettings = z.infer<typeof TableSettings>;
 const token = z.string().min(16).max(128);
 
 // ---------- phone -> server ----------
+/**
+ * Offline only: who a phone says it is. The host phone has no internet to check a ticket, so it takes the
+ * phone's word for it at the table; the league only counts the night once the players confirm it online.
+ */
+export const OfflineClaim = z.object({ account: z.string().uuid(), device: id, crews: z.array(z.string().uuid()).max(10) }).strict();
+export type OfflineClaim = z.infer<typeof OfflineClaim>;
+
 export const ClientMessage = z.discriminatedUnion('t', [
-  z.object({ t: z.literal('hello'), v: z.number().int(), table: tableCode, player: id, token: token.optional(), ticket: z.string().min(16).max(128).optional(), lastSeq: z.number().int().nonnegative(), name: z.string().min(1).max(20).optional(), spectate: z.boolean().optional(), settings: TableSettings.optional() }),
+  z.object({
+    t: z.literal('hello'), v: z.number().int(), table: tableCode, player: id, token: token.optional(), ticket: z.string().min(16).max(128).optional(),
+    lastSeq: z.number().int().nonnegative(), name: z.string().min(1).max(20).optional(), spectate: z.boolean().optional(), settings: TableSettings.optional(),
+    claim: OfflineClaim.optional(),
+    /** Offline: fingerprint of the last table checkpoint this phone holds (checked when a table is continued on another phone). */
+    cp: z.string().regex(/^[0-9a-f]{64}$/).optional(),
+  }),
   z.object({ t: z.literal('act'), actionId: id, handNo: z.number().int().positive(), action }),
   z.object({ t: z.literal('sit'), actionId: id, out: z.boolean(), postNow: z.boolean().optional() }),
   z.object({ t: z.literal('rebuy'), actionId: id }),
@@ -75,6 +88,10 @@ export const ServerMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('react'), from: id, reaction: z.enum(REACTIONS), at: z.number().optional() }),
   z.object({ t: z.literal('seedRequest'), handNo: z.number().int().positive(), dealerSeedCommit: seed }),
   z.object({ t: z.literal('pong'), c: z.number(), s: z.number(), seq: z.number().int().nonnegative() }),
+  /** Offline: the table between hands (no cards), kept by every phone so another phone can carry the night on. */
+  z.object({ t: z.literal('checkpoint'), handNo: z.number().int().nonnegative(), hash: z.string().regex(/^[0-9a-f]{64}$/), data: z.string().max(200_000) }),
+  /** Something everyone at the table should be told (not part of the game itself). */
+  z.object({ t: z.literal('notice'), text: z.string().max(300) }),
   z.object({ t: z.literal('error'), code: z.enum(['version', 'bad_message', 'not_allowed', 'table_full', 'no_table', 'rate_limited', 'server', 'replaced', 'need_hello', 'ticket']), message: z.string() }),
 ]);
 export type ServerMessage = z.infer<typeof ServerMessage>;

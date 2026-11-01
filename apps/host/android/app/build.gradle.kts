@@ -10,11 +10,24 @@ android {
         applicationId = "app.trainpoker.host"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.1.0-phase1"
+        versionCode = 3
+        versionName = "0.5.0"
+    }
+    // The release key lives outside the repository (TP_SIGNING_DIR); the app can only ever be updated with it.
+    val signingDir = System.getenv("TP_SIGNING_DIR")
+    signingConfigs {
+        if (signingDir != null) create("release") {
+            storeFile = file("$signingDir/host.keystore")
+            storePassword = file("$signingDir/password").readText().trim()
+            keyAlias = "trainpoker"
+            keyPassword = storePassword
+        }
     }
     buildTypes {
-        release { isMinifyEnabled = false }
+        release {
+            isMinifyEnabled = false
+            if (signingDir != null) signingConfig = signingConfigs.getByName("release")
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

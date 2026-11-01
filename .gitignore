@@ -9,3 +9,5 @@ apps/host/android/.gradle/
 *.apk
 *.log
 .DS_Store
+apps/host/android/app/src/main/assets/
+apps/host/android/.kotlin/
