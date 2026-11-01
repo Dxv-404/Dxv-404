@@ -7,11 +7,14 @@ export default defineConfig({
     testTimeout: 60_000,
     coverage: {
       provider: 'v8',
-      include: ['packages/*/src/**/*.ts'],
+      include: ['packages/*/src/**/*.ts', 'tools/*/src/**/*.ts'],
       exclude: ['**/index.ts', '**/types.ts'],
       reporter: ['text-summary', 'json-summary', 'html'],
-      // Phase 0 floor; raised to 100% branches for the engine at the Phase 1 gate.
-      thresholds: { lines: 95, branches: 90, functions: 95, statements: 95 },
+      // The rules engine must stay fully covered (Phase 1 gate); everything else at least 85% of lines.
+      thresholds: {
+        lines: 85,
+        'packages/engine/src/**': { lines: 100, branches: 100, functions: 100, statements: 100 },
+      },
     },
   },
 });

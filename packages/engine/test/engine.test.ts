@@ -321,7 +321,7 @@ describe('table management', () => {
     e.act(e.s.hand!.toAct!, { type: 'call' });
     e.act(e.s.hand!.toAct!, { type: 'check' }); // deals the flop
     expect(e.canUndo()).toBe(false);
-    for (let i = 0; i < 15; i++) e.snapshot();
+    for (let i = 0; i < 15; i++) e.pushUndo();
     expect(e.undoStack.length).toBe(10);
   });
 

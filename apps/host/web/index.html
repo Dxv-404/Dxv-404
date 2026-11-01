@@ -27,8 +27,9 @@ async function info() {
     document.getElementById('device').textContent = r.model + ', Android ' + r.android;
     const e = r.engine, el = document.getElementById('engine');
     if (!e.pending) {
-      el.textContent = e.conserved ? `OK: ${e.hands} hands in ${e.ms} ms, chips conserved` : 'FAILED ' + JSON.stringify(e);
-      el.className = e.conserved ? 'ok' : 'bad';
+      const good = e.conserved && e.proofs && e.sha;
+      el.textContent = good ? `OK: engine v${e.engineVersion}, ${e.hands} hands in ${e.ms} ms, chips conserved, every deck proof checked` : 'FAILED ' + JSON.stringify(e);
+      el.className = good ? 'ok' : 'bad';
       el.dataset.result = JSON.stringify(e);
       return;
     }
