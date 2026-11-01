@@ -16219,11 +16219,13 @@ var TableSettings = external_exports.object({
   maxRebuys: external_exports.number().int().min(0).max(100),
   straddle: external_exports.boolean(),
   dealItTwice: external_exports.boolean(),
-  maxPlayers: external_exports.number().int().min(2).max(15)
+  maxPlayers: external_exports.number().int().min(2).max(15),
+  /** A crew-only table: only active members of this crew may sit or watch. */
+  crew: external_exports.string().uuid()
 }).partial().strict().refine((c) => c.sb === void 0 || c.bb === void 0 || c.bb >= c.sb, { message: "Big blind must be at least the small blind" });
 var token = external_exports.string().min(16).max(128);
 var ClientMessage = external_exports.discriminatedUnion("t", [
-  external_exports.object({ t: external_exports.literal("hello"), v: external_exports.number().int(), table: tableCode, player: id, token: token.optional(), lastSeq: external_exports.number().int().nonnegative(), name: external_exports.string().min(1).max(20).optional(), spectate: external_exports.boolean().optional(), settings: TableSettings.optional() }),
+  external_exports.object({ t: external_exports.literal("hello"), v: external_exports.number().int(), table: tableCode, player: id, token: token.optional(), ticket: external_exports.string().min(16).max(128).optional(), lastSeq: external_exports.number().int().nonnegative(), name: external_exports.string().min(1).max(20).optional(), spectate: external_exports.boolean().optional(), settings: TableSettings.optional() }),
   external_exports.object({ t: external_exports.literal("act"), actionId: id, handNo: external_exports.number().int().positive(), action }),
   external_exports.object({ t: external_exports.literal("sit"), actionId: id, out: external_exports.boolean(), postNow: external_exports.boolean().optional() }),
   external_exports.object({ t: external_exports.literal("rebuy"), actionId: id }),
@@ -16253,7 +16255,7 @@ var ServerMessage = external_exports.discriminatedUnion("t", [
   external_exports.object({ t: external_exports.literal("react"), from: id, reaction: external_exports.enum(REACTIONS), at: external_exports.number().optional() }),
   external_exports.object({ t: external_exports.literal("seedRequest"), handNo: external_exports.number().int().positive(), dealerSeedCommit: seed }),
   external_exports.object({ t: external_exports.literal("pong"), c: external_exports.number(), s: external_exports.number(), seq: external_exports.number().int().nonnegative() }),
-  external_exports.object({ t: external_exports.literal("error"), code: external_exports.enum(["version", "bad_message", "not_allowed", "table_full", "no_table", "rate_limited", "server", "replaced", "need_hello"]), message: external_exports.string() })
+  external_exports.object({ t: external_exports.literal("error"), code: external_exports.enum(["version", "bad_message", "not_allowed", "table_full", "no_table", "rate_limited", "server", "replaced", "need_hello", "ticket"]), message: external_exports.string() })
 ]);
 var MAX_CLIENT_BYTES = 8 * 1024;
 var MAX_SERVER_BYTES = 256 * 1024;
@@ -17803,7 +17805,7 @@ var TableRoom = class {
     this.clock = clock;
     this.store = store;
     this.code = code;
-    this.opt = { handPauseMs: 4e3, rateLimit: 40, rateWindowMs: 2e3, keepUpdates: 200, offlineAfterMs: 3e3, seed: randomSeed, ...opt };
+    this.opt = { handPauseMs: 4e3, rateLimit: 40, rateWindowMs: 2e3, keepUpdates: 200, offlineAfterMs: 3e3, seed: randomSeed, identify: async () => null, ...opt };
     this.createdAt = clock.now();
     if (saved) this.restore(saved);
   }
@@ -17812,6 +17814,8 @@ var TableRoom = class {
   seq = 0;
   host = null;
   running = false;
+  /** Crew-only table (set by the first player's settings). */
+  crew = null;
   nextDealAt = null;
   createdAt;
   base = null;
@@ -17890,29 +17894,68 @@ var TableRoom = class {
   }
   // ---------------- messages ----------------
   hello(conn, st, m) {
-    const now = this.clock.now();
     const fail = (code, message) => {
       this.send(conn, { t: "error", code, message });
       conn.close(4e3, code);
     };
     if (!versionOk(m.v)) return fail("version", "Please update the app");
     if (m.table !== this.code) return fail("no_table", "Wrong table");
-    if (st.hello) return this.send(conn, { t: "error", code: "bad_message", message: "Already said hello" });
-    if (m.spectate || !m.token) {
+    if (st.hello || st.checking) return this.send(conn, { t: "error", code: "bad_message", message: "Already said hello" });
+    if (!m.ticket) return this.seat(conn, st, m, null);
+    st.checking = true;
+    this.opt.identify(m.ticket, this.code).then(
+      (who) => this.batch(() => {
+        st.checking = false;
+        if (this.conns.get(conn) !== st) return;
+        if (!who) return fail("ticket", "Your table pass has expired. Please try again.");
+        this.seat(conn, st, m, who);
+      }),
+      () => this.batch(() => {
+        st.checking = false;
+        if (this.conns.get(conn) === st) fail("server", "Could not check your account. Please try again.");
+      })
+    );
+  }
+  /** Seat (or watch) after the hello is checked. `who` is set for signed-in phones. */
+  seat(conn, st, m, who) {
+    const now = this.clock.now();
+    const fail = (code, message) => {
+      this.send(conn, { t: "error", code, message });
+      conn.close(4e3, code);
+    };
+    const crew = this.engine ? this.crew : m.settings?.crew ?? null;
+    if (crew && !who?.crews.includes(crew)) return fail("not_allowed", "This table is for crew members");
+    if (who && m.player !== who.account) return fail("not_allowed", "That seat belongs to another account");
+    const watch = () => {
       if (!this.engine) return fail("no_table", "This table has not started");
       st.hello = true;
       st.spectator = true;
-      return this.welcome(conn, null, m.lastSeq);
+      st.pid = null;
+      this.welcome(conn, null, m.lastSeq);
+    };
+    if (m.spectate || !m.token && !who) return watch();
+    if (!who) {
+      const tokenHash = hashToken(m.token);
+      if (this.tokens[m.player] && this.tokens[m.player] !== tokenHash) return fail("not_allowed", "That seat belongs to another phone");
     }
-    const tokenHash = hashToken(m.token);
-    if (this.tokens[m.player] && this.tokens[m.player] !== tokenHash) return fail("not_allowed", "That seat belongs to another phone");
-    if (!this.engine) this.create(m.settings, now);
+    if (who && this.connsOf(m.player).some((c) => {
+      const o = this.conns.get(c);
+      return o.device && o.device !== who.device;
+    })) {
+      st.device = who.device;
+      return watch();
+    }
+    if (!this.engine) {
+      this.create(m.settings, now);
+      this.crew = crew;
+    }
     const e = this.engine;
     if (!e.player(m.player)) {
-      if (!m.name) return fail("bad_message", "A name is needed to join");
-      const r = this.apply({ t: "join", id: m.player, name: m.name, now });
+      const name = m.name ?? who?.name;
+      if (!name) return fail("bad_message", "A name is needed to join");
+      const r = this.apply({ t: "join", id: m.player, name, now });
       if (r) return fail(r === "The table is full" ? "table_full" : "not_allowed", r);
-      this.tokens[m.player] = tokenHash;
+      if (m.token && !who) this.tokens[m.player] = hashToken(m.token);
       if (!this.host) this.host = m.player;
       this.persist();
     }
@@ -17925,6 +17968,7 @@ var TableRoom = class {
     if (!e.player(m.player).connected) this.apply({ t: "presence", pid: m.player, connected: true, now });
     st.hello = true;
     st.pid = m.player;
+    if (who) st.device = who.device;
     this.welcome(conn, m.player, m.lastSeq);
     this.tryDeal(now);
     this.reschedule();
@@ -17997,7 +18041,8 @@ var TableRoom = class {
   }
   // ---------------- the table ----------------
   create(settings, now) {
-    this.engine = Engine.create(this.code, settings ?? {}, now);
+    const { crew: _crew, ...rules } = settings ?? {};
+    this.engine = Engine.create(this.code, rules, now);
     this.base = this.engine.snapshot();
     this.inputs = [];
   }
@@ -18101,7 +18146,8 @@ var TableRoom = class {
       running: this.running,
       nextDealAt: this.nextDealAt,
       createdAt: this.createdAt,
-      acks
+      acks,
+      crew: this.crew
     };
   }
   persist() {
@@ -18134,6 +18180,7 @@ var TableRoom = class {
     this.running = p.running;
     this.nextDealAt = p.nextDealAt;
     this.createdAt = p.createdAt;
+    this.crew = p.crew ?? null;
     for (const [pid, list] of Object.entries(p.acks ?? {})) this.acks.set(pid, new Map(list.map((a) => [a.actionId, a])));
   }
   /**
@@ -18168,6 +18215,37 @@ var TableRoom = class {
     return !!this.conns.get(conn)?.hello;
   }
 };
+
+// ../../packages/account/src/ticket.ts
+var SUPABASE_URL = "https://yghyartpurzwogtldzii.supabase.co";
+var SUPABASE_KEY = "sb_publishable_kkp6rh7CrHks9RS5eDyOrw_J2CXKFdt";
+async function checkTicket(token2, table, opts = {}) {
+  const f = opts.fetch ?? fetch;
+  const key = opts.key ?? SUPABASE_KEY;
+  const res = await f(`${opts.url ?? SUPABASE_URL}/rest/v1/rpc/check_ticket`, {
+    method: "POST",
+    headers: { apikey: key, "content-type": "application/json" },
+    body: JSON.stringify({ p_token: token2, p_table: table })
+  });
+  if (!res.ok) throw new Error(`check_ticket failed: ${res.status}`);
+  return await res.json();
+}
+function cachedTicketChecker(opts = {}) {
+  const ttl = opts.ttlMs ?? 5 * 6e4;
+  const now = opts.now ?? Date.now;
+  const cache = /* @__PURE__ */ new Map();
+  return async (token2, table) => {
+    const key = `${table}:${token2}`;
+    const hit = cache.get(key);
+    if (hit && now() - hit.at < ttl) return hit.info;
+    const info = await checkTicket(token2, table, opts.fetch ? { fetch: opts.fetch } : {});
+    if (info) {
+      cache.set(key, { at: now(), info });
+      if (cache.size > 5e3) cache.delete(cache.keys().next().value);
+    } else cache.delete(key);
+    return info;
+  };
+}
 
 // src/latency-page.ts
 var LATENCY_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -18275,6 +18353,7 @@ var SAVE_EVERY_MS = 100;
 mkdirSync(join(DATA, "tables"), { recursive: true });
 mkdirSync(join(DATA, "hands"), { recursive: true });
 var live = /* @__PURE__ */ new Map();
+var identify = cachedTicketChecker();
 var echo = /* @__PURE__ */ new Map();
 var tableFile = (code) => join(DATA, "tables", `${code}.json`);
 function flush(code, l) {
@@ -18316,7 +18395,7 @@ function getRoom(code) {
       else l.saveTimer ??= setTimeout(() => flush(code, l), SAVE_EVERY_MS);
     },
     appendHand: (h) => appendFileSync(join(DATA, "hands", `${code}.jsonl`), JSON.stringify(h) + "\n")
-  }, saved, process.env.HAND_PAUSE_MS ? { handPauseMs: Number(process.env.HAND_PAUSE_MS) } : {});
+  }, saved, { identify, ...process.env.HAND_PAUSE_MS ? { handPauseMs: Number(process.env.HAND_PAUSE_MS) } : {} });
   l.room.settleAfterRestart();
   live.set(code, l);
   return l;
