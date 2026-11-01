@@ -17799,6 +17799,73 @@ var Engine = class _Engine {
 };
 
 // ../../packages/table/src/record.ts
+function slimRecord(rec) {
+  const before = { ...rec.before, hand: null, log: [] };
+  return { ...rec, before };
+}
+function publicReplay(rec) {
+  const e = Engine.fromSnapshot(slimRecord(rec).before);
+  const frames = [];
+  let keys = [];
+  const idx = (k) => keys.indexOf(k);
+  let lastBoard = "", lastBoard2 = "";
+  const say = (i) => {
+    switch (i.t) {
+      case "start":
+        return { t: "deal" };
+      case "act":
+        return { t: "act", k: idx(i.pid), a: i.action.type, ...i.action.to !== void 0 ? { to: i.action.to } : {} };
+      case "tick":
+        return { t: "auto" };
+      case "vote":
+        return { t: "vote", k: idx(i.pid), yes: i.yes };
+      case "show":
+        return { t: "show", k: idx(i.pid) };
+      case "host":
+        return { t: "host", a: i.cmd };
+      default:
+        return null;
+    }
+  };
+  for (const input of rec.inputs) {
+    const r = e.apply(input);
+    if (r.error) throw new Error(`hand ${rec.handNo} does not replay: ${r.error}`);
+    const v = e.viewFor(null);
+    if (!v.hand) continue;
+    if (input.t === "start") keys = v.hand.order.slice();
+    const s = say(input);
+    if (!s) continue;
+    if (s.t === "auto" && !(r.events ?? []).some((ev) => ev.t === "act" || ev.t === "twice")) continue;
+    const f = { say: s, pot: v.hand.pot, stacks: [], bets: [], folded: 0, allIn: 0 };
+    keys.forEach((k, n) => {
+      const hp = v.hand.ps[k];
+      f.stacks.push(v.players.find((x) => x.id === k).stack);
+      f.bets.push(hp.streetBet);
+      if (hp.folded) f.folded |= 1 << n;
+      if (hp.allIn) f.allIn |= 1 << n;
+      if (hp.cards) (f.cards ??= {})[n] = hp.cards;
+    });
+    const b = v.hand.board.join(" "), b2 = (v.hand.board2 ?? []).join(" ");
+    if (b !== lastBoard) {
+      f.board = v.hand.board;
+      lastBoard = b;
+    }
+    if (b2 !== lastBoard2) {
+      f.board2 = v.hand.board2 ?? [];
+      lastBoard2 = b2;
+    }
+    frames.push(f);
+  }
+  const res = e.s.hand?.results;
+  return {
+    v: 2,
+    handNo: rec.handNo,
+    deckCommit: rec.deckCommit,
+    keys,
+    frames,
+    results: res ? { showdown: res.showdown, pots: res.pots.map((p) => ({ label: p.label, amount: p.amount, hand: p.hand?.name ?? null, ...p.board ? { board: p.board } : {}, awards: p.awards.map((a) => ({ k: idx(a.pid), amount: a.amount })) })) } : null
+  };
+}
 function handPlayers(rec, accountOf) {
   const e = Engine.fromSnapshot(rec.before);
   const vpip = /* @__PURE__ */ new Set(), pfr = /* @__PURE__ */ new Set();
@@ -17833,7 +17900,9 @@ function handPlayers(rec, accountOf) {
       pfr: pfr.has(pid),
       showdown,
       won: (won.get(pid) ?? 0) > 0,
-      bestHand: showdown && cat >= 0 ? cat : null
+      bestHand: showdown && cat >= 0 ? cat : null,
+      ...accountOf(pid) ? { cards: hp.cards.map(cardStr) } : {}
+      // only for the player themselves
     };
   });
   return { rows, pot: results.pots.reduce((s, p) => s + p.amount, 0) };
@@ -17852,12 +17921,18 @@ var Recorder = class {
   }
   items = /* @__PURE__ */ new Map();
   refused = [];
+  nextOrder = 0;
   async start() {
-    for (const it of await this.store.load()) this.items.set(it.id, it);
+    const loaded = (await this.store.load()).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    for (const it of loaded) {
+      this.items.set(it.id, it);
+      this.nextOrder = Math.max(this.nextOrder, (it.order ?? 0) + 1);
+    }
   }
   async add(fn, id2, payload) {
     if (this.items.has(id2)) return;
-    const it = { id: id2, fn, body: JSON.stringify(payload), tries: 0, nextAt: 0 };
+    this.nextOrder = Math.max(this.nextOrder + 1, this.now() * 1e3);
+    const it = { id: id2, fn, body: JSON.stringify(payload), tries: 0, nextAt: 0, order: this.nextOrder };
     this.items.set(id2, it);
     await this.store.put(it);
     await this.flush();
@@ -17883,9 +17958,13 @@ var Recorder = class {
   }
   running = null;
   async flushOnce() {
-    const due = [...this.items.values()].filter((it) => it.nextAt <= this.now());
+    const due = [...this.items.values()].filter((it) => it.nextAt <= this.now()).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     for (const it of due) {
       if (!this.items.has(it.id)) continue;
+      if (it.fn === "record_game_end") {
+        const game = it.id.split(":")[0];
+        if ([...this.items.values()].some((x) => x.fn === "record_hand" && x.id.startsWith(`${game}:`))) continue;
+      }
       let res;
       try {
         res = await this.send(it.fn, it.body, await this.sign(it.body));
@@ -17927,7 +18006,7 @@ var TableRoom = class {
     this.clock = clock;
     this.store = store;
     this.code = code;
-    this.opt = { handPauseMs: 4e3, rateLimit: 40, rateWindowMs: 2e3, keepUpdates: 200, offlineAfterMs: 3e3, seed: randomSeed, identify: async () => null, server: "test", ...opt };
+    this.opt = { handPauseMs: 4e3, rateLimit: 40, rateWindowMs: 2e3, keepUpdates: 200, offlineAfterMs: 3e3, seed: randomSeed, identify: async () => null, server: "test", autoEndAfterMs: 20 * 6e4, ...opt };
     this.createdAt = clock.now();
     if (saved) this.restore(saved);
   }
@@ -17948,6 +18027,8 @@ var TableRoom = class {
   /** This game in the league (made with the table). */
   game = null;
   minStacks = {};
+  /** Since when no player has been connected (for ending abandoned games). */
+  emptySince = null;
   conns = /* @__PURE__ */ new Map();
   acks = /* @__PURE__ */ new Map();
   recent = [];
@@ -17968,6 +18049,7 @@ var TableRoom = class {
     this.conns.delete(conn);
     if (st.pid && this.engine?.player(st.pid) && !this.connsOf(st.pid).length) {
       this.goingOffline.set(st.pid, this.clock.now() + this.opt.offlineAfterMs);
+      this.trackEmpty();
       this.reschedule();
     }
   }
@@ -18012,6 +18094,12 @@ var TableRoom = class {
       if (now < at) continue;
       this.goingOffline.delete(pid);
       if (!this.connsOf(pid).length && this.engine?.player(pid)?.connected) this.apply({ t: "presence", pid, connected: false, now });
+    }
+    const endAt = this.autoEndAt();
+    if (endAt !== null && now >= endAt) {
+      this.running = false;
+      this.nextDealAt = null;
+      if (!this.apply({ t: "host", cmd: "end", now })) this.endToLeague();
     }
     if (this.nextDealAt !== null && now >= this.nextDealAt) {
       this.nextDealAt = null;
@@ -18099,6 +18187,7 @@ var TableRoom = class {
     st.hello = true;
     st.pid = m.player;
     if (who) st.device = who.device;
+    this.trackEmpty();
     this.welcome(conn, m.player, m.lastSeq);
     this.tryDeal(now);
     this.reschedule();
@@ -18225,8 +18314,21 @@ var TableRoom = class {
     return e.s.hand?.vote ? e.s.hand.vote.deadline : e.deadline();
   }
   reschedule() {
-    const times = [this.handDeadline(), this.nextDealAt, ...this.goingOffline.values()].filter((x) => x !== null);
+    const times = [this.handDeadline(), this.nextDealAt, this.autoEndAt(), ...this.goingOffline.values()].filter((x) => x !== null);
     this.clock.schedule(times.length ? Math.min(...times) : null);
+  }
+  /** Notice when the last player leaves, or someone comes back. */
+  trackEmpty() {
+    const e = this.engine;
+    if (!e) return;
+    const anyone = e.s.players.some((p) => this.connsOf(p.id).length > 0);
+    if (anyone) this.emptySince = null;
+    else if (this.emptySince === null) this.emptySince = this.clock.now();
+  }
+  autoEndAt() {
+    const e = this.engine;
+    if (this.emptySince === null || !e || e.s.phase === "ended" || e.s.handNo === 0) return null;
+    return this.emptySince + this.opt.autoEndAfterMs;
   }
   gameInfo() {
     const g = this.game;
@@ -18240,7 +18342,7 @@ var TableRoom = class {
       const { rows, pot } = handPlayers(rec, this.accountOf);
       this.store.league("hand", `${this.game.id}:${rec.handNo}`, {
         game: this.gameInfo(),
-        hand: { no: rec.handNo, playedAt: new Date(rec.endedAt).toISOString(), deckCommit: rec.deckCommit, pot, record: rec, players: rows }
+        hand: { no: rec.handNo, playedAt: new Date(rec.endedAt).toISOString(), deckCommit: rec.deckCommit, pot, replay: publicReplay(rec), full: slimRecord(rec), players: rows }
       });
     } catch (err) {
       console.error(`table ${this.code}: hand ${rec.handNo} not recorded`, err);
@@ -18384,6 +18486,7 @@ var TableRoom = class {
     if (!e) return;
     const now = Math.max(this.clock.now(), e.s.now);
     for (const pl of e.s.players) if (pl.connected && !this.connsOf(pl.id).length) this.apply({ t: "presence", pid: pl.id, connected: false, now });
+    this.trackEmpty();
     this.reschedule();
   }
   /** What a connection said hello as (kept by servers that may sleep, like a Durable Object). */
@@ -18667,6 +18770,14 @@ function getRoom(code) {
   l.room.settleAfterRestart();
   live.set(code, l);
   return l;
+}
+for (const f of readdirSync(join(DATA, "tables")).filter((x) => x.endsWith(".json"))) {
+  try {
+    const p = JSON.parse(readFileSync(join(DATA, "tables", f), "utf8"));
+    if (p.game && !p.game.ended) getRoom(p.code);
+  } catch (e) {
+    console.error(`table file ${f}:`, e);
+  }
 }
 var server = createServer((req, res) => {
   const url2 = new URL(req.url ?? "/", "http://local");
