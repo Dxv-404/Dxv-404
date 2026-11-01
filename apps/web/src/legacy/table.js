@@ -1,7 +1,7 @@
 // The poker table screen: rendering, the animation queue, the dealer NPC and the action controls.
 import { h, $, fmt, cardEl, setCardFace, flipUp, initials, hueFor, chipStack, toast, flyFrom, flyTo, countTo, sleep, reduceMotion } from './ui.js';
 import { sfx, buzz, settings } from './fx.js';
-import { describePartial, parseCard } from './cards.js';
+import { describePartial, parseCard } from '@tp/engine';
 
 // Seat slots around the oval, clockwise from the hero's left (x%, y% of the table box).
 const SLOT = {

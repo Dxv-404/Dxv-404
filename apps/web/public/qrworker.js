@@ -1,4 +1,4 @@
-importScripts('../vendor/jsQR.js');
+importScripts('vendor/jsQR.js');
 self.onmessage = (e) => {
   const { data, w, h } = e.data;
   let out = null;

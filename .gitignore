@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+test-results/
+playwright-report/
+.wrangler/
+apps/host/android/app/build/
+apps/host/android/.gradle/
+*.apk
+*.log
+.DS_Store

@@ -1,4 +1,4 @@
-import qrcode from '../vendor/qrcode.mjs';
+import qrcode from './vendor/qrcode.mjs';
 
 // Draw a QR code as an SVG string (crisp at any size).
 export function qrSvg(text, { dark = '#17110C', light = '#F7F1E3' } = {}) {
@@ -41,7 +41,7 @@ export class Scanner {
       } catch {}
     }
     if (!this.detector) {
-      this.worker = new Worker(new URL('./qrworker.js', import.meta.url));
+      this.worker = new Worker('qrworker.js');
       this.worker.onmessage = (e) => { this.busy = false; if (e.data && this.running) this._found(e.data); };
       this.canvas = document.createElement('canvas');
       this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });

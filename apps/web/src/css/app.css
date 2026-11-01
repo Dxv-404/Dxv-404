@@ -1,10 +1,10 @@
 /* Train Poker — night-train card room: bottle-green felt, walnut leather rail, brass, ivory cards. */
-@font-face { font-family: 'Fraunces'; src: url(../fonts/fraunces.woff2) format('woff2'); font-weight: 100 900; font-display: swap; }
-@font-face { font-family: 'Fraunces'; src: url(../fonts/fraunces-italic.woff2) format('woff2'); font-weight: 100 900; font-style: italic; font-display: swap; }
-@font-face { font-family: 'Figtree'; src: url(../fonts/figtree-400.woff2) format('woff2'); font-weight: 400; font-display: swap; }
-@font-face { font-family: 'Figtree'; src: url(../fonts/figtree-500.woff2) format('woff2'); font-weight: 500; font-display: swap; }
-@font-face { font-family: 'Figtree'; src: url(../fonts/figtree-600.woff2) format('woff2'); font-weight: 600; font-display: swap; }
-@font-face { font-family: 'Figtree'; src: url(../fonts/figtree-700.woff2) format('woff2'); font-weight: 700; font-display: swap; }
+@font-face { font-family: 'Fraunces'; src: url(/fonts/fraunces.woff2) format('woff2'); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: 'Fraunces'; src: url(/fonts/fraunces-italic.woff2) format('woff2'); font-weight: 100 900; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Figtree'; src: url(/fonts/figtree-400.woff2) format('woff2'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Figtree'; src: url(/fonts/figtree-500.woff2) format('woff2'); font-weight: 500; font-display: swap; }
+@font-face { font-family: 'Figtree'; src: url(/fonts/figtree-600.woff2) format('woff2'); font-weight: 600; font-display: swap; }
+@font-face { font-family: 'Figtree'; src: url(/fonts/figtree-700.woff2) format('woff2'); font-weight: 700; font-display: swap; }
 
 :root {
   --room: #1b120d;

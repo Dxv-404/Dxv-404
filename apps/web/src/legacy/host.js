@@ -1,5 +1,5 @@
 // Host controller: owns the Engine, the links to every guest phone, timers and persistence.
-import { Engine } from './engine.js';
+import { Engine } from '@tp/engine';
 import { Link, keepAlive } from './net.js';
 
 const SAVE_KEY = 'tp-host-v1';

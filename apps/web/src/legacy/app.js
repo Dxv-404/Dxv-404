@@ -193,7 +193,7 @@ async function pair(pid, after) {
   const noRoute = !parsePayload(offer).cands.length;
   const step1 = () => {
     body.replaceChildren(
-      noRoute && h('p', { class: 'warn' }, 'This phone has no network to share the game on. Turn WiFi on and join the hotspot (or turn on this phone’s hotspot), then try again.'),
+      noRoute ? h('p', { class: 'warn' }, 'This phone has no network to share the game on. Turn WiFi on and join the hotspot (or turn on this phone’s hotspot), then try again.') : '',
       h('h2', {}, `${p.name}, scan this`),
       h('p', { class: 'hint' }, `On ${p.name}’s phone: Train Poker, then Join a table.`),
       h('div', { class: 'qr', html: qrSvg(offer) }),
@@ -256,7 +256,7 @@ function join() {
     const showReply = (reply) => {
       const noRoute = !parsePayload(reply).cands.length;
       body.replaceChildren(
-        noRoute && h('p', { class: 'warn' }, 'This phone is not on any network. Join the host’s hotspot WiFi, then scan again.'),
+        noRoute ? h('p', { class: 'warn' }, 'This phone is not on any network. Join the host’s hotspot WiFi, then scan again.') : '',
         h('h2', {}, `You’re joining as ${guest.name}`),
         h('p', { class: 'hint' }, 'Show this to the host so they can scan it.'),
         h('div', { class: 'qr', html: qrSvg(reply) }),
@@ -428,7 +428,7 @@ function resumeHost() {
 document.addEventListener('pointerdown', () => unlockAudio(), { once: true });
 
 // service worker for offline use
-if ('serviceWorker' in navigator && location.protocol === 'https:') {
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 

@@ -1,42 +1,51 @@
-// Authoritative No-Limit Texas Hold'em engine. Runs on the host phone only.
+// Authoritative No-Limit Texas Hold'em engine.
 // Pure logic: no DOM, no timers. Every mutating call returns a list of events
-// that clients animate; the public/private view is produced by viewFor().
-import { freshDeck, shuffle, evalBest, cardStr } from './cards.js';
+// that clients animate; the per-seat view is produced by viewFor().
+import { freshDeck, shuffle, evalBest, cardStr } from './cards';
+import type {
+  Action, ActResult, Award, GameConfig, GameEvent, GameState, Hand, HandEval, HandPlayer,
+  HandPlayerView, Legal, Player, PlayerId, PotResult, Standing, View,
+} from './types';
 
-const clone = (o) => JSON.parse(JSON.stringify(o));
+const clone = <T>(o: T): T => JSON.parse(JSON.stringify(o)) as T;
+const rid = (n: number): string => Math.random().toString(36).slice(2, 2 + n);
 
-export function niceRound(x) {
-  // round a blind to a friendly number
-  const steps = [1, 2, 2.5, 3, 4, 5, 6, 8, 10];
+/** Round a blind to a friendly number. */
+export function niceRound(x: number): number {
+  const steps = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
   const mag = Math.pow(10, Math.floor(Math.log10(x)));
-  let best = steps[0] * mag;
+  let best = steps[0]! * mag;
   for (const s of steps) if (Math.abs(s * mag - x) < Math.abs(best - x)) best = s * mag;
   return Math.max(1, Math.round(best));
 }
 
+interface BuiltPot { amount: number; elig: PlayerId[] }
+
 export class Engine {
-  constructor(state) {
-    this.s = state || null;
-    this.undoStack = [];
+  s: GameState;
+  undoStack: GameState[] = [];
+
+  constructor(state: GameState) {
+    this.s = state;
   }
 
   // ---------------- setup ----------------
-  static newGame(config, names) {
-    const cfg = {
+  static newGame(config: Partial<GameConfig>, names: string[]): Engine {
+    const cfg: GameConfig = {
       startStack: 1000, sb: 5, bb: 10, blindUpEvery: 0, turnTime: 0, rebuys: true,
       ...config,
     };
     const players = names.map((n, i) => Engine.makePlayer(n, i, cfg.startStack));
-    const st = {
+    const st: GameState = {
       v: 1,
-      gameId: Math.random().toString(36).slice(2, 10),
+      gameId: rid(8),
       cfg,
       level: { sb: cfg.sb, bb: cfg.bb, n: 1 },
       players,
-      button: -1, // seat index of the button
+      button: -1,
       handNo: 0,
       hand: null,
-      phase: 'lobby', // lobby | hand | between | ended
+      phase: 'lobby',
       log: [],
       stats: {},
       paused: false,
@@ -44,9 +53,9 @@ export class Engine {
     return new Engine(st);
   }
 
-  static makePlayer(name, seat, stack) {
+  static makePlayer(name: string, seat: number, stack: number): Player {
     return {
-      id: 'p' + Math.random().toString(36).slice(2, 9),
+      id: 'p' + rid(7),
       name: String(name).trim().slice(0, 14) || 'Player',
       seat,
       stack,
@@ -58,10 +67,28 @@ export class Engine {
     };
   }
 
-  get state() { return this.s; }
-  player(id) { return this.s.players.find((p) => p.id === id); }
+  get state(): GameState { return this.s; }
+  player(id: PlayerId): Player | undefined { return this.s.players.find((p) => p.id === id); }
 
-  addPlayer(name) {
+  /** Like player(), for ids the engine itself guarantees exist. */
+  private P(id: PlayerId): Player {
+    const p = this.player(id);
+    if (!p) throw new Error(`Unknown player ${id}`);
+    return p;
+  }
+
+  private get H(): Hand {
+    if (!this.s.hand) throw new Error('No hand in progress');
+    return this.s.hand;
+  }
+
+  private hp(id: PlayerId): HandPlayer {
+    const x = this.H.ps[id];
+    if (!x) throw new Error(`Player ${id} is not in this hand`);
+    return x;
+  }
+
+  addPlayer(name: string): Player {
     const seat = this.s.players.length;
     const p = Engine.makePlayer(name, seat, this.s.cfg.startStack);
     this.s.players.push(p);
@@ -69,10 +96,11 @@ export class Engine {
     return p;
   }
 
-  removePlayer(id) {
+  removePlayer(id: PlayerId): void {
     const p = this.player(id);
     if (!p) return;
-    if (this.s.hand && this.s.hand.ps[id] && !this.s.hand.ps[id].folded && this.s.phase === 'hand') {
+    const inHand = this.s.hand?.ps[id];
+    if (inHand && !inHand.folded && this.s.phase === 'hand') {
       p.leaving = true; // removed after the hand
       return;
     }
@@ -81,19 +109,22 @@ export class Engine {
     if (this.s.button >= this.s.players.length) this.s.button = this.s.players.length - 1;
   }
 
-  movePlayer(id, dir) {
+  movePlayer(id: PlayerId, dir: number): void {
     const arr = this.s.players;
     const i = arr.findIndex((p) => p.id === id);
     const j = i + dir;
     if (i < 0 || j < 0 || j >= arr.length) return;
-    [arr[i], arr[j]] = [arr[j], arr[i]];
+    const tmp = arr[i]!;
+    arr[i] = arr[j]!;
+    arr[j] = tmp;
     arr.forEach((x, k) => (x.seat = k));
   }
 
-  rebuy(id) {
+  rebuy(id: PlayerId): GameEvent[] {
     const p = this.player(id);
     if (!p || !this.s.cfg.rebuys) return [];
-    if (this.s.phase === 'hand' && this.s.hand.ps[id] && !this.s.hand.ps[id].folded) return [];
+    const inHand = this.s.hand?.ps[id];
+    if (this.s.phase === 'hand' && inHand && !inHand.folded) return [];
     if (p.stack >= this.s.cfg.startStack) return [];
     const add = this.s.cfg.startStack - p.stack;
     p.stack += add;
@@ -104,34 +135,36 @@ export class Engine {
     return [{ t: 'rebuy', pid: id, amount: add }];
   }
 
-  setSitOut(id, v) {
+  setSitOut(id: PlayerId, v: boolean): void {
     const p = this.player(id);
     if (p) p.sittingOut = !!v;
   }
 
-  logLine(text) {
+  logLine(text: string): void {
     this.s.log.push({ h: this.s.handNo, text });
     if (this.s.log.length > 80) this.s.log.splice(0, this.s.log.length - 80);
   }
 
-  // Players that will be dealt into the next hand, in seat order.
-  eligible() {
+  /** Players that will be dealt into the next hand, in seat order. */
+  eligible(): Player[] {
     return this.s.players.filter((p) => p.stack > 0 && !p.sittingOut && !p.leaving);
   }
 
-  canStartHand() {
+  canStartHand(): boolean {
     return this.eligible().length >= 2;
   }
 
   // ---------------- hand flow ----------------
-  startHand() {
+  startHand(): GameEvent[] {
     const s = this.s;
-    if (!this.canStartHand()) return [];
+    // Bug fix (found in Phase 0): starting a hand while one is running threw away the pot.
+    if (s.phase === 'hand' || s.phase === 'ended' || !this.canStartHand()) return [];
     this.undoStack = [];
     s.handNo += 1;
     // blind levels
     if (s.cfg.blindUpEvery > 0 && s.handNo > 1 && (s.handNo - 1) % s.cfg.blindUpEvery === 0) {
-      const bb = niceRound(s.level.bb * 1.5);
+      // Bug fix (found in Phase 0): 10 x 1.5 used to round back down to 10, so blinds never rose.
+      const bb = Math.max(niceRound(s.level.bb * 1.5), s.level.bb + 1);
       s.level = { bb, sb: Math.max(1, Math.round(bb / 2)), n: s.level.n + 1 };
       this.logLine(`Blinds up: ${s.level.sb}/${s.level.bb}`);
     }
@@ -143,23 +176,22 @@ export class Engine {
       const cand = (b + k + n) % n;
       if (seats.includes(cand)) { b = cand; break; }
     }
-    if (!seats.includes(b)) b = seats[0];
+    if (!seats.includes(b)) b = seats[0]!;
     s.button = b;
-    // order of eligible players starting left of button
-    const order = [];
+    // order of eligible players starting left of button (button last)
+    const order: PlayerId[] = [];
     for (let k = 1; k <= n; k++) {
       const seat = (b + k) % n;
-      if (seats.includes(seat)) order.push(s.players[seat].id);
+      if (seats.includes(seat)) order.push(s.players[seat]!.id);
     }
-    // order currently: left of button ... button (button last)
     const deck = shuffle(freshDeck());
-    const hand = {
+    const hand: Hand = {
       id: s.handNo,
       deck,
       board: [],
       burns: 0,
       street: 'preflop',
-      order, // acting order, button last
+      order,
       ps: {},
       currentBet: 0,
       lastFullRaise: s.level.bb,
@@ -171,7 +203,7 @@ export class Engine {
       shown: {},
       sbId: null,
       bbId: null,
-      buttonId: s.players[b].id,
+      buttonId: s.players[b]!.id,
       runout: false,
       endedAt: null,
     };
@@ -180,16 +212,16 @@ export class Engine {
     }
     s.hand = hand;
     s.phase = 'hand';
-    const ev = [{ t: 'handStart', handNo: s.handNo, buttonId: hand.buttonId, level: s.level }];
+    const ev: GameEvent[] = [{ t: 'handStart', handNo: s.handNo, buttonId: hand.buttonId, level: s.level }];
 
     // blinds
-    let sbId, bbId;
+    let sbId: PlayerId, bbId: PlayerId;
     if (order.length === 2) {
       sbId = hand.buttonId; // heads-up: button is the small blind
-      bbId = order[0] === hand.buttonId ? order[1] : order[0];
+      bbId = order[0] === hand.buttonId ? order[1]! : order[0]!;
     } else {
-      sbId = order[0];
-      bbId = order[1];
+      sbId = order[0]!;
+      bbId = order[1]!;
     }
     hand.sbId = sbId; hand.bbId = bbId;
     ev.push(this.post(sbId, s.level.sb, 'sb'));
@@ -200,10 +232,10 @@ export class Engine {
     // deal two cards each, one at a time, starting left of the button
     const dealOrder = order.slice();
     for (let round = 0; round < 2; round++) {
-      for (const pid of dealOrder) hand.ps[pid].cards.push(deck.pop());
+      for (const pid of dealOrder) hand.ps[pid]!.cards.push(deck.pop()!);
     }
     ev.push({ t: 'dealHole', order: dealOrder });
-    this.logLine(`Hand #${s.handNo} — ${this.player(hand.buttonId).name} has the button`);
+    this.logLine(`Hand #${s.handNo} — ${this.P(hand.buttonId).name} has the button`);
 
     // first to act preflop: after the big blind
     hand.toAct = this.nextToAct(bbId);
@@ -212,9 +244,9 @@ export class Engine {
     return ev;
   }
 
-  post(pid, amount, kind) {
-    const p = this.player(pid);
-    const hp = this.s.hand.ps[pid];
+  post(pid: PlayerId, amount: number, kind: 'sb' | 'bb'): GameEvent {
+    const p = this.P(pid);
+    const hp = this.hp(pid);
     const amt = Math.min(amount, p.stack);
     p.stack -= amt;
     hp.streetBet += amt;
@@ -224,28 +256,28 @@ export class Engine {
     return { t: 'blind', pid, amount: amt, kind };
   }
 
-  // Next player (after `fromId` in order) who still needs to act this round.
-  nextToAct(fromId) {
-    const h = this.s.hand;
+  /** Next player (after `fromId` in order) who still needs to act this round. */
+  nextToAct(fromId: PlayerId): PlayerId | null {
+    const h = this.H;
     const ord = h.order;
     const start = ord.indexOf(fromId);
     for (let k = 1; k <= ord.length; k++) {
-      const pid = ord[(start + k) % ord.length];
-      const hp = h.ps[pid];
+      const pid = ord[(start + k) % ord.length]!;
+      const hp = h.ps[pid]!;
       if (hp.folded || hp.allIn) continue;
       if (!hp.acted || hp.streetBet < h.currentBet) return pid;
     }
     return null;
   }
 
-  livePlayers() { return this.s.hand.order.filter((pid) => !this.s.hand.ps[pid].folded); }
-  canActPlayers() { return this.s.hand.order.filter((pid) => { const hp = this.s.hand.ps[pid]; return !hp.folded && !hp.allIn; }); }
+  livePlayers(): PlayerId[] { const h = this.H; return h.order.filter((pid) => !h.ps[pid]!.folded); }
+  canActPlayers(): PlayerId[] { const h = this.H; return h.order.filter((pid) => { const hp = h.ps[pid]!; return !hp.folded && !hp.allIn; }); }
 
-  // What `pid` may do right now.
-  legal(pid) {
+  /** What `pid` may do right now, or null if it is not their turn. */
+  legal(pid: PlayerId): Legal | null {
     const s = this.s, h = s.hand;
     if (!h || s.phase !== 'hand' || h.toAct !== pid) return null;
-    const p = this.player(pid), hp = h.ps[pid];
+    const p = this.P(pid), hp = this.hp(pid);
     const toCall = Math.min(h.currentBet - hp.streetBet, p.stack);
     const maxTo = hp.streetBet + p.stack;
     const reopened = !hp.acted || (h.currentBet - hp.actedAt) >= h.lastFullRaise;
@@ -266,40 +298,39 @@ export class Engine {
     };
   }
 
-  potTotal() {
+  potTotal(): number {
     const h = this.s.hand;
     if (!h) return 0;
     return Object.values(h.ps).reduce((a, hp) => a + hp.total, 0);
   }
 
-  snapshot() {
+  snapshot(): void {
     this.undoStack.push(clone(this.s));
     if (this.undoStack.length > 10) this.undoStack.shift();
   }
 
-  canUndo() {
+  canUndo(): boolean {
     const prev = this.undoStack[this.undoStack.length - 1];
     if (!prev || !this.s.hand || !prev.hand) return false;
     return prev.hand.id === this.s.hand.id && prev.hand.board.length === this.s.hand.board.length && this.s.phase === 'hand';
   }
 
-  undo() {
+  undo(): GameEvent[] | null {
     if (!this.canUndo()) return null;
-    this.s = this.undoStack.pop();
+    this.s = this.undoStack.pop()!;
     this.logLine('Dealer undoes the last action');
-    return [{ t: 'undo' }, { t: 'turn', pid: this.s.hand.toAct }];
+    return [{ t: 'undo' }, { t: 'turn', pid: this.H.toAct }];
   }
 
-  // action: {type: 'fold'|'check'|'call'|'bet'|'raise'|'allin', to?: number}
-  act(pid, action) {
+  act(pid: PlayerId, action: Action): ActResult {
     const s = this.s, h = s.hand;
     const L = this.legal(pid);
-    if (!L) return { error: 'Not your turn' };
-    const p = this.player(pid), hp = h.ps[pid];
+    if (!L || !h) return { error: 'Not your turn' };
+    const p = this.P(pid), hp = this.hp(pid);
     let type = action.type;
     this.snapshot();
-    const ev = [];
-    const say = (text) => this.logLine(`${p.name} ${text}`);
+    const ev: GameEvent[] = [];
+    const say = (text: string): void => this.logLine(`${p.name} ${text}`);
 
     if (type === 'allin') {
       if (L.canRaise && L.maxTo > h.currentBet) type = 'raise';
@@ -309,9 +340,6 @@ export class Engine {
     }
 
     if (type === 'fold') {
-      if (L.canCheck && action.force !== true) {
-        // folding when you can check is allowed but pointless; treat as fold anyway
-      }
       hp.folded = true;
       hp.acted = true;
       hp.lastAction = 'fold';
@@ -367,29 +395,34 @@ export class Engine {
     return { events: ev };
   }
 
-  // Return the uncalled part of the biggest bet this round.
-  returnUncalled() {
-    const h = this.s.hand;
-    const bets = h.order.map((pid) => ({ pid, b: h.ps[pid].streetBet })).sort((a, b) => b.b - a.b);
+  /** Return the uncalled part of the biggest bet this round. */
+  returnUncalled(): GameEvent[] {
+    const h = this.H;
+    const bets = h.order.map((pid) => ({ pid, b: h.ps[pid]!.streetBet })).sort((a, b) => b.b - a.b);
     if (bets.length < 2) return [];
-    const [top, second] = bets;
+    const top = bets[0]!, second = bets[1]!;
     if (top.b > second.b) {
       const extra = top.b - second.b;
-      const hp = h.ps[top.pid];
+      const hp = h.ps[top.pid]!;
+      const p = this.P(top.pid);
       hp.streetBet -= extra; hp.total -= extra;
-      this.player(top.pid).stack += extra;
-      if (hp.allIn && this.player(top.pid).stack > 0) hp.allIn = false;
-      this.logLine(`Uncalled ${extra} returned to ${this.player(top.pid).name}`);
+      p.stack += extra;
+      if (hp.allIn && p.stack > 0) hp.allIn = false;
+      this.logLine(`Uncalled ${extra} returned to ${p.name}`);
       return [{ t: 'refund', pid: top.pid, amount: extra }];
     }
     return [];
   }
 
-  closeRound() {
-    const h = this.s.hand;
-    const ev = [...this.returnUncalled()];
+  closeRound(): GameEvent[] {
+    const h = this.H;
+    const ev: GameEvent[] = [...this.returnUncalled()];
     ev.push({ t: 'collect' });
-    for (const pid of h.order) { const hp = h.ps[pid]; hp.streetBet = 0; hp.acted = false; hp.actedAt = 0; if (!hp.folded && !hp.allIn) hp.lastAction = null; }
+    for (const pid of h.order) {
+      const hp = h.ps[pid]!;
+      hp.streetBet = 0; hp.acted = false; hp.actedAt = 0;
+      if (!hp.folded && !hp.allIn) hp.lastAction = null;
+    }
     h.currentBet = 0;
     h.lastFullRaise = this.s.level.bb;
     h.toAct = null;
@@ -408,37 +441,37 @@ export class Engine {
     }
     ev.push(this.dealStreet());
     // first to act after the flop: first live player left of the button
-    const first = this.nextToAct(h.buttonId) ;
+    const first = this.nextToAct(h.buttonId);
     h.toAct = first;
     ev.push({ t: 'turn', pid: first });
     return ev;
   }
 
-  dealStreet() {
-    const h = this.s.hand;
+  dealStreet(): GameEvent {
+    const h = this.H;
     h.deck.pop(); h.burns += 1; // burn
-    let cards, street;
-    if (h.board.length === 0) { cards = [h.deck.pop(), h.deck.pop(), h.deck.pop()]; street = 'flop'; }
-    else if (h.board.length === 3) { cards = [h.deck.pop()]; street = 'turn'; }
-    else { cards = [h.deck.pop()]; street = 'river'; }
+    let cards: number[], street: Hand['street'];
+    if (h.board.length === 0) { cards = [h.deck.pop()!, h.deck.pop()!, h.deck.pop()!]; street = 'flop'; }
+    else if (h.board.length === 3) { cards = [h.deck.pop()!]; street = 'turn'; }
+    else { cards = [h.deck.pop()!]; street = 'river'; }
     h.board.push(...cards);
     h.street = street;
-    this.logLine(`${street[0].toUpperCase() + street.slice(1)}: ${h.board.map(cardStr).join(' ')}`);
+    this.logLine(`${street.charAt(0).toUpperCase() + street.slice(1)}: ${h.board.map(cardStr).join(' ')}`);
     return { t: 'street', street, cards: cards.map(cardStr) };
   }
 
-  revealAll() {
-    const h = this.s.hand;
-    const cards = {};
-    for (const pid of this.livePlayers()) { h.revealed[pid] = true; cards[pid] = h.ps[pid].cards.map(cardStr); }
+  revealAll(): GameEvent {
+    const h = this.H;
+    const cards: Record<PlayerId, string[]> = {};
+    for (const pid of this.livePlayers()) { h.revealed[pid] = true; cards[pid] = h.ps[pid]!.cards.map(cardStr); }
     return { t: 'reveal', cards };
   }
 
-  buildPots() {
-    const h = this.s.hand;
-    const contrib = h.order.map((pid) => ({ pid, amt: h.ps[pid].total, live: !h.ps[pid].folded }));
+  buildPots(): BuiltPot[] {
+    const h = this.H;
+    const contrib = h.order.map((pid) => ({ pid, amt: h.ps[pid]!.total, live: !h.ps[pid]!.folded }));
     const levels = [...new Set(contrib.filter((c) => c.amt > 0).map((c) => c.amt))].sort((a, b) => a - b);
-    const pots = [];
+    const pots: BuiltPot[] = [];
     let prev = 0;
     for (const lvl of levels) {
       let amount = 0;
@@ -454,15 +487,15 @@ export class Engine {
     return pots;
   }
 
-  // seat-order distance from the button (1 = first left of button)
-  distFromButton(pid) {
+  /** Seat-order distance from the button (1 = first left of button). */
+  distFromButton(pid: PlayerId): number {
     const n = this.s.players.length;
-    return ((this.player(pid).seat - this.s.button) + n) % n || n;
+    return ((this.P(pid).seat - this.s.button) + n) % n || n;
   }
 
-  showdown() {
-    const s = this.s, h = s.hand;
-    const ev = [];
+  showdown(): GameEvent[] {
+    const h = this.H;
+    const ev: GameEvent[] = [];
     const live = this.livePlayers();
     // showing order: last aggressor of the final street first, else left of button
     let showOrder = live.slice().sort((a, b) => this.distFromButton(a) - this.distFromButton(b));
@@ -470,33 +503,33 @@ export class Engine {
       const i = showOrder.indexOf(h.lastAggressor);
       showOrder = showOrder.slice(i).concat(showOrder.slice(0, i));
     }
-    const evals = {};
+    const evals: Record<PlayerId, HandEval> = {};
     for (const pid of live) {
-      const e = evalBest(h.ps[pid].cards.concat(h.board));
+      const e = evalBest(h.ps[pid]!.cards.concat(h.board))!;
       evals[pid] = { score: e.score, name: e.name, desc: e.desc, best: e.cards.map(cardStr) };
     }
     if (!h.runout) {
-      const cards = {};
-      for (const pid of showOrder) { h.revealed[pid] = true; cards[pid] = h.ps[pid].cards.map(cardStr); }
+      const cards: Record<PlayerId, string[]> = {};
+      for (const pid of showOrder) { h.revealed[pid] = true; cards[pid] = h.ps[pid]!.cards.map(cardStr); }
       ev.push({ t: 'reveal', cards, order: showOrder });
     }
     const pots = this.buildPots();
-    const results = [];
+    const results: PotResult[] = [];
     pots.forEach((pot, i) => {
-      const best = Math.max(...pot.elig.map((pid) => evals[pid].score));
-      const winners = pot.elig.filter((pid) => evals[pid].score === best)
+      const best = Math.max(...pot.elig.map((pid) => evals[pid]!.score));
+      const winners = pot.elig.filter((pid) => evals[pid]!.score === best)
         .sort((a, b) => this.distFromButton(a) - this.distFromButton(b));
       const share = Math.floor(pot.amount / winners.length);
       let odd = pot.amount - share * winners.length;
-      const awards = winners.map((pid) => {
+      const awards: Award[] = winners.map((pid) => {
         const amt = share + (odd > 0 ? 1 : 0);
         if (odd > 0) odd -= 1;
-        this.player(pid).stack += amt;
+        this.P(pid).stack += amt;
         return { pid, amount: amt };
       });
       const label = pots.length === 1 ? 'the pot' : i === 0 ? 'the main pot' : `side pot ${i}`;
-      for (const a of awards) this.logLine(`${this.player(a.pid).name} wins ${a.amount} from ${label} with ${evals[a.pid].desc}`);
-      results.push({ label, amount: pot.amount, awards, hand: evals[winners[0]] });
+      for (const a of awards) this.logLine(`${this.P(a.pid).name} wins ${a.amount} from ${label} with ${evals[a.pid]!.desc}`);
+      results.push({ label, amount: pot.amount, awards, hand: evals[winners[0]!]! });
     });
     h.results = { pots: results, evals, showdown: true };
     this.endHand();
@@ -504,28 +537,28 @@ export class Engine {
     return ev;
   }
 
-  finishUncontested() {
-    const h = this.s.hand;
-    const ev = [...this.returnUncalled(), { t: 'collect' }];
-    for (const pid of h.order) h.ps[pid].streetBet = 0;
-    const winner = this.livePlayers()[0];
+  finishUncontested(): GameEvent[] {
+    const h = this.H;
+    const ev: GameEvent[] = [...this.returnUncalled(), { t: 'collect' }];
+    for (const pid of h.order) h.ps[pid]!.streetBet = 0;
+    const winner = this.livePlayers()[0]!;
     const amount = this.potTotal();
-    this.player(winner).stack += amount;
-    this.logLine(`${this.player(winner).name} wins ${amount} uncontested`);
+    this.P(winner).stack += amount;
+    this.logLine(`${this.P(winner).name} wins ${amount} uncontested`);
     h.results = { pots: [{ label: 'the pot', amount, awards: [{ pid: winner, amount }], hand: null }], evals: {}, showdown: false };
     this.endHand();
     ev.push({ t: 'win', results: h.results });
     return ev;
   }
 
-  endHand() {
-    const s = this.s, h = s.hand;
+  endHand(): void {
+    const s = this.s, h = this.H;
     h.toAct = null;
     h.endedAt = Date.now();
     s.phase = 'between';
     // stats
-    for (const pot of h.results.pots) for (const a of pot.awards) {
-      const st = (s.stats[a.pid] ||= { won: 0, biggest: 0 });
+    for (const pot of h.results!.pots) for (const a of pot.awards) {
+      const st = (s.stats[a.pid] ??= { won: 0, biggest: 0 });
       st.won += 1;
       st.biggest = Math.max(st.biggest, a.amount);
     }
@@ -533,9 +566,9 @@ export class Engine {
       if (p.stack === 0) p.busted = true;
     }
     // remove players who asked to leave
-    const leaving = s.players.filter((p) => p.leaving).map((p) => p.id);
+    const leaving = s.players.filter((p) => p.leaving);
     if (leaving.length) {
-      s.departed = (s.departed || []).concat(s.players.filter((p) => p.leaving).map((p) => ({ ...p })));
+      s.departed = (s.departed ?? []).concat(leaving.map((p) => ({ ...p })));
       s.players = s.players.filter((p) => !p.leaving);
       const btnId = h.buttonId;
       s.players.forEach((x, i) => (x.seat = i));
@@ -545,45 +578,49 @@ export class Engine {
     this.undoStack = [];
   }
 
-  // Winner of an uncontested pot may choose to show.
-  showCards(pid) {
+  /** Winner of an uncontested pot may choose to show. */
+  showCards(pid: PlayerId): GameEvent[] {
     const h = this.s.hand;
-    if (!h || !h.ps[pid] || this.s.phase !== 'between') return [];
+    const hp = h?.ps[pid];
+    if (!h || !hp || this.s.phase !== 'between') return [];
     h.shown[pid] = true;
-    this.logLine(`${this.player(pid).name} shows ${h.ps[pid].cards.map(cardStr).join(' ')}`);
-    return [{ t: 'show', pid, cards: h.ps[pid].cards.map(cardStr) }];
+    this.logLine(`${this.P(pid).name} shows ${hp.cards.map(cardStr).join(' ')}`);
+    return [{ t: 'show', pid, cards: hp.cards.map(cardStr) }];
   }
 
-  // Timer / away handling: check if possible, otherwise fold.
-  autoAct(pid) {
+  /** Timer / away handling: check if possible, otherwise fold. */
+  autoAct(pid: PlayerId): ActResult | null {
     const L = this.legal(pid);
     if (!L) return null;
     return this.act(pid, { type: L.canCheck ? 'check' : 'fold' });
   }
 
-  endGame() {
+  endGame(): Standing[] {
     this.s.phase = 'ended';
-    if (this.s.hand && this.s.hand.toAct) {
+    const h = this.s.hand;
+    if (h && h.toAct) {
       // refund chips in the middle of an unfinished hand
-      for (const pid of Object.keys(this.s.hand.ps)) {
+      for (const [pid, hp] of Object.entries(h.ps)) {
         const p = this.player(pid);
-        if (p) p.stack += this.s.hand.ps[pid].total;
+        if (p) p.stack += hp.total;
       }
     }
     this.s.hand = null;
     return this.standings();
   }
 
-  standings() {
-    const all = this.s.players.concat(this.s.departed || []);
-    return all.map((p) => ({ id: p.id, name: p.name, stack: p.stack, buyins: p.buyins, net: p.stack - p.buyins, won: this.s.stats[p.id]?.won || 0, biggest: this.s.stats[p.id]?.biggest || 0 }))
-      .sort((a, b) => b.net - a.net);
+  standings(): Standing[] {
+    const all = this.s.players.concat(this.s.departed ?? []);
+    return all.map((p) => ({
+      id: p.id, name: p.name, stack: p.stack, buyins: p.buyins, net: p.stack - p.buyins,
+      won: this.s.stats[p.id]?.won ?? 0, biggest: this.s.stats[p.id]?.biggest ?? 0,
+    })).sort((a, b) => b.net - a.net);
   }
 
   // ---------------- views ----------------
-  viewFor(pid) {
+  viewFor(pid: PlayerId): View {
     const s = this.s, h = s.hand;
-    const v = {
+    const v: View = {
       gameId: s.gameId,
       phase: s.phase,
       handNo: s.handNo,
@@ -602,9 +639,9 @@ export class Engine {
       canUndo: this.canUndo(),
     };
     if (h) {
-      const ps = {};
+      const ps: Record<PlayerId, HandPlayerView> = {};
       for (const id of h.order) {
-        const hp = h.ps[id];
+        const hp = h.ps[id]!;
         const show = id === pid || h.revealed[id] || h.shown[id];
         ps[id] = {
           streetBet: hp.streetBet, total: hp.total, folded: hp.folded, allIn: hp.allIn,
@@ -625,10 +662,10 @@ export class Engine {
     return v;
   }
 
-  // pots made only of collected chips (for showing side pots mid-hand)
-  livePotsPreview() {
-    const h = this.s.hand;
-    const anyAllIn = h.order.some((pid) => h.ps[pid].allIn);
+  /** Pots made only of collected chips (for showing side pots mid-hand). */
+  livePotsPreview(): { amount: number; n: number }[] | null {
+    const h = this.H;
+    const anyAllIn = h.order.some((pid) => h.ps[pid]!.allIn);
     if (!anyAllIn) return null;
     return this.buildPots().map((p) => ({ amount: p.amount, n: p.elig.length }));
   }
