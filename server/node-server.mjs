@@ -18073,6 +18073,7 @@ var TableRoom = class {
       st.device = who.device;
       return watch();
     }
+    if (!this.engine && !m.settings) return fail("no_table", "This table has not started yet");
     if (!this.engine) {
       this.create(m.settings, now);
       this.crew = crew;
