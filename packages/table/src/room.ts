@@ -10,6 +10,7 @@
 //   which is also exactly the hand's replay log.
 import { Engine, randomSeed, sha256hex, toHex, type GameEvent, type GameState, type HandRecord, type Input, type PlayerId } from '@tp/engine';
 import { PROTOCOL_VERSION, encode, parseClient, versionOk, type ClientMessage, type ServerMessage, type TableSettings } from '@tp/protocol';
+import { handPlayers, type EndPlayerRow, type GameInfo } from './record';
 
 export interface Conn {
   send(text: string): void;
@@ -25,6 +26,8 @@ export interface RoomClock {
 export interface RoomStore {
   save(p: Persisted): void;
   appendHand(r: HandRecord): void;
+  /** League and history: a finished hand or the end of the game, ready to record (see record.ts). */
+  league?(kind: 'hand' | 'end', id: string, payload: unknown): void;
 }
 
 /** Everything a table needs to come back after a restart. */
@@ -48,6 +51,10 @@ export interface Persisted {
   crew?: string | null;
   /** Seats that belong to signed-in accounts. */
   accountSeats?: PlayerId[];
+  /** The league's id for this game, when it began, and whether it is casual. */
+  game?: { id: string; startedAt: string; casual: boolean; bigBlind: number; startStack: number; ended: boolean };
+  /** Lowest stack each player had (for the comeback trophy). */
+  minStacks?: Record<PlayerId, number>;
 }
 
 export interface RoomOptions {
@@ -62,6 +69,8 @@ export interface RoomOptions {
   offlineAfterMs?: number;
   /** Where shuffle seeds come from (tests pass a repeatable one). */
   seed?: () => string;
+  /** Which server this is, as the league records it. */
+  server?: GameInfo['server'];
   /** Checks an account ticket (phones that are signed in send one). Needed for crew-only tables. */
   identify?: (ticket: string, table: string) => Promise<Identity | null>;
 }
@@ -93,6 +102,9 @@ export class TableRoom {
   private tokens: Record<PlayerId, string> = {};
   /** Seats taken by signed-in accounts: only a ticket for that account may use them. */
   private accountSeats = new Set<PlayerId>();
+  /** This game in the league (made with the table). */
+  game: NonNullable<Persisted['game']> | null = null;
+  private minStacks: Record<PlayerId, number> = {};
   private conns = new Map<Conn, ConnState>();
   private acks = new Map<PlayerId, Map<string, Ack>>();
   private recent: { seq: number; events: GameEvent[] }[] = [];
@@ -106,7 +118,7 @@ export class TableRoom {
 
   constructor(code: string, private clock: RoomClock, private store: RoomStore, saved?: Persisted | null, opt: RoomOptions = {}) {
     this.code = code;
-    this.opt = { handPauseMs: 4000, rateLimit: 40, rateWindowMs: 2000, keepUpdates: 200, offlineAfterMs: 3000, seed: randomSeed, identify: async () => null, ...opt };
+    this.opt = { handPauseMs: 4000, rateLimit: 40, rateWindowMs: 2000, keepUpdates: 200, offlineAfterMs: 3000, seed: randomSeed, identify: async () => null, server: 'test', ...opt };
     this.createdAt = clock.now();
     if (saved) this.restore(saved);
   }
@@ -219,6 +231,9 @@ export class TableRoom {
       st.device = who.device;
       return watch();
     }
+    // only the host's hello (it carries the table's settings) creates the table; a friend who connects
+    // first must not create it with default settings and become the host
+    if (!this.engine && !m.settings) return fail('no_table', 'This table has not started yet');
     if (!this.engine) { this.create(m.settings, now); this.crew = crew; }
     const e = this.engine!;
     if (!e.player(m.player)) {
@@ -283,7 +298,7 @@ export class TableRoom {
           for (const c of this.connsOf(m.pid!)) { const st = this.conns.get(c)!; st.pid = null; st.spectator = true; }
           if (this.host === m.pid) this.host = this.pickHost(m.pid);
         }
-        if (!r && m.cmd === 'end') { this.running = false; this.nextDealAt = null; }
+        if (!r && m.cmd === 'end') { this.running = false; this.nextDealAt = null; this.endToLeague(); }
         if (!r && m.cmd === 'resume') this.tryDeal(now);
         this.persist();
         return r;
@@ -303,7 +318,10 @@ export class TableRoom {
   private create(settings: TableSettings | undefined, now: number): void {
     const rules = { ...settings };
     delete rules.crew; // the crew belongs to the room, not the rules
+    delete rules.casual;
     this.engine = Engine.create(this.code, rules, now);
+    const c = this.engine.s.cfg;
+    this.game = { id: newGameId(), startedAt: new Date(now).toISOString(), casual: !!settings?.casual, bigBlind: c.bb, startStack: c.startStack, ended: false };
     this.base = this.engine.snapshot();
     this.inputs = [];
   }
@@ -319,10 +337,12 @@ export class TableRoom {
     this.seq++;
     this.recent.push({ seq: this.seq, events });
     if (this.recent.length > this.opt.keepUpdates) this.recent.shift();
+    for (const p of e.s.players) this.minStacks[p.id] = Math.min(this.minStacks[p.id] ?? p.stack, p.stack);
     const rec = e.lastHandRecord;
     if (rec && rec !== this.lastRecord) {
       this.lastRecord = rec;
       this.store.appendHand(rec);
+      this.toLeague(rec);
       if (this.running && e.s.phase !== 'ended') this.nextDealAt = input.now + this.opt.handPauseMs;
     }
     for (const [c, st] of this.conns) if (st.hello) this.send(c, { t: 'update', seq: this.seq, events: events as unknown as Record<string, unknown>[], view: this.view(st.pid), host: this.host, at: input.now });
@@ -353,6 +373,42 @@ export class TableRoom {
   private reschedule(): void {
     const times = [this.handDeadline(), this.nextDealAt, ...this.goingOffline.values()].filter((x): x is number => x !== null);
     this.clock.schedule(times.length ? Math.min(...times) : null);
+  }
+
+  private gameInfo(): GameInfo {
+    const g = this.game!;
+    return { id: g.id, crew: this.crew, table: this.code, server: this.opt.server, casual: g.casual, startStack: g.startStack, bigBlind: g.bigBlind, startedAt: g.startedAt };
+  }
+
+  private accountOf = (pid: PlayerId): string | null => (this.accountSeats.has(pid) ? pid : null);
+
+  /** A finished hand goes to history and the league (worked out from the engine's own record). */
+  private toLeague(rec: HandRecord): void {
+    if (!this.store.league || !this.game) return;
+    try {
+      const { rows, pot } = handPlayers(rec, this.accountOf);
+      this.store.league('hand', `${this.game.id}:${rec.handNo}`, {
+        game: this.gameInfo(),
+        hand: { no: rec.handNo, playedAt: new Date(rec.endedAt).toISOString(), deckCommit: rec.deckCommit, pot, record: rec, players: rows },
+      });
+    } catch (err) { console.error(`table ${this.code}: hand ${rec.handNo} not recorded`, err); }
+  }
+
+  /** The night is over: final chips against buy-ins, once. */
+  private endToLeague(): void {
+    if (!this.store.league || !this.game || this.game.ended) return;
+    this.game.ended = true;
+    const e = this.engine!;
+    const everyone = e.s.players.concat(e.s.departed ?? []);
+    const seen = new Set<PlayerId>();
+    const players: EndPlayerRow[] = [];
+    for (const p of everyone) {
+      if (seen.has(p.id)) continue;
+      seen.add(p.id);
+      players.push({ key: p.id, account: this.accountOf(p.id), name: p.name, buyins: p.buyins, final: p.stack, minStack: Math.min(this.minStacks[p.id] ?? p.stack, p.stack) });
+    }
+    this.store.league('end', `${this.game.id}:end`, { game: this.gameInfo(), endedAt: new Date(this.clock.now()).toISOString(), players });
+    this.persist();
   }
 
   /** Two players called Riya at one table: the second becomes "Riya 2" (names are cut to 14 at the table). */
@@ -416,7 +472,7 @@ export class TableRoom {
     for (const [pid, m] of this.acks) acks[pid] = [...m.values()].slice(-ACKS_SAVED);
     return {
       v: 1, code: this.code, base: this.base, inputs: this.inputs, seq: this.seq, host: this.host, tokens: this.tokens,
-      running: this.running, nextDealAt: this.nextDealAt, createdAt: this.createdAt, acks, crew: this.crew, accountSeats: [...this.accountSeats],
+      running: this.running, nextDealAt: this.nextDealAt, createdAt: this.createdAt, acks, crew: this.crew, accountSeats: [...this.accountSeats], ...(this.game ? { game: this.game } : {}), minStacks: this.minStacks,
     };
   }
 
@@ -439,7 +495,7 @@ export class TableRoom {
     this.lastRecord = this.engine.lastHandRecord;
     this.base = p.base; this.inputs = p.inputs.slice();
     this.seq = p.seq; this.host = p.host; this.tokens = { ...p.tokens };
-    this.running = p.running; this.nextDealAt = p.nextDealAt; this.createdAt = p.createdAt; this.crew = p.crew ?? null; this.accountSeats = new Set(p.accountSeats ?? []);
+    this.running = p.running; this.nextDealAt = p.nextDealAt; this.createdAt = p.createdAt; this.crew = p.crew ?? null; this.accountSeats = new Set(p.accountSeats ?? []); this.game = p.game ?? null; this.minStacks = { ...(p.minStacks ?? {}) };
     for (const [pid, list] of Object.entries(p.acks ?? {})) this.acks.set(pid, new Map(list.map((a) => [a.actionId, a])));
   }
 
@@ -475,6 +531,14 @@ export class TableRoom {
 
   /** Has this connection introduced itself? (Servers close connections that never do.) */
   hasSaidHello(conn: Conn): boolean { return !!this.conns.get(conn)?.hello; }
+}
+
+function newGameId(): string {
+  const b = new Uint8Array(16);
+  (globalThis as unknown as { crypto: { getRandomValues(a: Uint8Array): Uint8Array } }).crypto.getRandomValues(b);
+  b[6] = (b[6]! & 0x0f) | 0x40; b[8] = (b[8]! & 0x3f) | 0x80; // a version 4 UUID
+  const h = toHex(b);
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
 /** A fresh random seat token for a phone (keep it in the phone's storage). */

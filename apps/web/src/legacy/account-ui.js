@@ -2,6 +2,7 @@
 // this phone. The account code (Supabase client) is loaded only when one of these screens opens, so the
 // game itself still starts instantly and works offline.
 import { h, toast } from './ui.js';
+import { leagueScreens } from './league-ui.js';
 
 let mod = null;
 let acct = null;
@@ -21,6 +22,7 @@ const share = (text) => `https://wa.me/?text=${encodeURIComponent(text)}`;
 const copy = (text, what = 'Copied') => navigator.clipboard?.writeText(text).then(() => toast(what), () => toast('Could not copy. Select it and copy by hand.'));
 
 export function accountScreens({ screen, openSheet, home }) {
+  const lg = leagueScreens({ screen, openSheet, account, back: () => profile() });
   const head = (title, back = home) => h('header', { class: 'page-head' }, h('button', { class: 'icon-btn', 'aria-label': 'Back', onclick: back }, '‹'), h('h1', {}, title));
   const busy = (el, text = 'Loading…') => el.replaceChildren(h('p', { class: 'hint', role: 'status' }, text));
   const failed = (el, err, retry) => el.replaceChildren(
@@ -73,6 +75,7 @@ export function accountScreens({ screen, openSheet, home }) {
     body.replaceChildren(
       h('section', { class: 'block' }, h('label', { class: 'field' }, h('span', {}, 'Name'), nameIn)),
       h('section', { class: 'block' }, h('h2', {}, 'Recovery code'), codeBox),
+      h('section', { class: 'block' }, h('button', { class: 'btn secondary', 'data-testid': 'my-games', onclick: () => lg.history() }, 'My games', h('small', {}, 'Every game you played, with replays'))),
       h('section', { class: 'block' }, h('h2', {}, 'Crews'), crewsBox,
         h('button', { class: 'btn secondary', 'data-testid': 'new-crew', onclick: () => newCrew() }, 'New crew')),
       h('section', { class: 'block' }, h('h2', {}, 'Phones on this account'), phonesBox),
@@ -237,6 +240,7 @@ export function accountScreens({ screen, openSheet, home }) {
           body.replaceChildren(
             h('div', { class: 'crew-title' }, h('span', { class: 'crew-dot big', style: { background: crew.color }, 'aria-hidden': 'true' }), h('h2', { 'data-testid': 'crew-title' }, crew.name)),
             crew.status === 'pending' && h('p', { class: 'hint', role: 'status' }, 'An admin will let you in soon.'),
+            crew.status === 'active' && h('button', { class: 'btn primary', 'data-testid': 'open-league', onclick: () => lg.league(crew, () => crewScreen(id)) }, 'League and games', h('small', {}, 'Standings, player cards, hall of fame, replays')),
             rescues.length > 0 && h('section', { class: 'block', 'data-testid': 'rescues' }, ...rescues.map((r) => r.target_account === me
               // someone says they are you: only you can tell, so you can refuse; approving needs another admin
               ? h('div', { class: 'rescue' },

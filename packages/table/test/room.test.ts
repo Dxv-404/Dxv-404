@@ -26,7 +26,9 @@ function setup(opts = {}) {
     const c = new FakeConn();
     room.connect(c);
     tokens[pid] ??= newSeatToken();
-    room.message(c, JSON.stringify({ t: 'hello', v: 1, table: 'ABCD', player: pid, lastSeq: 0, token: tokens[pid], name: pid.toUpperCase(), ...extra }));
+    // the first phone is the host: its hello carries the table's settings
+    const host = !room.engine && !extra.settings && !extra.spectate ? { settings: {} } : {};
+    room.message(c, JSON.stringify({ t: 'hello', v: 1, table: 'ABCD', player: pid, lastSeq: 0, token: tokens[pid], name: pid.toUpperCase(), ...host, ...extra }));
     return c;
   };
   let n = 0;
@@ -60,6 +62,19 @@ describe('table room', () => {
     expect(t.room.engine!.s.cfg.startStack).toBe(500);
   });
 
+  it('only the host (whose hello carries settings) creates a table; a friend who is early is told to wait', () => {
+    const t = setup();
+    const early = new FakeConn(); t.room.connect(early);
+    t.room.message(early, JSON.stringify({ t: 'hello', v: 1, table: 'ABCD', player: 'friend', lastSeq: 0, token: newSeatToken(), name: 'Friend' }));
+    expect(early.last('error')).toMatchObject({ code: 'no_table', message: 'This table has not started yet' });
+    expect(t.room.engine).toBeNull();
+    const host = t.join('host', { settings: { startStack: 700 } });
+    expect(host.last('welcome')!.host).toBe('host');
+    const friend = t.join('friend');
+    expect(friend.last('welcome')!.host).toBe('host');
+    expect(t.room.engine!.s.cfg.startStack).toBe(700);
+  });
+
   it('a seat token protects the seat; the right token rejoins it', () => {
     const t = setup();
     t.join('a');
@@ -88,10 +103,10 @@ describe('table room', () => {
     const s = new FakeConn(); t.room.connect(s);
     t.room.message(s, JSON.stringify({ t: 'hello', v: 1, table: 'ABCD', player: 's', lastSeq: 0, spectate: true }));
     expect(s.last('error')!.code).toBe('no_table'); // nothing to watch yet
+    const ok = t.join('a');
     const n = new FakeConn(); t.room.connect(n);
     t.room.message(n, JSON.stringify({ t: 'hello', v: 1, table: 'ABCD', player: 'n', lastSeq: 0, token: newSeatToken() }));
-    expect(n.last('error')!.code).toBe('bad_message');
-    const ok = t.join('a');
+    expect(n.last('error')!.code).toBe('bad_message'); // a name is needed to sit down
     t.room.message(ok, JSON.stringify({ t: 'hello', v: 1, table: 'ABCD', player: 'a', lastSeq: 0, token: t.tokens.a }));
     expect(ok.last('error')!.message).toMatch(/Already/);
   });

@@ -33,7 +33,8 @@ function setup() {
   const hello = async (player: string, ticket: string | null, extra: Record<string, unknown> = {}) => {
     const c = new FakeConn();
     room.connect(c);
-    room.message(c, JSON.stringify({ t: 'hello', v: 1, table: 'CREW1', player, lastSeq: 0, ...(ticket ? { ticket } : {}), ...extra }));
+    const host = !room.engine && !extra.settings && !extra.spectate ? { settings: {} } : {};
+    room.message(c, JSON.stringify({ t: 'hello', v: 1, table: 'CREW1', player, lastSeq: 0, ...(ticket ? { ticket } : {}), ...host, ...extra }));
     await tick();
     return c;
   };

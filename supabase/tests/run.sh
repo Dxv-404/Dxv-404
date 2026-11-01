@@ -16,4 +16,6 @@ for t in tests/*.test.sql; do
   total=$((total + n))
   if [ -n "$bad" ] || grep -qE '^# Looks like' <<<"$out"; then echo "$out" | grep -vE '^ok '; echo "FAILED $t"; fail=1; else echo "ok   $t ($n tests)"; fi
 done
-echo "database tests: $total passed"; exit $fail
+echo "database tests: $total passed"
+bash tests/restore.sh || fail=1
+exit $fail

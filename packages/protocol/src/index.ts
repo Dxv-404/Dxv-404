@@ -34,6 +34,8 @@ export const TableSettings = z.object({
   maxPlayers: z.number().int().min(2).max(15),
   /** A crew-only table: only active members of this crew may sit or watch. */
   crew: z.string().uuid(),
+  /** A casual table: results go to the players' history but not the crew's league. */
+  casual: z.boolean(),
 }).partial().strict().refine((c) => c.sb === undefined || c.bb === undefined || c.bb >= c.sb, { message: 'Big blind must be at least the small blind' });
 export type TableSettings = z.infer<typeof TableSettings>;
 

@@ -10,7 +10,7 @@ const MIXES: [string, ModelName[]][] = [
 
 for (const [label, models] of MIXES) {
   test(`three phones play 40 actions without losing a chip (${label})`, async ({ browser, baseURL }) => {
-    test.setTimeout(300_000);
+    test.setTimeout(360_000);
     const names = ['Dev', 'Rohan', 'Riya'];
     const phones = await Promise.all(models.map((m, i) => newPhone(browser, names[i]!, MODELS[m], baseURL!)));
     const [host, g1, g2] = phones as [typeof phones[0], typeof phones[0], typeof phones[0]];
@@ -25,8 +25,13 @@ for (const [label, models] of MIXES) {
     let buyins = 3000;
     const rnd = seeded(label.length * 7919);
     let acted = 0;
-    for (let step = 0; step < 120 && acted < 40; step++) {
-      if (await playOneAction(phones, rnd)) acted++;
+    // Play until 40 actions or 3 minutes. Showdowns and result animations take a while, so the pace
+    // varies; what must never happen is a table where nobody can act for 30 seconds (a stuck game).
+    const until = Date.now() + 180_000;
+    let lastAction = Date.now();
+    while (acted < 40 && Date.now() < until) {
+      if (await playOneAction(phones, rnd)) { acted++; lastAction = Date.now(); }
+      expect(Date.now() - lastAction, 'nobody could act for 30 seconds: the game is stuck').toBeLessThan(30_000);
       await host.page.waitForTimeout(250);
       const b = await host.page.evaluate(() => (window as any).__tp.host.e.s.players.reduce((a: number, p: any) => a + p.buyins, 0));
       buyins = b;

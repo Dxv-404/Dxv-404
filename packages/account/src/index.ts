@@ -13,6 +13,13 @@ export type Role = 'owner' | 'admin' | 'member';
 export interface Crew { id: string; name: string; color: string; avatar_url: string | null; house_rules: Record<string, unknown>; require_approval: boolean; role: Role; status: 'active' | 'pending' }
 export interface Member { account_id: string; name: string; role: Role; status: 'active' | 'pending'; joined_at: string }
 export interface InviteInfo { crew: string; name: string; color: string; members: { id: string; name: string }[] }
+export interface GameRow { game_id: string; ended_at: string; crew_id: string | null; crew_name: string | null; table_code: string; players: number; hands: number; net: number | null; bb_won: number | null; place: number | null; casual: boolean; status: string }
+export interface GamePlayer { player_key: string; account_id: string | null; name: string; buyins: number; final_chips: number | null; net: number | null; bb_won: number | null; place: number | null; points: number | null; hands: number; vpip: number; pfr: number; showdowns_won: number; biggest_pot: number; best_hand: number | null }
+export interface Game { id: string; crew_id: string | null; season_id: string | null; table_code: string; casual: boolean; start_stack: number; big_blind: number; started_at: string; ended_at: string | null; status: string; void_reason: string | null; hands: number }
+export interface LeagueRow { account_id: string; name: string; games: number; total_bb: number; avg_bb: number | null; points: number; wins: number; hands: number; vpip_pct: number | null; pfr_pct: number | null; showdowns_won: number; biggest_pot: number | null; best_hand: number | null }
+export interface Season { id: string; name: string; starts_at: string; ends_at: string; closed_at: string | null }
+export interface Trophy { id: number; account_id: string; kind: string; game_id: string | null; hand_no: number | null; season_id: string | null; at: string; detail: Record<string, unknown> }
+export interface ResultChange { id: number; what: string; reason: string; detail: Record<string, unknown>; at: string; actor_name: string | null }
 export interface PhoneLogin { phone: string; this_phone: boolean; added: string; last_seen: string }
 export interface LogEntry { id: number; what: string; detail: Record<string, unknown>; at: string; actor_name: string | null }
 export interface Rescue { id: string; crew_id: string; target_account: string; target_name?: string; status: string; created_at: string }
@@ -169,6 +176,66 @@ export class Account {
     const { data: logins } = await this.db.from('account_logins').select('account_id').eq('auth_user', data.session.user.id);
     const id = (logins as { account_id: string }[] | null)?.[0]?.account_id;
     return (this.profile = (rows as Profile[]).find((r) => r.id === id) ?? null);
+  }
+
+  // ---------------- history and league ----------------
+  myGames(limit = 50, before?: string): Promise<GameRow[]> { return this.rpc<GameRow[]>('my_games', { p_limit: limit, p_before: before ?? null }); }
+
+  async game(gameId: string): Promise<{ game: Game; players: GamePlayer[] } | null> {
+    const [g, p] = await Promise.all([
+      this.db.from('games').select('*').eq('id', gameId).maybeSingle(),
+      this.db.from('game_players').select('*').eq('game_id', gameId),
+    ]);
+    if (g.error) throw new AccountError(g.error.message, g.error.code);
+    if (p.error) throw new AccountError(p.error.message, p.error.code);
+    if (!g.data) return null;
+    const players = (p.data as GamePlayer[]).sort((a, b) => (a.place ?? 99) - (b.place ?? 99) || (b.net ?? 0) - (a.net ?? 0));
+    return { game: g.data as Game, players };
+  }
+
+  async hands(gameId: string): Promise<{ hand_no: number; pot: number; played_at: string }[]> {
+    const { data, error } = await this.db.from('hands').select('hand_no, pot, played_at').eq('game_id', gameId).order('hand_no');
+    if (error) throw new AccountError(error.message, error.code);
+    return data as { hand_no: number; pot: number; played_at: string }[];
+  }
+
+  /** One hand's full record, for the replay viewer. */
+  async hand(gameId: string, handNo: number): Promise<unknown> {
+    const { data, error } = await this.db.from('hands').select('record').eq('game_id', gameId).eq('hand_no', handNo).maybeSingle();
+    if (error) throw new AccountError(error.message, error.code);
+    return (data as { record: unknown } | null)?.record ?? null;
+  }
+
+  async seasons(crewId: string): Promise<Season[]> {
+    const { data, error } = await this.db.from('seasons').select('id, name, starts_at, ends_at, closed_at').eq('crew_id', crewId).order('starts_at', { ascending: false });
+    if (error) throw new AccountError(error.message, error.code);
+    return data as Season[];
+  }
+  league(crewId: string, seasonId?: string): Promise<LeagueRow[]> { return this.rpc<LeagueRow[]>('league', { p_crew: crewId, p_season: seasonId ?? null }); }
+
+  async crewGames(crewId: string, limit = 30): Promise<Game[]> {
+    const { data, error } = await this.db.from('games').select('*').eq('crew_id', crewId).order('started_at', { ascending: false }).limit(limit);
+    if (error) throw new AccountError(error.message, error.code);
+    return data as Game[];
+  }
+
+  async trophies(filter: { crewId?: string; accountId?: string }): Promise<Trophy[]> {
+    let q = this.db.from('trophies').select('id, account_id, kind, game_id, hand_no, season_id, at, detail').order('at', { ascending: false }).limit(100);
+    if (filter.crewId) q = q.eq('crew_id', filter.crewId);
+    if (filter.accountId) q = q.eq('account_id', filter.accountId);
+    const { data, error } = await q;
+    if (error) throw new AccountError(error.message, error.code);
+    return data as Trophy[];
+  }
+
+  voidGame(gameId: string, reason: string): Promise<void> { return this.rpc('void_game', { p_game: gameId, p_reason: reason }); }
+  adjustResult(gameId: string, from: string, to: string, chips: number, reason: string): Promise<void> {
+    return this.rpc('adjust_result', { p_game: gameId, p_from: from, p_to: to, p_chips: chips, p_reason: reason });
+  }
+  async resultChanges(gameId: string): Promise<ResultChange[]> {
+    const { data, error } = await this.db.from('result_changes').select('id, what, reason, detail, at, accounts(name)').eq('game_id', gameId).order('at');
+    if (error) throw new AccountError(error.message, error.code);
+    return (data as unknown as (Omit<ResultChange, 'actor_name'> & { accounts: { name: string } | null })[]).map((r) => ({ id: r.id, what: r.what, reason: r.reason, detail: r.detail, at: r.at, actor_name: r.accounts?.name ?? null }));
   }
 
   // ---------------- live tables ----------------

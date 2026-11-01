@@ -4,12 +4,13 @@
 // to disk after every change (taps inside a hand batched for 0.1 s, everything else at once) and every finished hand is appended to
 // that table's hand log, so a restart or a crash loses nothing.
 import { createServer } from 'node:http';
-import { appendFileSync, mkdirSync, readFileSync, renameSync, writeFileSync, existsSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, renameSync, writeFileSync, existsSync, readdirSync, unlinkSync, chmodSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
 import { dirname, join } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { PROTOCOL_VERSION } from '@tp/protocol';
-import { TableRoom, type Conn, type Persisted } from '@tp/table';
-import { cachedTicketChecker } from '@tp/account/ticket';
+import { TableRoom, Recorder, tokenSigner, supabaseSend, type Conn, type Persisted, type OutboxItem } from '@tp/table';
+import { cachedTicketChecker, SUPABASE_KEY, SUPABASE_URL } from '@tp/account/ticket';
 import { LATENCY_PAGE } from './latency-page';
 import { TAP_PAGE } from './tap-page';
 
@@ -23,6 +24,63 @@ const IDLE_EVICT_MS = 30 * 60_000;
 const SAVE_EVERY_MS = 100;
 mkdirSync(join(DATA, 'tables'), { recursive: true });
 mkdirSync(join(DATA, 'hands'), { recursive: true });
+mkdirSync(join(DATA, 'outbox'), { recursive: true });
+mkdirSync(join(DATA, 'backups'), { recursive: true, mode: 0o700 });
+
+// ---------------- league recorder ----------------
+// The signing key reaches this machine out of band: an environment variable, or the Oracle instance's
+// metadata (set through the Oracle API), never the code on GitHub. Without it, games are still played and
+// kept in the hand logs, just not sent to the league.
+async function recorderKey(): Promise<string | null> {
+  if (process.env.RECORDER_TOKEN) return process.env.RECORDER_TOKEN;
+  try {
+    const r = await fetch('http://169.254.169.254/opc/v2/instance/metadata/recorder_token', { headers: { authorization: 'Bearer Oracle' }, signal: AbortSignal.timeout(2000) });
+    return r.ok ? (await r.text()).trim() : null;
+  } catch { return null; }
+}
+const outboxDir = join(DATA, 'outbox');
+const outboxStore = {
+  load: async () => readdirSync(outboxDir).filter((f) => f.endsWith('.json')).map((f) => JSON.parse(readFileSync(join(outboxDir, f), 'utf8')) as OutboxItem),
+  put: async (it: OutboxItem) => { const f = join(outboxDir, `${encodeURIComponent(it.id)}.json`); writeFileSync(`${f}.tmp`, JSON.stringify(it)); renameSync(`${f}.tmp`, f); },
+  remove: async (id: string) => { try { unlinkSync(join(outboxDir, `${encodeURIComponent(id)}.json`)); } catch { /* already gone */ } },
+};
+let recorder: Recorder | null = null;
+let signBody: ((body: string) => Promise<string>) | null = null;
+void recorderKey().then(async (key) => {
+  if (!key) { console.log('league recorder: no key, games are not sent to the league'); return; }
+  signBody = tokenSigner(key);
+  recorder = new Recorder(outboxStore, signBody, supabaseSend(process.env.SUPABASE_URL ?? SUPABASE_URL, SUPABASE_KEY), Date.now, (m) => console.log(m));
+  await recorder.start();
+  console.log(`league recorder ready (${recorder.pending} waiting in the outbox)`);
+  void recorder.flush();
+  setInterval(() => { void recorder?.flush(); }, 30_000).unref();
+});
+
+// ---------------- nightly backup ----------------
+// At 03:00 India time: the whole accounts database, gzipped, kept here (readable by this server only) for 30 nights.
+async function backupNow(): Promise<string | null> {
+  if (!signBody) return null;
+  const body = JSON.stringify({ backup: new Date().toISOString() });
+  const res = await fetch(`${process.env.SUPABASE_URL ?? SUPABASE_URL}/rest/v1/rpc/export_backup`, {
+    method: 'POST', headers: { apikey: SUPABASE_KEY, 'content-type': 'application/json' }, body: JSON.stringify({ p_body: body, p_sig: await signBody(body) }),
+  });
+  if (!res.ok) throw new Error(`backup failed: ${res.status} ${await res.text()}`);
+  const file = join(DATA, 'backups', `${new Date().toISOString().slice(0, 10)}.json.gz`);
+  writeFileSync(file, gzipSync(Buffer.from(await res.text())), { mode: 0o600 });
+  chmodSync(file, 0o600);
+  const all = readdirSync(join(DATA, 'backups')).filter((f) => f.endsWith('.json.gz')).sort();
+  for (const old of all.slice(0, Math.max(0, all.length - 30))) unlinkSync(join(DATA, 'backups', old));
+  return file;
+}
+let lastBackupDay = '';
+setInterval(() => {
+  const ist = new Date(Date.now() + 5.5 * 3600_000);
+  const day = ist.toISOString().slice(0, 10);
+  if (ist.getUTCHours() === 3 && day !== lastBackupDay) {
+    lastBackupDay = day;
+    backupNow().then((f) => f && console.log(`backup saved: ${f}`), (e) => console.error(e));
+  }
+}, 60_000).unref();
 
 interface Live { room: TableRoom; timer: NodeJS.Timeout | null; dirty: Persisted | null; saveTimer: NodeJS.Timeout | null; idleSince: number }
 const live = new Map<string, Live>();
@@ -63,7 +121,13 @@ function getRoom(code: string): Live {
       else l.saveTimer ??= setTimeout(() => flush(code, l), SAVE_EVERY_MS);
     },
     appendHand: (h) => appendFileSync(join(DATA, 'hands', `${code}.jsonl`), JSON.stringify(h) + '\n'),
-  }, saved, { identify, ...(process.env.HAND_PAUSE_MS ? { handPauseMs: Number(process.env.HAND_PAUSE_MS) } : {}) });
+    league: (kind, id, payload) => {
+      const fn = kind === 'hand' ? 'record_hand' : 'record_game_end';
+      // before the recorder is ready (or with no key yet) the record waits in the outbox on disk
+      if (recorder) void recorder.add(fn, id, payload);
+      else void outboxStore.put({ id, fn, body: JSON.stringify(payload), tries: 0, nextAt: 0 });
+    },
+  }, saved, { identify, server: 'oracle', ...(process.env.HAND_PAUSE_MS ? { handPauseMs: Number(process.env.HAND_PAUSE_MS) } : {}) });
   l.room.settleAfterRestart(); // nobody is connected to a table just loaded from disk
   live.set(code, l);
   return l;
@@ -76,7 +140,7 @@ const server = createServer((req, res) => {
     let connections = 0;
     for (const l of live.values()) connections += l.room.connectionCount;
     res.writeHead(200, { 'content-type': 'application/json', ...cors });
-    res.end(JSON.stringify({ ok: true, protocol: PROTOCOL_VERSION, colo: SITE, country: req.headers['cf-ipcountry'] ?? null, version: VERSION, rooms: live.size, connections }));
+    res.end(JSON.stringify({ ok: true, protocol: PROTOCOL_VERSION, colo: SITE, country: req.headers['cf-ipcountry'] ?? null, version: VERSION, rooms: live.size, connections, league: recorder ? { waiting: recorder.pending, refused: recorder.refused.length } : null }));
     return;
   }
   if (url.pathname === '/latency' || url.pathname === '/tap') {

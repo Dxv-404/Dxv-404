@@ -435,3 +435,27 @@ a.btn { text-decoration: none; color: var(--text); }
 .log-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 14px; }
 .log-list li { display: flex; justify-content: space-between; gap: 12px; }
 .log-list small { color: var(--muted); white-space: nowrap; }
+
+/* ---------------- history and league ---------------- */
+.game-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.game-row, .league-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 10px 14px; border-radius: 14px; border: 1px solid rgba(246,240,225,.14); background: rgba(246,240,225,.05); color: var(--text); text-align: left; }
+.game-row .who, .league-row .who { flex: 1; display: grid; }
+.game-row small, .league-row small { color: var(--muted); font-size: 13px; }
+.game-row .nums, .league-row .nums { display: grid; justify-items: end; }
+.league-list { padding: 0; list-style: none; display: grid; gap: 8px; }
+.league-row .rank { width: 24px; text-align: center; font-family: var(--serif); color: var(--brass-hi); font-size: 18px; }
+.hand-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.void-note { padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(168,60,50,.6); background: rgba(138,47,39,.2); color: #f2c7bf; margin: 0; }
+.stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.stat { display: grid; gap: 2px; padding: 10px; border-radius: 12px; background: rgba(0,0,0,.2); text-align: center; }
+.stat strong { font-family: var(--serif); font-size: 18px; }
+.stat small { color: var(--muted); font-size: 12px; }
+.replay-stage { display: grid; gap: 10px; }
+.replay-say { font-size: 18px; margin: 0; min-height: 26px; }
+.replay-board { display: flex; gap: 6px; min-height: 44px; align-items: center; }
+.replay-controls { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 12px; }
+.replay-controls .btn { width: auto; }
+.replay-result p { margin: 4px 0; color: var(--brass-hi); }
+.member-list li.folded { opacity: .55; }
+.mini-cards { display: flex; gap: 3px; }
+select { font: inherit; color: var(--text); background: rgba(0,0,0,.25); border: 1px solid rgba(246,240,225,.18); border-radius: 10px; min-height: 44px; padding: 6px 10px; }

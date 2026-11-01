@@ -5,8 +5,19 @@
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
-  "exports": { ".": "./src/index.ts" },
-  "scripts": { "typecheck": "tsc -p tsconfig.json" },
-  "dependencies": { "@tp/engine": "workspace:*", "@tp/protocol": "workspace:*" },
-  "devDependencies": { "@tp/bots": "workspace:*" }
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@tp/engine": "workspace:*",
+    "@tp/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@tp/bots": "workspace:*",
+    "pg": "8.16.3",
+    "@types/pg": "8.15.5"
+  }
 }

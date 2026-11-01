@@ -58,7 +58,9 @@ type Payload<T> = T extends Outgoing ? Omit<T, 'actionId'> : never;
 export type ActionPayload = Payload<Outgoing>;
 
 const realTimers: Timers = { now: () => Date.now(), set: (fn, ms) => setTimeout(fn, ms), clear: (h) => clearTimeout(h as ReturnType<typeof setTimeout>) };
-const FATAL = new Set(['version', 'not_allowed', 'table_full', 'no_table', 'replaced']);
+// 'no_table' is not final: a friend can connect a moment before the host has opened the table. The phone
+// keeps trying (with backoff) and the screen, told through onError, decides when to give up on a wrong code.
+const FATAL = new Set(['version', 'not_allowed', 'table_full', 'replaced']);
 
 export class TableClient {
   status: Status = 'connecting';

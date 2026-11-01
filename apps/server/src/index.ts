@@ -1,15 +1,15 @@
 // The Cloudflare table server (the backup to the Oracle server in Hyderabad): one Durable Object per table.
 import { DurableObject } from 'cloudflare:workers';
 import { PROTOCOL_VERSION } from '@tp/protocol';
-import { TableRoom, type Conn, type Persisted } from '@tp/table';
-import { cachedTicketChecker, checkTicket } from '@tp/account/ticket';
+import { TableRoom, Recorder, tokenSigner, supabaseSend, type Conn, type Persisted, type OutboxItem } from '@tp/table';
+import { cachedTicketChecker, checkTicket, SUPABASE_KEY, SUPABASE_URL } from '@tp/account/ticket';
 
 // signed-in phones show a ticket; the accounts database says whose it is (cached while this isolate lives)
 const identify = cachedTicketChecker();
 import { LATENCY_PAGE } from './latency-page';
 import { TAP_PAGE } from './tap-page';
 
-export interface Env { TABLES: DurableObjectNamespace<Table>; ECHO: DurableObjectNamespace<Echo> }
+export interface Env { TABLES: DurableObjectNamespace<Table>; ECHO: DurableObjectNamespace<Echo>; RECORDER_TOKEN?: string }
 
 type Region = 'apac' | 'weur' | 'eeur' | 'wnam' | 'enam' | 'sam' | 'oc' | 'afr' | 'me';
 const REGIONS: Region[] = ['apac', 'weur', 'eeur', 'wnam', 'enam', 'sam', 'oc', 'afr', 'me'];
@@ -33,24 +33,46 @@ interface Attachment { pid: string | null; hello: boolean }
 export class Table extends DurableObject<Env> {
   private room: TableRoom | null = null;
   private conns = new Map<WebSocket, Conn>();
+  private recorder: Recorder | null = null;
+  /** One alarm serves both the table's timers and the league outbox's retries. */
+  private roomAt: number | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     ctx.blockConcurrencyWhile(async () => {
+      if (env.RECORDER_TOKEN) {
+        const storage = ctx.storage;
+        this.recorder = new Recorder({
+          load: async () => [...(await storage.list<OutboxItem>({ prefix: 'outbox:' })).values()],
+          put: async (it) => { await storage.put(`outbox:${it.id}`, it); },
+          remove: async (id) => { await storage.delete(`outbox:${id}`); },
+        }, tokenSigner(env.RECORDER_TOKEN), supabaseSend(SUPABASE_URL, SUPABASE_KEY), Date.now, (m) => console.log(m));
+        await this.recorder.start();
+      }
+      this.roomAt = (await ctx.storage.get<number>('roomAt')) ?? null;
       const code = await ctx.storage.get<string>('code');
       if (code) this.init(code, (await ctx.storage.get<Persisted>('table')) ?? null);
     });
+  }
+
+  private setAlarm(): void {
+    const at = [this.roomAt, this.recorder?.nextAt ?? null].filter((x): x is number => x !== null);
+    void (at.length ? this.ctx.storage.setAlarm(Math.max(Date.now(), Math.min(...at))) : this.ctx.storage.deleteAlarm());
   }
 
   private init(code: string, saved: Persisted | null): TableRoom {
     const storage = this.ctx.storage;
     const room = new TableRoom(code, {
       now: () => Date.now(),
-      schedule: (at) => { void (at === null ? storage.deleteAlarm() : storage.setAlarm(at)); },
+      schedule: (at) => { this.roomAt = at; void storage.put('roomAt', at); this.setAlarm(); },
     }, {
       save: (p) => { void storage.put('table', p); },
       appendHand: (h) => { void storage.put(`hand:${String(h.handNo).padStart(6, '0')}`, h); },
-    }, saved, { identify });
+      league: (kind, id, payload) => {
+        if (!this.recorder) return;
+        this.ctx.waitUntil(this.recorder.add(kind === 'hand' ? 'record_hand' : 'record_game_end', id, payload).finally(() => this.setAlarm()));
+      },
+    }, saved, { identify, server: 'cloudflare' });
     this.room = room;
     for (const ws of this.ctx.getWebSockets()) {
       const a = ws.deserializeAttachment() as Attachment | null;
@@ -111,7 +133,9 @@ export class Table extends DurableObject<Env> {
   }
 
   override async alarm(): Promise<void> {
-    this.room?.wake();
+    if (this.roomAt !== null && Date.now() >= this.roomAt) { this.roomAt = null; this.room?.wake(); }
+    await this.recorder?.flush();
+    this.setAlarm();
   }
 }
 
@@ -168,10 +192,17 @@ export default {
 
   // Daily keep-alive: a free Supabase project pauses after 7 days with no activity, and accounts would
   // stop working until someone restored it by hand. One tiny database call a day prevents that.
-  async scheduled(_event, _env, ctx): Promise<void> {
+  // It also closes seasons whose end has passed (trophies for the winner and the iron chair).
+  async scheduled(_event, env, ctx): Promise<void> {
     ctx.waitUntil(checkTicket('keep-alive', 'KEEP').then(
       () => console.log('keep-alive: accounts database answered'),
       (e: unknown) => console.error('keep-alive failed', e),
     ));
+    if (env.RECORDER_TOKEN) {
+      const body = JSON.stringify({ closeSeasons: new Date().toISOString() });
+      ctx.waitUntil(tokenSigner(env.RECORDER_TOKEN)(body).then((sig) => fetch(`${SUPABASE_URL}/rest/v1/rpc/close_due_seasons`, {
+        method: 'POST', headers: { apikey: SUPABASE_KEY, 'content-type': 'application/json' }, body: JSON.stringify({ p_body: body, p_sig: sig }),
+      })).then(async (r) => console.log(`seasons closed: ${await r.text()}`), (e: unknown) => console.error('closing seasons failed', e)));
+    }
   },
 } satisfies ExportedHandler<Env>;
