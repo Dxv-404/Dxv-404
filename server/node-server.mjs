@@ -16958,6 +16958,15 @@ var Engine = class _Engine {
   addPlayer(name, opts = {}) {
     const chair = opts.chair ?? this.freeChair();
     const p = _Engine.fillPlayer({ id: opts.id ?? "p" + rid(7), name: _Engine.cleanName(name), stack: this.s.cfg.startStack }, chair, this.s.cfg);
+    const old = opts.id ? (this.s.departed ?? []).find((d) => d.id === opts.id) : void 0;
+    if (old) {
+      p.stack = old.stack;
+      p.buyins = old.buyins;
+      p.rebuysUsed = old.rebuysUsed;
+      p.busted = old.busted;
+      p.bank = old.bank;
+      this.s.departed = this.s.departed.filter((d) => d.id !== old.id);
+    }
     p.waitForBB = !!opts.waitForBB;
     this.s.players.push(p);
     this.reseat();
@@ -17907,8 +17916,15 @@ function handPlayers(rec, accountOf) {
   });
   return { rows, pot: results.pots.reduce((s, p) => s + p.amount, 0) };
 }
-function tokenSigner(token2) {
-  return async () => token2;
+function tokenSigner(token2, now = Date.now) {
+  const subtle = globalThis.crypto.subtle;
+  const enc = new TextEncoder();
+  const key = subtle.importKey("raw", enc.encode(sha256hex(token2)), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return async (body) => {
+    const t = String(Math.floor(now()));
+    const mac = new Uint8Array(await subtle.sign("HMAC", await key, enc.encode(`${t}.${body}`)));
+    return `v1.${t}.${toHex(mac)}`;
+  };
 }
 var Recorder = class {
   constructor(store, sign, send, now = Date.now, log = () => {
@@ -18006,7 +18022,7 @@ var TableRoom = class {
     this.clock = clock;
     this.store = store;
     this.code = code;
-    this.opt = { handPauseMs: 4e3, rateLimit: 40, rateWindowMs: 2e3, keepUpdates: 200, offlineAfterMs: 3e3, seed: randomSeed, identify: async () => null, server: "test", autoEndAfterMs: 20 * 6e4, ...opt };
+    this.opt = { handPauseMs: 4e3, rateLimit: 40, rateWindowMs: 2e3, keepUpdates: 200, offlineAfterMs: 3e3, seed: randomSeed, identify: async () => null, server: "test", autoEndAfterMs: 20 * 6e4, hostHandoverMs: 6e4, maxConnections: 60, silentCloseMs: 3e4, helloWithinMs: 15e3, ...opt };
     this.createdAt = clock.now();
     if (saved) this.restore(saved);
   }
@@ -18029,6 +18045,8 @@ var TableRoom = class {
   minStacks = {};
   /** Since when no player has been connected (for ending abandoned games). */
   emptySince = null;
+  /** When hosting passes on if the host is still gone (see hostHandoverMs). */
+  hostHandoverAt = null;
   conns = /* @__PURE__ */ new Map();
   acks = /* @__PURE__ */ new Map();
   recent = [];
@@ -18041,7 +18059,12 @@ var TableRoom = class {
   opt;
   // ---------------- doors in ----------------
   connect(conn) {
-    this.conns.set(conn, { pid: null, hello: false, spectator: false, windowStart: this.clock.now(), count: 0, lastReact: 0 });
+    if (this.conns.size >= this.opt.maxConnections) {
+      this.send(conn, { t: "error", code: "table_full", message: "This table has too many phones connected" });
+      return conn.close(4e3, "table_full");
+    }
+    this.conns.set(conn, { pid: null, hello: false, spectator: false, windowStart: this.clock.now(), count: 0, lastReact: 0, lastSeen: this.clock.now() });
+    this.reschedule();
   }
   disconnect(conn) {
     const st = this.conns.get(conn);
@@ -18060,6 +18083,7 @@ var TableRoom = class {
     const st = this.conns.get(conn);
     if (!st) return;
     const now = this.clock.now();
+    st.lastSeen = now;
     if (now - st.windowStart >= this.opt.rateWindowMs) {
       st.windowStart = now;
       st.count = 0;
@@ -18085,6 +18109,15 @@ var TableRoom = class {
   }
   onWake() {
     const now = this.clock.now();
+    for (const [c, st] of [...this.conns]) {
+      const limit = st.hello ? this.opt.silentCloseMs : this.opt.helloWithinMs;
+      if (now - st.lastSeen < limit || st.checking) continue;
+      try {
+        c.close(4004, st.hello ? "silent" : "no hello");
+      } catch {
+      }
+      this.disconnect(c);
+    }
     const e = this.engine;
     if (e && e.s.phase === "hand" && !e.s.paused) {
       const due = this.handDeadline();
@@ -18275,7 +18308,7 @@ var TableRoom = class {
     const e = this.engine;
     const r = e.apply(input);
     if (r.error !== void 0) return r.error;
-    const events2 = r.events;
+    const events2 = r.events.filter((ev) => ev.t !== "deckReveal");
     if (e.s.phase === "hand") this.inputs.push(input);
     else {
       this.base = e.snapshot();
@@ -18294,8 +18327,20 @@ var TableRoom = class {
     }
     for (const [c, st] of this.conns) if (st.hello) this.send(c, { t: "update", seq: this.seq, events: events2, view: this.view(st.pid), host: this.host, at: input.now });
     this.persist();
+    this.foldLeaving(input.now);
     this.reschedule();
     return null;
+  }
+  /**
+   * A player the host removed mid-hand leaves when the hand ends, but the hand would wait for them to act
+   * (for ever at a table with no turn timer). When it is their turn they fold (or check) at once.
+   */
+  foldLeaving(now) {
+    const e = this.engine;
+    const pid = e.s.phase === "hand" && !e.s.paused ? e.s.hand?.toAct : null;
+    if (!pid || !e.player(pid)?.leaving) return;
+    const L = e.legal(pid);
+    this.apply({ t: "act", pid, action: { type: L?.canCheck ? "check" : "fold" }, now });
   }
   deal(now) {
     return this.apply({ t: "start", seed: this.opt.seed(), now });
@@ -18314,8 +18359,52 @@ var TableRoom = class {
     return e.s.hand?.vote ? e.s.hand.vote.deadline : e.deadline();
   }
   reschedule() {
-    const times = [this.handDeadline(), this.nextDealAt, this.autoEndAt(), ...this.goingOffline.values()].filter((x) => x !== null);
+    this.checkHost(this.clock.now());
+    const times = [this.handDeadline(), this.nextDealAt, this.autoEndAt(), this.hostHandoverAt, this.nextSilentCheck(), ...this.goingOffline.values()].filter((x) => x !== null);
     this.clock.schedule(times.length ? Math.min(...times) : null);
+  }
+  /**
+   * A host whose phone died would leave the table with nobody able to deal, pause or end the game. After
+   * hostHandoverMs gone, hosting passes to a player who is here (the old host does not get it back).
+   */
+  checkHost(now) {
+    const e = this.engine;
+    const away = !!e && e.s.phase !== "ended" && !!this.host && !this.connsOf(this.host).length;
+    if (!away) {
+      this.hostHandoverAt = null;
+      return;
+    }
+    if (this.hostHandoverAt === null) {
+      this.hostHandoverAt = now + this.opt.hostHandoverMs;
+      return;
+    }
+    if (now < this.hostHandoverAt) return;
+    const next = e.s.players.find((p) => p.id !== this.host && !p.leaving && this.connsOf(p.id).length);
+    if (!next) {
+      this.hostHandoverAt = now + this.opt.hostHandoverMs;
+      return;
+    }
+    this.hostHandoverAt = null;
+    this.host = next.id;
+    this.announce();
+  }
+  /** A change outside the rules engine (who hosts): numbered like any other update so phones keep in step. */
+  announce() {
+    this.seq++;
+    this.recent.push({ seq: this.seq, events: [] });
+    if (this.recent.length > this.opt.keepUpdates) this.recent.shift();
+    const at = this.clock.now();
+    for (const [c, st] of this.conns) if (st.hello) this.send(c, { t: "update", seq: this.seq, events: [], view: this.view(st.pid), host: this.host, at });
+    this.persist();
+  }
+  /** When the quietest socket would count as vanished (see onWake). */
+  nextSilentCheck() {
+    let at = null;
+    for (const st of this.conns.values()) {
+      const t = st.lastSeen + (st.hello ? this.opt.silentCloseMs : this.opt.helloWithinMs);
+      if (at === null || t < at) at = t;
+    }
+    return at;
   }
   /** Notice when the last player leaves, or someone comes back. */
   trackEmpty() {
@@ -18353,6 +18442,10 @@ var TableRoom = class {
     if (!this.store.league || !this.game || this.game.ended) return;
     this.game.ended = true;
     const e = this.engine;
+    if (e.s.handNo === 0) {
+      this.persist();
+      return;
+    }
     const everyone = e.s.players.concat(e.s.departed ?? []);
     const seen = /* @__PURE__ */ new Set();
     const players = [];
@@ -18366,13 +18459,14 @@ var TableRoom = class {
   }
   /** Two players called Riya at one table: the second becomes "Riya 2" (names are cut to 14 at the table). */
   uniqueName(name) {
-    const taken = new Set(this.engine.s.players.map((p) => p.name.toLowerCase()));
-    const base = Engine.cleanName(name);
-    if (!taken.has(base.toLowerCase())) return base;
+    const key = (n) => n.normalize("NFKC").toLowerCase();
+    const taken = new Set(this.engine.s.players.map((p) => key(p.name)));
+    const base = Engine.cleanName(name.normalize("NFKC").replace(/[\p{C}]/gu, "").replace(/\s+/g, " "));
+    if (!taken.has(key(base))) return base;
     for (let n = 2; ; n++) {
       const tag = ` ${n}`;
       const candidate = base.slice(0, 14 - tag.length).trimEnd() + tag;
-      if (!taken.has(candidate.toLowerCase())) return candidate;
+      if (!taken.has(key(candidate))) return candidate;
     }
   }
   pickHost(not) {
@@ -18381,7 +18475,9 @@ var TableRoom = class {
   }
   // ---------------- doors out ----------------
   view(pid) {
-    return this.engine.viewFor(pid);
+    const v = this.engine.viewFor(pid);
+    if (v.hand) v.hand = { ...v.hand, proof: null };
+    return v;
   }
   welcome(conn, pid, lastSeq) {
     const missed = lastSeq > 0 && lastSeq < this.seq && this.recent[0] && this.recent[0].seq <= lastSeq + 1 ? this.recent.filter((u) => u.seq > lastSeq).flatMap((u) => u.events) : void 0;
@@ -18478,7 +18574,7 @@ var TableRoom = class {
    * sockets) are handed back with the seat they had said hello for.
    */
   adopt(conn, pid) {
-    this.conns.set(conn, { pid, hello: true, spectator: pid === null, windowStart: this.clock.now(), count: 0, lastReact: 0 });
+    this.conns.set(conn, { pid, hello: true, spectator: pid === null, windowStart: this.clock.now(), count: 0, lastReact: 0, lastSeen: this.clock.now() });
   }
   /** Call once after a restore (and any adopt calls): players with no connection are shown as gone. */
   settleAfterRestart() {
@@ -18649,6 +18745,10 @@ var VERSION = (() => {
 var HELLO_WITHIN_MS = 15e3;
 var IDLE_EVICT_MS = 30 * 6e4;
 var SAVE_EVERY_MS = 100;
+var MAX_SOCKETS = Number(process.env.MAX_SOCKETS ?? 1e3);
+var MAX_PER_ADDRESS = Number(process.env.MAX_PER_ADDRESS ?? 40);
+var MAX_ECHO_PER_ROOM = 20;
+var perAddress = /* @__PURE__ */ new Map();
 mkdirSync(join(DATA, "tables"), { recursive: true });
 mkdirSync(join(DATA, "hands"), { recursive: true });
 mkdirSync(join(DATA, "outbox"), { recursive: true });
@@ -18807,7 +18907,18 @@ server.on("upgrade", (req, socket, head) => {
     return;
   }
   const [, kind, code] = m;
+  const addr = String(req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "").split(",").pop().trim();
+  if (wss.clients.size >= MAX_SOCKETS || (perAddress.get(addr) ?? 0) >= MAX_PER_ADDRESS || kind === "echo" && (echo.get(code)?.size ?? 0) >= MAX_ECHO_PER_ROOM) {
+    socket.end("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n");
+    return;
+  }
   wss.handleUpgrade(req, socket, head, (ws) => {
+    perAddress.set(addr, (perAddress.get(addr) ?? 0) + 1);
+    ws.on("close", () => {
+      const n = (perAddress.get(addr) ?? 1) - 1;
+      if (n > 0) perAddress.set(addr, n);
+      else perAddress.delete(addr);
+    });
     alive.set(ws, true);
     ws.on("pong", () => alive.set(ws, true));
     if (kind === "echo") return echoRoom(ws, code);
@@ -18829,7 +18940,12 @@ server.on("upgrade", (req, socket, head) => {
     ws.on("close", () => {
       clearTimeout(helloTimer);
       l.room.disconnect(conn);
-      if (!l.room.connectionCount) l.idleSince = Date.now();
+      if (l.room.connectionCount) return;
+      l.idleSince = Date.now();
+      if (!l.room.engine && live.get(code) === l) {
+        if (l.timer) clearTimeout(l.timer);
+        live.delete(code);
+      }
     });
   });
 });
