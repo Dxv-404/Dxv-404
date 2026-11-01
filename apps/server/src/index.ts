@@ -26,13 +26,14 @@ const LATENCY_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"
   const probe = async (url) => { const t = []; for (let i = 0; i < 8; i++) { const t0 = performance.now(); try { await fetch(url + '?i=' + i + '&r=' + Math.random(), { mode: 'no-cors', cache: 'no-store' }); } catch (e) { return null; } t.push(performance.now() - t0); } return stats(t.slice(1)); };
   const mumbai = await probe('https://dynamodb.ap-south-1.amazonaws.com/ping');
   const singapore = await probe('https://dynamodb.ap-southeast-1.amazonaws.com/ping');
+  const hyderabad = await probe('https://dynamodb.ap-south-2.amazonaws.com/ping');
   const ua = navigator.userAgent;
   const browser = /OPR|Opera/.test(ua) ? 'Opera' : /SamsungBrowser/.test(ua) ? 'Samsung Internet' : /Edg/.test(ua) ? 'Edge' : /CriOS|Chrome/.test(ua) ? 'Chrome' : /Safari/.test(ua) ? 'Safari' : 'other';
   const net = navigator.connection ? navigator.connection.effectiveType + (navigator.connection.rtt ? ' rtt' + navigator.connection.rtt : '') : '?';
-  const res = { edge: edge.colo, country: edge.country, table: doColo, http: stats(http), live: stats(live), mumbai, singapore, browser, net, ua: ua.slice(0, 160) };
+  const res = { edge: edge.colo, country: edge.country, table: doColo, http: stats(http), live: stats(live), mumbai, hyderabad, singapore, browser, net, ua: ua.slice(0, 160) };
   out.innerHTML = 'Your phone reaches Cloudflare at <b>' + res.edge + '</b>: median <b>' + res.http.p50 + ' ms</b><br>'
     + 'Table server runs at <b>' + res.table + '</b>: live median <b>' + res.live.p50 + ' ms</b>, 95th percentile <b>' + res.live.p95 + ' ms</b><br>'
-    + 'For comparison, a server in Mumbai: median <b>' + (mumbai ? mumbai.p50 + ' ms' : 'unreachable') + '</b>; Singapore: <b>' + (singapore ? singapore.p50 + ' ms' : 'unreachable') + '</b><br>'
+    + 'For comparison, a server in Mumbai: median <b>' + (mumbai ? mumbai.p50 + ' ms' : 'unreachable') + '</b>; Hyderabad: <b>' + (hyderabad ? hyderabad.p50 + ' ms' : 'unreachable') + '</b>; Singapore: <b>' + (singapore ? singapore.p50 + ' ms' : 'unreachable') + '</b><br>'
     + 'Browser: ' + browser + ', network: ' + net;
   const text = JSON.stringify(res);
   document.getElementById('raw').textContent = text;
