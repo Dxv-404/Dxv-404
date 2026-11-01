@@ -46,7 +46,7 @@ async function pickServer(): Promise<'oracle' | 'cloudflare'> {
 
 interface Seat { id: string; name: string; token?: string; getTicket?: (fresh: boolean) => Promise<string> }
 /** Who sits: the account (with a table ticket) when this phone is signed in, else a guest seat kept on this phone. */
-async function mySeat(code: string): Promise<Seat> {
+async function mySeat(code: string, sitting = true): Promise<Seat> {
   const me = store.get<{ account: string; name: string }>('tp-me');
   if (me?.account) {
     try {
@@ -63,6 +63,7 @@ async function mySeat(code: string): Promise<Seat> {
   let token = store.get<string>('tp-guest-token');
   if (!token) { token = newSeatToken(); store.set('tp-guest-token', token); }
   let name = localStorage.getItem('tp-name');
+  if (!name && !sitting) name = 'Watcher';
   if (!name) {
     name = (prompt('Your name at the table', '') ?? '').trim().slice(0, 20) || 'Player';
     try { localStorage.setItem('tp-name', name); } catch { /* blocked */ }
@@ -70,22 +71,22 @@ async function mySeat(code: string): Promise<Seat> {
   return { id, name, token };
 }
 
-export function onlineTable(code: string, seat: Seat, settings?: TableSettings): NetTable {
+export function onlineTable(code: string, seat: Seat, settings?: TableSettings, spectate = false): NetTable {
   return new NetTable({
     me: seat.id,
     makeClient: (cb) => new TableClient({
       url: `${serverFor(code)}/table/${code}`, table: code, player: seat.id, name: seat.name,
       ...(seat.token ? { token: seat.token } : {}), ...(seat.getTicket ? { getTicket: seat.getTicket } : {}),
-      ...(settings ? { settings } : {}),
+      ...(settings ? { settings } : {}), ...(spectate ? { spectate: true } : {}),
       open: (u) => new WebSocket(u) as unknown as SocketLike,
       ...cb,
     }),
   });
 }
 
-export async function playOnline(ui: Ui, code: string, settings?: TableSettings, tries = 0): Promise<void> {
-  const seat = await mySeat(code);
-  const net = onlineTable(code, seat, settings);
+export async function playOnline(ui: Ui, code: string, settings?: TableSettings, tries = 0, watch = false): Promise<void> {
+  const seat = await mySeat(code, !watch);
+  const net = onlineTable(code, seat, settings, watch);
   if (settings) {
     // opening a table: if the code happens to be a table that already exists, pick another code
     const off = net.subscribe((_e, v) => {
@@ -93,8 +94,8 @@ export async function playOnline(ui: Ui, code: string, settings?: TableSettings,
       if (v.players.some((p) => p.id !== seat.id) && tries < 3) { net.close(); void playOnline(ui, newCode(ORACLE_FIRST.includes(code[0]!) ? 'oracle' : 'cloudflare'), settings, tries + 1); }
     });
   }
-  store.set('tp-online-last', { code, at: Date.now() });
-  playNet(ui, net, { offline: false, code, onLeave: ui.home });
+  if (!watch) store.set('tp-online-last', { code, at: Date.now() });
+  playNet(ui, net, { offline: false, code, onLeave: ui.home, ...(watch ? { takeSeat: () => void playOnline(ui, code) } : {}) });
 }
 
 /** "Play online": open a table or join one. */
@@ -105,10 +106,10 @@ export function onlineStart(ui: Ui): void {
     el.className = 'screen online';
     const input = h('input', { type: 'text', maxlength: 4, placeholder: 'QK7P', 'aria-label': 'Table code', autocomplete: 'off', autocapitalize: 'characters', class: 'code-input', 'data-testid': 'online-code' }) as HTMLInputElement;
     input.addEventListener('input', () => { input.value = cleanCode(input.value); });
-    const join = () => {
+    const join = (watch = false) => {
       const c = cleanCode(input.value);
       if (!validCode(c)) return toast('A table code is 4 letters and numbers.');
-      void playOnline(ui, c);
+      void playOnline(ui, c, undefined, 0, watch);
     };
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') join(); });
     el.append(
@@ -116,7 +117,8 @@ export function onlineStart(ui: Ui): void {
       recent && h('button', { class: 'btn primary', 'data-testid': 'online-back', onclick: () => void playOnline(ui, recent) }, `Back to table ${recent}`, h('small', {}, 'Your seat and chips are kept')),
       h('button', { class: 'btn ' + (recent ? 'secondary' : 'primary'), 'data-testid': 'online-host', onclick: () => hostOnline(ui) }, 'Open a table', h('small', {}, 'Friends join with a code or a link')),
       h('section', { class: 'block' }, h('h2', {}, 'Join a table'), h('label', { class: 'field' }, h('span', {}, 'Table code'), input),
-        h('button', { class: 'btn secondary', 'data-testid': 'online-join', onclick: join }, 'Join')));
+        h('div', { class: 'two' }, h('button', { class: 'btn secondary', 'data-testid': 'online-join', onclick: () => join() }, 'Join'),
+          h('button', { class: 'btn ghost', 'data-testid': 'online-watch', onclick: () => join(true) }, 'Just watch'))));
   });
 }
 
@@ -157,12 +159,13 @@ function hostOnline(ui: Ui): void {
 
 /** A shared link (#/t/CODE) opens the table. */
 export function routeOnline(ui: Ui): boolean {
-  const m = /^#\/t\/([A-Za-z0-9]{4})$/.exec(location.hash);
+  const m = /^#\/(t|w)\/([A-Za-z0-9]{4})(\?watch)?$/.exec(location.hash);
   if (!m) return false;
-  const code = cleanCode(m[1]!);
+  const code = cleanCode(m[2]!);
   history.replaceState(null, '', location.pathname);
-  if (validCode(code)) void playOnline(ui, code);
+  if (validCode(code)) void playOnline(ui, code, undefined, 0, m[1] === 'w' || !!m[3]);
   return validCode(code);
 }
 
 export const shareLink = (code: string): string => `${location.origin}${location.pathname}#/t/${code}`;
+export const watchLink = (code: string): string => `${location.origin}${location.pathname}#/w/${code}`;

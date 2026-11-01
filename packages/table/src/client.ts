@@ -120,6 +120,14 @@ export class TableClient {
   /** The server's clock, as best this phone knows it (for turn timers). */
   serverNow(): number { return this.t.now() + this.clockOffset; }
 
+  private hidden = false;
+  /** The app went to the background or came back (the table pushes "Your turn" only while it is hidden). */
+  background(hidden: boolean): void {
+    if (hidden === this.hidden) return;
+    this.hidden = hidden;
+    if (this.status === 'live') this.raw({ t: 'bg', hidden });
+  }
+
   react(reaction: Extract<ClientMessage, { t: 'react' }>['reaction']): void {
     this.raw({ t: 'react', reaction });
   }
@@ -199,6 +207,7 @@ export class TableClient {
         this.seq = m.seq; this.you = m.you; this.host = m.host;
         this.view = m.view as unknown as View;
         this.clockOffset = m.serverTime - this.t.now();
+        if (this.hidden) this.raw({ t: 'bg', hidden: true });
         this.setStatus('live');
         this.o.onView?.(this.view, (m.missed ?? []) as unknown as GameEvent[]);
         for (const o of this.outbox.values()) o.sentAt = -Infinity; // resend everything still unanswered

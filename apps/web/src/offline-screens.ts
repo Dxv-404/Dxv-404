@@ -157,7 +157,7 @@ export async function hostPhoneTable(ui: Ui): Promise<void> {
 }
 
 // ---------------- the table screen for network tables ----------------
-export function playNet(ui: Ui, net: NetTable, o: { offline: boolean; me?: Me; code?: string; onLeave?: () => void }): void {
+export function playNet(ui: Ui, net: NetTable, o: { offline: boolean; me?: Me; code?: string; onLeave?: () => void; takeSeat?: () => void }): void {
   document.body.dataset.playing = '1';
   ui.screen((el) => {
     let lostSince: number | null = null;
@@ -168,6 +168,11 @@ export function playNet(ui: Ui, net: NetTable, o: { offline: boolean; me?: Me; c
       info: () => ui.openSheet(infoContent(), { label: 'Poker hands', tall: true }),
       offline: o.offline,
     });
+    if (o.takeSeat) {
+      // watching: the public view only (the server never sends anyone's cards); a seat can be asked for any time
+      el.querySelector('.tp-over')?.append(h('div', { class: 'tp-watching', role: 'status', 'data-testid': 'watching' },
+        h('span', {}, 'Watching'), h('button', { class: 'btn small primary', 'data-testid': 'take-seat', onclick: () => o.takeSeat!() }, 'Take a seat')));
+    }
     let ended = false;
     const offView = net.subscribe((_events, v) => { if (v.phase === 'ended' && !ended) { ended = true; standings(ui, v, o); } });
     const offErr = net.onError((code, m) => {
@@ -238,7 +243,8 @@ function tableMenu(ui: Ui, net: NetTable, o: { offline: boolean; code?: string; 
       h('p', { class: 'invite-link', 'data-testid': 'table-link' }, link),
       h('div', { class: 'two' },
         h('button', { class: 'btn ghost small', onclick: () => navigator.clipboard?.writeText(link).then(() => toast('Link copied'), () => toast('Select the link and copy it')) }, 'Copy link'),
-        h('a', { class: 'btn ghost small', href: `https://wa.me/?text=${encodeURIComponent(`Poker table ${o.code}: ${link}`)}`, target: '_blank', rel: 'noopener' }, 'Send on WhatsApp'))));
+        h('a', { class: 'btn ghost small', href: `https://wa.me/?text=${encodeURIComponent(`Poker table ${o.code}: ${link}`)}`, target: '_blank', rel: 'noopener' }, 'Send on WhatsApp')),
+      h('button', { class: 'btn ghost small', 'data-testid': 'copy-watch-link', onclick: () => { const w = `${location.origin}${location.pathname}#/w/${o.code}`; navigator.clipboard?.writeText(w).then(() => toast('Watch link copied'), () => toast(w, 8000)); } }, 'Copy a link to watch')));
   }
   const themeRow = h('div', { class: 'theme-grid', role: 'radiogroup', 'aria-label': 'Table theme' }, ...THEME_KEYS.map((k) => h('button', {
     role: 'radio', 'aria-checked': currentTheme() === k ? 'true' : 'false', class: 'theme-pick' + (currentTheme() === k ? ' on' : ''), 'data-theme': k,
@@ -248,6 +254,12 @@ function tableMenu(ui: Ui, net: NetTable, o: { offline: boolean; code?: string; 
   body.append(h('section', { class: 'block' }, h('div', { class: 'menu-actions' },
     meP && h('button', { class: 'btn ghost', onclick: () => { net.sitOut(!meP.sittingOut); close(); } }, meP.sittingOut ? 'Sit back in' : 'Sit out from next hand'),
     meP && v.cfg.rebuys && meP.stack < v.cfg.startStack && v.phase !== 'hand' && h('button', { class: 'btn ghost', onclick: () => { net.rebuy(); close(); } }, `Top up to ${fmt(v.cfg.startStack)}`))),
+  h('section', { class: 'block' }, h('button', { class: 'btn ghost', 'data-testid': 'leave-table', onclick: () => {
+    if (meP && !confirm('Leave the table? You sit out; your seat and chips are kept if you come back.')) return;
+    if (meP && !meP.sittingOut) net.sitOut(true);
+    close();
+    setTimeout(() => (o.onLeave ? o.onLeave() : ui.home()), 150);
+  } }, meP ? 'Leave the table' : 'Stop watching')),
   S.isHost && h('section', { class: 'block' }, h('button', { class: 'btn danger', 'data-testid': 'end-game', onclick: () => { if (confirm('End the game and show the final standings?')) { net.host('end'); close(); } } }, 'End game')));
   void o;
 }

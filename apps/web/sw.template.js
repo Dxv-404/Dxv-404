@@ -19,3 +19,25 @@ self.addEventListener('fetch', (e) => {
     }).catch(() => caches.match('./index.html')))
   );
 });
+
+// Push notifications (your turn while the app is in the background, a crew table started, approvals,
+// trophies). A push is a backup: while the table is on screen, nothing is shown.
+self.addEventListener('push', (e) => {
+  let m = {};
+  try { m = e.data ? e.data.json() : {}; } catch { /* not ours */ }
+  if (!m.title) return;
+  // (the table server pushes a turn only while the app is not on screen; every push must show something)
+  e.waitUntil(self.registration.showNotification(m.title, {
+    body: m.body || '', tag: m.tag || 'tp', renotify: true, data: { url: m.url || './' },
+    icon: 'assets/icon-192.png', badge: 'assets/icon-192.png', vibrate: [80, 60, 80],
+  }));
+});
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = new URL(String((e.notification.data && e.notification.data.url) || './').replace(/^\//, './'), self.registration.scope).href;
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+    const open = list.find((c) => c.url.startsWith(self.registration.scope));
+    if (open) return open.focus().then((c) => (c && 'navigate' in c ? c.navigate(url) : c));
+    return self.clients.openWindow(url);
+  }));
+});

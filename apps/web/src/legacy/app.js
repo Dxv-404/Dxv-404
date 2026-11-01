@@ -10,6 +10,7 @@ import { accountScreens } from './account-ui.js';
 import { offlineStart, hostPhoneHome, hostPhoneTable } from '../offline-screens.ts';
 import { onHostPhonePage } from '../offline.ts';
 import { onlineStart, routeOnline } from '../online-screens.ts';
+import { settingsScreen, ageNotice, installErrorReporting, noteScreen } from '../more-screens.ts';
 
 const app = $('#app');
 let host = null;
@@ -57,6 +58,7 @@ function screen(build) {
   const el = h('main', { class: 'screen' });
   app.append(el);
   const cleanup = build(el);
+  noteScreen(el.className.replace(/^screen\s*/, '') || 'screen');
   current = typeof cleanup === 'function' ? cleanup : null;
   window.scrollTo(0, 0);
 }
@@ -79,7 +81,8 @@ function home() {
         h('button', { class: 'btn secondary', 'data-testid': 'play-offline', onclick: () => offlineStart(ui) }, 'Play offline', h('small', {}, 'No internet: one phone runs the host app on its hotspot')),
         h('button', { class: 'btn ghost', onclick: () => setup() }, 'Host a new table', h('small', {}, 'Without the host app: phones pair by QR code')),
         h('button', { class: 'btn ghost', onclick: () => join() }, gsaved ? 'Join or rejoin a table' : 'Join a table', h('small', {}, gsaved ? `Last time you were ${gsaved.name}` : 'Scan the host’s QR code')),
-        h('button', { class: 'btn ghost', 'data-testid': 'open-profile', onclick: () => accounts.profile() }, 'Profile and crews', h('small', {}, 'Recovery code, crews, invites'))),
+        h('button', { class: 'btn ghost', 'data-testid': 'open-profile', onclick: () => accounts.profile() }, 'Profile and crews', h('small', {}, 'Recovery code, crews, invites')),
+        h('button', { class: 'btn ghost', 'data-testid': 'open-settings', onclick: () => settingsScreen(ui) }, 'Settings', h('small', {}, 'Theme, sounds, motion, notifications, Report a problem'))),
       h('details', { class: 'howto' },
         h('summary', {}, 'How phones connect without WiFi'),
         h('ol', {},
@@ -454,4 +457,5 @@ if (onHostPhonePage()) {
 if (!window.RTCPeerConnection || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
   app.replaceChildren(h('main', { class: 'screen home' }, h('div', { class: 'home-hero' }, h('h1', {}, 'Train Poker'),
     h('p', { class: 'tagline' }, 'This browser can’t connect phones or use the camera. Open train-poker.vercel.app in Chrome (or Safari on iPhone).'))));
-} else if (!routeOnline(ui) && !accounts.route()) home();
+} else ageNotice(ui, () => { if (!routeOnline(ui) && !accounts.route()) home(); });
+installErrorReporting();

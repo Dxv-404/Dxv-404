@@ -39,7 +39,14 @@ export class NetTable {
       onReact: (f, r) => { for (const fn of this.reacts) fn(f, r); },
       onAck: (_id, ok, error) => { if (!ok && error) for (const fn of this.errors) fn('refused', error); },
     });
+    // the table pushes "Your turn" only while the app is not on screen
+    if (typeof document !== 'undefined') {
+      this.onVis = () => this.client.background(document.visibilityState === 'hidden');
+      document.addEventListener('visibilitychange', this.onVis);
+      this.onVis();
+    }
   }
+  private onVis: (() => void) | null = null;
 
   private shape(v: View): ScreenView {
     const hostId = this.client.host;
@@ -77,5 +84,5 @@ export class NetTable {
     this.client.send({ t: 'host', cmd, ...extra });
   }
   react(reaction: string): void { this.client.react(reaction as never); }
-  close(): void { this.client.close(); }
+  close(): void { if (this.onVis) document.removeEventListener('visibilitychange', this.onVis); this.client.close(); }
 }

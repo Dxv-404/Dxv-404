@@ -51,6 +51,8 @@ export async function newPhone(browser: Browser, name: string, model: PhoneModel
     ...(model.ua ? { userAgent: model.ua } : {}),
     permissions: ['camera'],
   });
+  // the first-open 18+ notice is tested on its own (more.spec.ts); every other phone has seen it
+  await ctx.addInitScript(() => { try { if (!sessionStorage.getItem('tp-test-fresh') && !localStorage.getItem('tp-18')) localStorage.setItem('tp-18', '1'); } catch { /* blocked */ } });
   const page = await ctx.newPage();
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(`[${name}] page error: ${e.message}`));

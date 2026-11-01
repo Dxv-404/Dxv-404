@@ -1,7 +1,7 @@
 // The Cloudflare table server (the backup to the Oracle server in Hyderabad): one Durable Object per table.
 import { DurableObject } from 'cloudflare:workers';
-import { PROTOCOL_VERSION } from '@tp/protocol';
-import { TableRoom, Recorder, tokenSigner, supabaseSend, checkOfflineUpload, MAX_UPLOAD_BYTES, type Conn, type Persisted, type OutboxItem } from '@tp/table';
+import { PROTOCOL_VERSION, VAPID_PUBLIC_KEY, PUSH_SUBJECT } from '@tp/protocol';
+import { TableRoom, Recorder, tokenSigner, supabaseSend, supabaseRpc, deliver, drainOutbox, verifySigned, checkOfflineUpload, MAX_UPLOAD_BYTES, type Conn, type Persisted, type OutboxItem, type PushDeps, type PushRequest } from '@tp/table';
 import { cachedTicketChecker, checkTicket, SUPABASE_KEY, SUPABASE_URL } from '@tp/account/ticket';
 
 // signed-in phones show a ticket; the accounts database says whose it is (cached while this isolate lives)
@@ -9,7 +9,21 @@ const identify = cachedTicketChecker();
 import { LATENCY_PAGE } from './latency-page';
 import { TAP_PAGE } from './tap-page';
 
-export interface Env { TABLES: DurableObjectNamespace<Table>; ECHO: DurableObjectNamespace<Echo>; RECORDER_TOKEN?: string; BACKUPS?: KVNamespace }
+export interface Env { TABLES: DurableObjectNamespace<Table>; ECHO: DurableObjectNamespace<Echo>; RECORDER_TOKEN?: string; VAPID_PRIVATE?: string; BACKUPS?: KVNamespace }
+
+/** Push sending needs both the recorder token (to ask the database who) and the push key. */
+function pushDeps(env: Env): PushDeps | null {
+  if (!env.RECORDER_TOKEN || !env.VAPID_PRIVATE) return null;
+  return { sign: tokenSigner(env.RECORDER_TOKEN), rpc: supabaseRpc(SUPABASE_URL, SUPABASE_KEY), vapid: { publicKey: VAPID_PUBLIC_KEY, privateKey: env.VAPID_PRIVATE, subject: PUSH_SUBJECT }, log: (m) => console.log(m) };
+}
+const isPush = (p: unknown): p is PushRequest => {
+  const o = p as PushRequest;
+  return !!o && (o.kind === 'turn' || o.kind === 'crewTable') && typeof o.title === 'string' && o.title.length <= 60 && typeof o.body === 'string' && o.body.length <= 200
+    && typeof o.url === 'string' && /^\/#\/t\/[A-Z0-9]{4}$/.test(o.url) && typeof o.tag === 'string' && o.tag.length <= 40
+    && (o.accounts === undefined || (Array.isArray(o.accounts) && o.accounts.length <= 20 && o.accounts.every((x) => typeof x === 'string')))
+    && (o.except === undefined || (Array.isArray(o.except) && o.except.length <= 60 && o.except.every((x) => typeof x === 'string')))
+    && (o.crew === undefined || (typeof o.crew === 'string' && /^[0-9a-f-]{36}$/.test(o.crew)));
+};
 
 type Region = 'apac' | 'weur' | 'eeur' | 'wnam' | 'enam' | 'sam' | 'oc' | 'afr' | 'me';
 const REGIONS: Region[] = ['apac', 'weur', 'eeur', 'wnam', 'enam', 'sam', 'oc', 'afr', 'me'];
@@ -72,7 +86,10 @@ export class Table extends DurableObject<Env> {
         if (!this.recorder) return;
         this.ctx.waitUntil(this.recorder.add(kind === 'hand' ? 'record_hand' : 'record_game_end', id, payload).finally(() => this.setAlarm()));
       },
-    }, saved, { identify, server: 'cloudflare' });
+    }, saved, {
+      identify, server: 'cloudflare',
+      push: (p) => { const d = pushDeps(this.env); if (d) this.ctx.waitUntil(deliver(p, d).catch((e: unknown) => console.error('push failed', e))); },
+    });
     this.room = room;
     for (const ws of this.ctx.getWebSockets()) {
       const a = ws.deserializeAttachment() as Attachment | null;
@@ -186,6 +203,20 @@ export default {
       const cf = (request as Request & { cf?: { colo?: string; country?: string } }).cf;
       return Response.json({ ok: true, protocol: PROTOCOL_VERSION, colo: cf?.colo, country: cf?.country }, { headers: cors });
     }
+    // the Oracle server hands its pushes here (the push key is kept only on Cloudflare)
+    if (url.pathname === '/push/send' && request.method === 'POST') {
+      const d = pushDeps(env);
+      if (!d || !env.RECORDER_TOKEN) return new Response('push is not set up', { status: 503 });
+      const raw = await request.text();
+      if (raw.length > 4000) return new Response('too big', { status: 413 });
+      let msg: { body?: string; sig?: string };
+      try { msg = JSON.parse(raw) as typeof msg; } catch { return new Response('bad', { status: 400 }); }
+      if (typeof msg.body !== 'string' || typeof msg.sig !== 'string' || !(await verifySigned(env.RECORDER_TOKEN, msg.body, msg.sig))) return new Response('not a table server', { status: 403 });
+      let p: unknown;
+      try { p = JSON.parse(msg.body); } catch { return new Response('bad', { status: 400 }); }
+      if (!isPush(p)) return new Response('bad push', { status: 400 });
+      return Response.json(await deliver(p, d));
+    }
     // nights played offline go through one table object (it has a recorder and an outbox)
     if (url.pathname === '/offline/upload' && request.method === 'POST') return env.TABLES.get(env.TABLES.idFromName('__offline_uploads__'), { locationHint: 'apac' }).fetch(request);
     const echo = url.pathname.match(/^\/echo\/([A-Z0-9]{4,12})$/);
@@ -209,7 +240,13 @@ export default {
   // Daily keep-alive: a free Supabase project pauses after 7 days with no activity, and accounts would
   // stop working until someone restored it by hand. One tiny database call a day prevents that.
   // It also closes seasons whose end has passed (trophies for the winner and the iron chair).
-  async scheduled(_event, env, ctx): Promise<void> {
+  async scheduled(event, env, ctx): Promise<void> {
+    // every few minutes: pushes the database queued (approved into a crew, trophies, a season's end)
+    if (event.cron !== '23 21 * * *') {
+      const d = pushDeps(env);
+      if (d) ctx.waitUntil(drainOutbox(d).then((r) => { if (r.sent + r.gone + r.failed) console.log(`push outbox: ${JSON.stringify(r)}`); }, (e: unknown) => console.error('push outbox failed', e)));
+      return;
+    }
     ctx.waitUntil(checkTicket('keep-alive', 'KEEP').then(
       () => console.log('keep-alive: accounts database answered'),
       (e: unknown) => console.error('keep-alive failed', e),

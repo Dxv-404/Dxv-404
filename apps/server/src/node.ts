@@ -9,7 +9,7 @@ import { gzipSync } from 'node:zlib';
 import { dirname, join } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { PROTOCOL_VERSION } from '@tp/protocol';
-import { TableRoom, Recorder, tokenSigner, supabaseSend, checkOfflineUpload, MAX_UPLOAD_BYTES, type Conn, type Persisted, type OutboxItem } from '@tp/table';
+import { TableRoom, Recorder, tokenSigner, supabaseSend, checkOfflineUpload, MAX_UPLOAD_BYTES, type Conn, type Persisted, type OutboxItem, type PushRequest } from '@tp/table';
 import { cachedTicketChecker, SUPABASE_KEY, SUPABASE_URL } from '@tp/account/ticket';
 import { LATENCY_PAGE } from './latency-page';
 import { TAP_PAGE } from './tap-page';
@@ -60,6 +60,16 @@ void recorderKey().then(async (key) => {
   void recorder.flush();
   setInterval(() => { void recorder?.flush(); }, 30_000).unref();
 });
+
+// ---------------- push notifications ----------------
+// The push key is kept only on Cloudflare: this server hands each push there, signed with the recorder key.
+const PUSH_RELAY = process.env.PUSH_RELAY ?? 'https://train-poker-tables.apins-subdomain.workers.dev/push/send';
+function handPush(p: PushRequest): void {
+  if (!signBody || !PUSH_RELAY) return;
+  const body = JSON.stringify(p);
+  void signBody(body).then((sig) => fetch(PUSH_RELAY, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ body, sig }), signal: AbortSignal.timeout(10_000) }))
+    .then((r) => { if (!r.ok) console.log(`push relay: ${r.status}`); }, (e: unknown) => console.log(`push relay failed: ${String(e)}`));
+}
 
 // ---------------- nightly backup ----------------
 // At 03:00 India time: the whole accounts database, gzipped, kept here (readable by this server only) for 30 nights.
@@ -132,7 +142,7 @@ function getRoom(code: string): Live {
       if (recorder) void recorder.add(fn, id, payload);
       else void outboxStore.put({ id, fn, body: JSON.stringify(payload), tries: 0, nextAt: 0 });
     },
-  }, saved, { identify, server: 'oracle', ...(process.env.HAND_PAUSE_MS ? { handPauseMs: Number(process.env.HAND_PAUSE_MS) } : {}) });
+  }, saved, { identify, server: 'oracle', push: handPush, ...(process.env.HAND_PAUSE_MS ? { handPauseMs: Number(process.env.HAND_PAUSE_MS) } : {}) });
   l.room.settleAfterRestart(); // nobody is connected to a table just loaded from disk
   live.set(code, l);
   return l;

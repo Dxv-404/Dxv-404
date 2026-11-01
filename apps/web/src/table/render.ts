@@ -151,7 +151,7 @@ export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: num
   const netCls = o.net === 'good' ? '' : o.net === 'weak' ? ' weak' : ' lost';
   const top = `<header class="top"><button class="ib" data-act="menu" aria-label="Table menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>`
     + `<div class="hm"><b>${esc(title)}</b><small>${sub}</small></div><span class="sp"></span>`
-    + `<span class="net${netCls}" aria-label="Connection ${o.net}"><i></i><i></i><i></i></span>`
+    + `<span class="net${netCls}" role="img" aria-label="Connection ${o.net}"><i></i><i></i><i></i></span>`
     + (o.code ? `<span class="pill code">${esc(o.code)}</span>` : '') + `<button class="ib info" data-act="info" aria-label="Hand rankings">i</button></header>`;
 
   // me

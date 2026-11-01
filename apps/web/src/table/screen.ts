@@ -32,7 +32,7 @@ export function loadDesignCss(): void {
 }
 
 const SAY: Record<string, string> = { fold: 'folds', check: 'checks', call: 'calls', bet: 'bets', raise: 'raises to', allin: 'is all-in' };
-const reduceMotion = (): boolean => matchMedia('(prefers-reduced-motion: reduce)').matches;
+const reduceMotion = (): boolean => settings.motion === 'off' || matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 export class TableScreen {
   private root: HTMLElement;
@@ -98,8 +98,16 @@ export class TableScreen {
 
   say(text: string): void {
     this.bubble = text;
+    this.announce(text);
     if (this.bubbleTimer) clearTimeout(this.bubbleTimer);
     this.bubbleTimer = setTimeout(() => { this.bubble = null; this.draw(); }, 3600);
+  }
+
+  /** For screen readers (the bubble is drawn only where the theme has a dealer). */
+  private announce(text: string): void {
+    let live = this.overlay.querySelector('.tp-sr') as HTMLElement | null;
+    if (!live) { live = document.createElement('div'); live.className = 'tp-sr'; live.setAttribute('aria-live', 'polite'); this.overlay.append(live); }
+    live.textContent = text;
   }
 
   update(events: GameEvent[], v: ScreenView): void {
@@ -117,7 +125,7 @@ export class TableScreen {
     }
     // my turn: a buzz once per turn
     const turnKey = v.hand?.toAct === v.me && v.me ? `${v.handNo}:${v.hand?.street}:${v.hand?.currentBet}` : '';
-    if (turnKey && turnKey !== this.lastTurnFor) { buzz?.([30, 40, 30]); sfx.turn?.(); }
+    if (turnKey && turnKey !== this.lastTurnFor) { buzz?.([30, 40, 30]); sfx.turn?.(); this.announce('Your turn.'); }
     this.lastTurnFor = turnKey;
     if (prev?.hand?.toAct === v.me && v.hand?.toAct !== v.me) this.closeRaise();
     this.draw();
@@ -128,7 +136,7 @@ export class TableScreen {
     const v = this.view;
     if (!v) { this.stage.innerHTML = '<div class="tp-wait" role="status">Connecting…</div>'; return; }
     const W = this.root.clientWidth || window.innerWidth, H = this.root.clientHeight || window.innerHeight;
-    const frame = renderTable(v, currentTheme(), W, H, { peek: this.peek, bubble: this.bubble, code: this.o.code, net: this.net });
+    const frame = renderTable(v, currentTheme(), W, H, { peek: this.peek || !settings.holdToPeek, bubble: this.bubble, code: this.o.code, net: this.net });
     if (frame.html === this.frame?.html) return; // nothing changed on screen
     const prev = this.frame;
     this.frame = frame;
@@ -144,6 +152,9 @@ export class TableScreen {
     this.stage.innerHTML = frame.html;
     const tp = this.stage.firstElementChild as HTMLElement;
     if (reduceMotion()) tp.classList.add('still');
+    else if (settings.motion === 'calm') tp.classList.add('calm');
+    tp.classList.toggle('four', !!settings.fourColor);
+    tp.classList.toggle('bigtext', !!settings.largeText);
   }
 
   private drawTimer(): void {
@@ -219,7 +230,7 @@ export class TableScreen {
     const bbs = total / Math.max(1, v.level.bb);
     const rare = !!best && /straight flush|royal|four of a kind/i.test(best);
     const tier = rare || bbs >= 120 ? 4 : bbs >= 60 ? 3 : bbs >= 25 ? 2 : 1;
-    if (tier < 2) return;
+    if (tier < 2 || settings.winFx === 'off' || (settings.winFx === 'big' && tier < 3)) return;
     const banner = document.createElement('div');
     banner.className = `tp-tier t${tier}`;
     banner.setAttribute('role', 'status');
@@ -270,6 +281,5 @@ export class TableScreen {
     if (this.bubbleTimer) clearTimeout(this.bubbleTimer);
     for (const f of this.off) f();
     this.root.replaceChildren();
-    void settings;
   }
 }

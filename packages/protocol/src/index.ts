@@ -73,6 +73,8 @@ export const ClientMessage = z.discriminatedUnion('t', [
     sb: z.number().int().positive().optional(), bb: z.number().int().positive().optional(), ante: z.number().int().nonnegative().optional(),
   }),
   z.object({ t: z.literal('ping'), c: z.number() }),
+  /** The app went to the background (or came back): a turn push is sent only while it is not on screen. */
+  z.object({ t: z.literal('bg'), hidden: z.boolean() }),
 ]);
 export type ClientMessage = z.infer<typeof ClientMessage>;
 
@@ -120,3 +122,7 @@ export const parseServer = (raw: unknown): Parsed<ServerMessage> => parse(Server
 export const versionOk = (v: number): boolean => SUPPORTED_VERSIONS.includes(v);
 
 export const encode = (m: ClientMessage | ServerMessage): string => JSON.stringify(m);
+
+/** The public half of the push key (phones subscribe with it; the private half is a Cloudflare secret). */
+export const VAPID_PUBLIC_KEY = 'BA49ZnpCIbcRzeR-XeKrrAUv0xUgJjm0--bYq490MgYjO2YAV3AYuk5xggcMgWMgNE2yrgAbl4N7GlEjZt034NY';
+export const PUSH_SUBJECT = 'mailto:devkrishna6780@gmail.com';

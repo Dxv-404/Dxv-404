@@ -28,6 +28,8 @@ export type RecoverResult = { ok: true; profile: Profile } | { ok: false; reason
 /** Where the login is kept: browser localStorage, or anything with the same three methods. */
 export interface KeyStore { getItem(k: string): string | null; setItem(k: string, v: string): void; removeItem(k: string): void }
 
+export interface PushPrefs { turn?: boolean; crewTable?: boolean; crew?: boolean; trophies?: boolean }
+
 export class AccountError extends Error {
   constructor(message: string, public code?: string) { super(message); }
 }
@@ -175,6 +177,13 @@ export class Account {
   confirmOfflineGame(gameId: string): Promise<'ended' | 'pending'> { return this.rpc('confirm_offline_game', { p_game: gameId }); }
   /** "That wasn't me": my seat in an offline game becomes a guest's. */
   disputeOfflineSeat(gameId: string): Promise<void> { return this.rpc('dispute_offline_seat', { p_game: gameId }); }
+
+  /** This phone's push subscription (Web Push) and which notifications it wants. */
+  savePush(endpoint: string, p256dh: string, auth: string, prefs: PushPrefs): Promise<void> { return this.rpc('save_push', { p_endpoint: endpoint, p_p256dh: p256dh, p_auth: auth, p_prefs: prefs }); }
+  removePush(endpoint: string): Promise<void> { return this.rpc('remove_push', { p_endpoint: endpoint }); }
+  myPush(endpoint: string): Promise<PushPrefs | null> { return this.rpc('my_push', { p_endpoint: endpoint }); }
+  /** A warning for crew owners and admins (the free database filling up), or null. */
+  serviceNotice(): Promise<string | null> { return this.rpc('service_notice'); }
 
   /** Withdraw every invite link of a crew (admins). */
   revokeInvites(crewId: string): Promise<number> { return this.rpc<number>('revoke_invites', { p_crew: crewId }); }

@@ -60,3 +60,9 @@
 body[data-playing] #info-btn{display:none}
 .tpd{display:contents}
 .tp-fatal{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);width:min(340px,calc(100% - 32px));background:#1c1612;color:#f3ead7;border-radius:16px;padding:18px;display:grid;gap:12px;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+.tp-watching{position:absolute;left:50%;top:max(10px,env(safe-area-inset-top));transform:translateX(-50%);display:flex;gap:10px;align-items:center;background:rgba(20,16,12,.85);color:#f3ead7;border-radius:999px;padding:6px 6px 6px 14px;font-size:14px;z-index:30}
+.tp-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.tp.four{--dia:#2f6fd8;--club:#1e8a4a}
+.tp.calm *{animation-iteration-count:1!important;animation-duration:.25s!important;transition-duration:.15s!important}
+.tp.bigtext .plate,.tp.bigtext .tag,.tp.bigtext .pot,.tp.bigtext .waitline{zoom:1.15}
+.tp.live{touch-action:manipulation}

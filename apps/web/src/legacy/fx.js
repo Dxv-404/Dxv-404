@@ -5,6 +5,12 @@ export const settings = {
   haptics: prefs.haptics ?? true,
   fourColor: prefs.fourColor ?? true,
   holdToPeek: prefs.holdToPeek ?? true,
+  /** 'full' | 'calm' (shorter, no loops) | 'off' (nothing moves; the phone's Reduce motion also turns it off) */
+  motion: prefs.motion ?? 'full',
+  /** 'all' | 'big' (huge pots and rare hands only) | 'off' */
+  winFx: prefs.winFx ?? 'all',
+  /** table labels 115% */
+  largeText: prefs.largeText ?? false,
 };
 export function saveSettings() { try { localStorage.setItem('tp-prefs', JSON.stringify(settings)); } catch {} }
 

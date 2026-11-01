@@ -52,14 +52,21 @@ export interface Persisted {
   /** Seats that belong to signed-in accounts. */
   accountSeats?: PlayerId[];
   /** The league's id for this game, when it began, and whether it is casual. */
-  game?: { id: string; startedAt: string; casual: boolean; bigBlind: number; startStack: number; ended: boolean };
+  game?: { id: string; startedAt: string; casual: boolean; bigBlind: number; startStack: number; ended: boolean; announced?: boolean };
   /** Lowest stack each player had (for the comeback trophy). */
   minStacks?: Record<PlayerId, number>;
   /** Offline: the checkpoint this table was carried on from (phones holding another copy are pointed out). */
   continuedFrom?: string | null;
 }
 
+/** A push notification the server sends for the table (to accounts' phones that allowed it). */
+export interface PushRequest { kind: 'turn' | 'crewTable'; accounts?: string[]; crew?: string; except?: string[]; title: string; body: string; url: string; tag: string }
+
 export interface RoomOptions {
+  /** Send push notifications (online servers only; a backup for phones whose app is in the background). */
+  push?: (p: PushRequest) => void;
+  /** How long a player's turn waits before their phone is pushed (if the app is not on screen). */
+  turnPushMs?: number;
   /** Pause between hands so everyone sees the result. */
   handPauseMs?: number;
   /** Most messages one connection may send in `rateWindowMs`. */
@@ -98,7 +105,7 @@ export interface RoomOptions {
   identify?: (ticket: string, table: string) => Promise<Identity | null>;
 }
 
-interface ConnState { pid: PlayerId | null; hello: boolean; spectator: boolean; windowStart: number; count: number; lastReact: number; lastSeen: number; device?: string; checking?: boolean }
+interface ConnState { pid: PlayerId | null; hello: boolean; spectator: boolean; hidden?: boolean; windowStart: number; count: number; lastReact: number; lastSeen: number; device?: string; checking?: boolean }
 
 /** Who a ticket belongs to, as the accounts database answers (see check_ticket). */
 export interface Identity { account: string; device: string; name: string; crews: string[] }
@@ -111,6 +118,8 @@ const ACKS_SAVED = 16;
 const REACT_GAP_MS = 800;
 /** Many phones' hotspots take only 8 to 10 devices: offline tables stop at 10 players. */
 export const OFFLINE_MAX_PLAYERS = 10;
+/** Watchers a table takes (players do not count). */
+export const MAX_WATCHERS = 20;
 const OFFLINE_FULL = 'This offline table is full. For more than 10 players, play online.';
 
 export class TableRoom {
@@ -131,6 +140,8 @@ export class TableRoom {
   /** This game in the league (made with the table). */
   game: NonNullable<Persisted['game']> | null = null;
   private minStacks: Record<PlayerId, number> = {};
+  /** The turn whose player is pushed if they have not looked by `at`. */
+  private turnPush: { pid: PlayerId; key: string; at: number; sent: boolean } | null = null;
   /** Since when no player has been connected (for ending abandoned games). */
   private emptySince: number | null = null;
   /** When hosting passes on if the host is still gone (see hostHandoverMs). */
@@ -151,11 +162,11 @@ export class TableRoom {
   /** Inside one incoming message or wake-up, saves are collected into one at the end. */
   private batchDepth = 0;
   private needSave = false;
-  private readonly opt: Required<RoomOptions>;
+  private readonly opt: Required<Omit<RoomOptions, 'push'>> & Pick<RoomOptions, 'push'>;
 
   constructor(code: string, private clock: RoomClock, private store: RoomStore, saved?: Persisted | null, opt: RoomOptions = {}) {
     this.code = code;
-    this.opt = { handPauseMs: 4000, rateLimit: 40, rateWindowMs: 2000, keepUpdates: 200, offlineAfterMs: 3000, seed: randomSeed, identify: async () => null, server: 'test', autoEndAfterMs: 20 * 60_000, hostHandoverMs: 60_000, maxConnections: 60, silentCloseMs: 30_000, helloWithinMs: 15_000, offline: false, sharedShuffle: !!opt.offline, shuffleWaitMs: 1500, ...opt };
+    this.opt = { handPauseMs: 4000, rateLimit: 40, rateWindowMs: 2000, keepUpdates: 200, offlineAfterMs: 3000, seed: randomSeed, identify: async () => null, server: 'test', turnPushMs: 3000, autoEndAfterMs: 20 * 60_000, hostHandoverMs: 60_000, maxConnections: 60, silentCloseMs: 30_000, helloWithinMs: 15_000, offline: false, sharedShuffle: !!opt.offline, shuffleWaitMs: 1500, ...opt };
     if (this.opt.offline) this.opt.maxConnections = Math.min(this.opt.maxConnections, OFFLINE_MAX_PLAYERS + 4);
     this.createdAt = clock.now();
     if (saved) this.restore(saved);
@@ -200,6 +211,7 @@ export class TableRoom {
     if (m.t === 'hello') return this.hello(conn, st, m);
     if (!st.hello) return this.send(conn, { t: 'error', code: 'need_hello', message: 'Say hello first' });
     if (m.t === 'react') return this.react(conn, st, m.reaction);
+    if (m.t === 'bg') { st.hidden = m.hidden; return; }
     if (m.t === 'seed') return this.onSeed(st, m.handNo, m.seed);
     if (!st.pid || !this.engine) return this.ack(conn, null, m.actionId, 'Spectators cannot play');
     const pid = st.pid;
@@ -284,6 +296,7 @@ export class TableRoom {
     if (who && m.player !== who.account) return fail('not_allowed', 'That seat belongs to another account');
     const watch = (): void => {
       if (!this.engine) return fail('no_table', 'This table has not started');
+      if ([...this.conns.values()].filter((o) => o.hello && o.spectator).length >= MAX_WATCHERS) return fail('table_full', `${MAX_WATCHERS} people are already watching this table`);
       st.hello = true; st.spectator = true; st.pid = null;
       this.welcome(conn, null, m.lastSeq);
     };
@@ -331,7 +344,7 @@ export class TableRoom {
     this.reschedule();
   }
 
-  private handle(pid: PlayerId, m: Exclude<ClientMessage, { t: 'hello' | 'ping' | 'react' | 'seed' }>, now: number): string | null {
+  private handle(pid: PlayerId, m: Exclude<ClientMessage, { t: 'hello' | 'ping' | 'react' | 'seed' | 'bg' }>, now: number): string | null {
     const e = this.engine!;
     const handNo = 'handNo' in m ? m.handNo : null;
     if (handNo !== null && (e.s.phase !== 'hand' || e.s.handNo !== handNo) && m.t !== 'show') return 'That hand is over';
@@ -497,8 +510,34 @@ export class TableRoom {
 
   private reschedule(): void {
     this.checkHost(this.clock.now());
-    const times = [this.handDeadline(), this.nextDealAt, this.autoEndAt(), this.hostHandoverAt, this.nextSilentCheck(), this.pendingDeal?.until ?? null, ...this.goingOffline.values()].filter((x): x is number => x !== null);
+    this.watchTurn(this.clock.now());
+    const times = [this.turnPush && !this.turnPush.sent ? this.turnPush.at : null, this.handDeadline(), this.nextDealAt, this.autoEndAt(), this.hostHandoverAt, this.nextSilentCheck(), this.pendingDeal?.until ?? null, ...this.goingOffline.values()].filter((x): x is number => x !== null);
     this.clock.schedule(times.length ? Math.min(...times) : null);
+  }
+
+  /**
+   * Push notifications: a signed-in player whose turn has waited turnPushMs while their app is not on screen
+   * (closed, locked or in the background) is pushed once for that turn; a crew table that has started tells
+   * the crew's other members once.
+   */
+  private watchTurn(now: number): void {
+    const e = this.engine;
+    if (!e || !this.opt.push || this.opt.offline) return;
+    if (this.crew && this.game && !this.game.announced && e.s.handNo >= 1) {
+      this.game.announced = true;
+      const hostName = e.player(this.host ?? '')?.name ?? 'Someone';
+      this.opt.push({ kind: 'crewTable', crew: this.crew, except: [...this.accountSeats], title: 'A crew table just started', body: `${hostName} is playing at table ${this.code}. Tap to join.`, url: `/#/t/${this.code}`, tag: `table-${this.code}` });
+    }
+    const h = e.s.phase === 'hand' && !e.s.paused ? e.s.hand : null;
+    const pid = h?.toAct ?? null;
+    if (!pid || !this.accountSeats.has(pid)) { this.turnPush = null; return; }
+    const key = `${e.s.handNo}:${pid}:${h!.turnStartedAt ?? 0}`;
+    if (this.turnPush?.key !== key) this.turnPush = { pid, key, at: now + this.opt.turnPushMs, sent: false };
+    const tp = this.turnPush;
+    if (tp.sent || now < tp.at) return;
+    tp.sent = true;
+    const looking = this.connsOf(pid).some((c) => !this.conns.get(c)!.hidden);
+    if (!looking) this.opt.push({ kind: 'turn', accounts: [pid], title: 'Your turn', body: `Table ${this.code} is waiting for you.`, url: `/#/t/${this.code}`, tag: `turn-${this.code}` });
   }
 
   /**

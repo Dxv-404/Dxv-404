@@ -3,6 +3,7 @@
 // game itself still starts instantly and works offline.
 import { h, toast } from './ui.js';
 import { leagueScreens } from './league-ui.js';
+import { offerPush } from '../more-screens.ts';
 
 let mod = null;
 let acct = null;
@@ -102,9 +103,9 @@ export function accountScreens({ screen, openSheet, home }) {
   // Another phone asked a crew to become this account: this phone is told, and can stop it
   async function drawRescueAlerts(box, a) {
     try {
-      const [list, nights] = await Promise.all([a.rescuesOfMe(), a.pendingOfflineGames().catch(() => [])]);
+      const [list, nights, notice] = await Promise.all([a.rescuesOfMe(), a.pendingOfflineGames().catch(() => []), a.serviceNotice().catch(() => null)]);
       const chips = (n) => (n > 0 ? `+${n}` : String(n ?? 0));
-      box.replaceChildren(...nights.map((g) => h('section', { class: 'block alert', 'data-testid': 'offline-pending' },
+      box.replaceChildren(notice && h('section', { class: 'block alert', role: 'status', 'data-testid': 'service-notice' }, h('p', {}, notice)), ...nights.map((g) => h('section', { class: 'block alert', 'data-testid': 'offline-pending' },
         h('h2', {}, 'A night played offline'),
         h('p', {}, `${new Date(g.ended_at).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })}${g.crew_name ? `, ${g.crew_name}` : ''}: ${g.players} players, ${g.hands} hands, you ${chips(g.net)} chips. `
           + (g.confirmed ? `You confirmed it. It counts once one more player does (${g.confirmations} so far).` : 'It counts in your history and the league once two of its players confirm it.')),
@@ -360,6 +361,7 @@ export function accountScreens({ screen, openSheet, home }) {
                 history.replaceState(null, '', location.pathname);
                 toast(st === 'pending' ? 'Asked to join. An admin will let you in.' : `You're in ${info.name}`);
                 crewScreen(info.crew);
+                offerPush({ screen, openSheet, home }, a); // the first crew: ask once whether to notify (never on first open)
               } catch (err) { e.target.disabled = false; toast(err.message); }
             } }, 'Join the crew'),
             h('button', { class: 'btn ghost', 'data-testid': 'already-in', onclick: () => rescuePick(a, code, info) }, 'I’m already in this crew', h('small', {}, 'New phone, lost code: a crew admin brings your account back')));
