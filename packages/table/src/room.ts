@@ -293,7 +293,8 @@ export class TableRoom {
 
   // ---------------- the table ----------------
   private create(settings: TableSettings | undefined, now: number): void {
-    const { crew: _crew, ...rules } = settings ?? {}; // the crew belongs to the room, not the rules
+    const rules = { ...settings };
+    delete rules.crew; // the crew belongs to the room, not the rules
     this.engine = Engine.create(this.code, rules, now);
     this.base = this.engine.snapshot();
     this.inputs = [];
