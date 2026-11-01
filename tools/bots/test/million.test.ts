@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest';
 import { playGame } from '../src/run';
 
 describe.runIf(process.env.GATE === '1')('one million hands', () => {
-  it('never creates or loses a chip and never gets stuck', () => {
+  it('never creates or loses a chip and never gets stuck', async () => {
     let hands = 0, showdowns = 0, sidePots = 0, twice = 0, chipErrors = 0, stuck = 0, game = 0;
     while (hands < 1_000_000) {
       const players = 2 + (game % 14);
@@ -16,6 +16,7 @@ describe.runIf(process.env.GATE === '1')('one million hands', () => {
       chipErrors += rep.chipErrors; stuck += rep.stuck;
       expect(rep.replayOk).toBe(true);
       game++;
+      await new Promise((r) => setTimeout(r, 0)); // let the test runner report progress
     }
     console.log(JSON.stringify({ hands, games: game, showdowns, sidePots, twice, chipErrors, stuck }));
     expect(chipErrors).toBe(0);
