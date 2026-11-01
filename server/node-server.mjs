@@ -2084,7 +2084,7 @@ var require_extension = __commonJS({
       if (dest[name] === void 0) dest[name] = [elem];
       else dest[name].push(elem);
     }
-    function parse3(header) {
+    function parse4(header) {
       const offers = /* @__PURE__ */ Object.create(null);
       let params = /* @__PURE__ */ Object.create(null);
       let mustUnescape = false;
@@ -2194,16 +2194,16 @@ var require_extension = __commonJS({
         throw new SyntaxError("Unexpected end of input");
       }
       if (end === -1) end = i;
-      const token = header.slice(start, end);
+      const token2 = header.slice(start, end);
       if (extensionName === void 0) {
-        push(offers, token, params);
+        push(offers, token2, params);
       } else {
         if (paramName === void 0) {
-          push(params, token, true);
+          push(params, token2, true);
         } else if (mustUnescape) {
-          push(params, paramName, token.replace(/\\/g, ""));
+          push(params, paramName, token2.replace(/\\/g, ""));
         } else {
-          push(params, paramName, token);
+          push(params, paramName, token2);
         }
         push(offers, extensionName, params);
       }
@@ -2224,7 +2224,7 @@ var require_extension = __commonJS({
         }).join(", ");
       }).join(", ");
     }
-    module.exports = { format, parse: parse3 };
+    module.exports = { format, parse: parse4 };
   }
 });
 
@@ -2257,7 +2257,7 @@ var require_websocket = __commonJS({
     var {
       EventTarget: { addEventListener, removeEventListener }
     } = require_event_target();
-    var { format, parse: parse3 } = require_extension();
+    var { format, parse: parse4 } = require_extension();
     var { toBuffer } = require_buffer_util();
     var closeTimeout = 30 * 1e3;
     var kAborted = Symbol("kAborted");
@@ -2924,7 +2924,7 @@ var require_websocket = __commonJS({
           }
           let extensions;
           try {
-            extensions = parse3(secWebSocketExtensions);
+            extensions = parse4(secWebSocketExtensions);
           } catch (err) {
             const message = "Invalid Sec-WebSocket-Extensions header";
             abortHandshake(websocket, socket, message);
@@ -3214,7 +3214,7 @@ var require_subprotocol = __commonJS({
   "../../node_modules/.pnpm/ws@8.18.3/node_modules/ws/lib/subprotocol.js"(exports, module) {
     "use strict";
     var { tokenChars } = require_validation();
-    function parse3(header) {
+    function parse4(header) {
       const protocols = /* @__PURE__ */ new Set();
       let start = -1;
       let end = -1;
@@ -3250,7 +3250,7 @@ var require_subprotocol = __commonJS({
       protocols.add(protocol);
       return protocols;
     }
-    module.exports = { parse: parse3 };
+    module.exports = { parse: parse4 };
   }
 });
 
@@ -3645,7 +3645,8 @@ var require_websocket_server = __commonJS({
 
 // src/node.ts
 import { createServer } from "node:http";
-import { readFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, renameSync, writeFileSync, existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 // ../../node_modules/.pnpm/ws@8.18.3/node_modules/ws/wrapper.mjs
 var import_stream = __toESM(require_stream(), 1);
@@ -6186,9 +6187,9 @@ var $ZodE164 = /* @__PURE__ */ $constructor("$ZodE164", (inst, def) => {
   def.pattern ?? (def.pattern = e164);
   $ZodStringFormat.init(inst, def);
 });
-function isValidJWT(token, algorithm = null) {
+function isValidJWT(token2, algorithm = null) {
   try {
-    const tokensParts = token.split(".");
+    const tokensParts = token2.split(".");
     if (tokensParts.length !== 3)
       return false;
     const [header] = tokensParts;
@@ -16207,8 +16208,22 @@ var action = external_exports.object({
   type: external_exports.enum(["fold", "check", "call", "bet", "raise", "allin"]),
   to: external_exports.number().int().nonnegative().optional()
 });
+var TableSettings = external_exports.object({
+  startStack: external_exports.number().int().min(100).max(1e6),
+  sb: external_exports.number().int().min(1).max(1e5),
+  bb: external_exports.number().int().min(1).max(2e5),
+  blindUpEvery: external_exports.number().int().min(0).max(1e3),
+  turnTime: external_exports.number().int().min(0).max(300),
+  timeBank: external_exports.number().int().min(0).max(600),
+  rebuys: external_exports.boolean(),
+  maxRebuys: external_exports.number().int().min(0).max(100),
+  straddle: external_exports.boolean(),
+  dealItTwice: external_exports.boolean(),
+  maxPlayers: external_exports.number().int().min(2).max(15)
+}).partial().strict().refine((c) => c.sb === void 0 || c.bb === void 0 || c.bb >= c.sb, { message: "Big blind must be at least the small blind" });
+var token = external_exports.string().min(16).max(128);
 var ClientMessage = external_exports.discriminatedUnion("t", [
-  external_exports.object({ t: external_exports.literal("hello"), v: external_exports.number().int(), table: tableCode, player: id, token: external_exports.string().max(4096).optional(), lastSeq: external_exports.number().int().nonnegative(), name: external_exports.string().min(1).max(20).optional(), spectate: external_exports.boolean().optional() }),
+  external_exports.object({ t: external_exports.literal("hello"), v: external_exports.number().int(), table: tableCode, player: id, token: token.optional(), lastSeq: external_exports.number().int().nonnegative(), name: external_exports.string().min(1).max(20).optional(), spectate: external_exports.boolean().optional(), settings: TableSettings.optional() }),
   external_exports.object({ t: external_exports.literal("act"), actionId: id, handNo: external_exports.number().int().positive(), action }),
   external_exports.object({ t: external_exports.literal("sit"), actionId: id, out: external_exports.boolean(), postNow: external_exports.boolean().optional() }),
   external_exports.object({ t: external_exports.literal("rebuy"), actionId: id }),
@@ -16232,15 +16247,1927 @@ var ClientMessage = external_exports.discriminatedUnion("t", [
 var view = external_exports.record(external_exports.string(), external_exports.unknown());
 var events = external_exports.array(external_exports.record(external_exports.string(), external_exports.unknown()));
 var ServerMessage = external_exports.discriminatedUnion("t", [
-  external_exports.object({ t: external_exports.literal("welcome"), v: external_exports.number().int(), seq: external_exports.number().int().nonnegative(), you: id.nullable(), view, serverTime: external_exports.number() }),
-  external_exports.object({ t: external_exports.literal("update"), seq: external_exports.number().int().positive(), events, view }),
+  external_exports.object({ t: external_exports.literal("welcome"), v: external_exports.number().int(), seq: external_exports.number().int().nonnegative(), you: id.nullable(), host: id.nullable(), view, serverTime: external_exports.number(), missed: events.optional() }),
+  external_exports.object({ t: external_exports.literal("update"), seq: external_exports.number().int().positive(), events, view, host: id.nullable() }),
   external_exports.object({ t: external_exports.literal("ack"), actionId: id, ok: external_exports.boolean(), error: external_exports.string().optional() }),
   external_exports.object({ t: external_exports.literal("react"), from: id, reaction: external_exports.enum(REACTIONS) }),
   external_exports.object({ t: external_exports.literal("seedRequest"), handNo: external_exports.number().int().positive(), dealerSeedCommit: seed }),
-  external_exports.object({ t: external_exports.literal("pong"), c: external_exports.number(), s: external_exports.number() }),
-  external_exports.object({ t: external_exports.literal("error"), code: external_exports.enum(["version", "bad_message", "not_allowed", "table_full", "no_table", "rate_limited", "server"]), message: external_exports.string() })
+  external_exports.object({ t: external_exports.literal("pong"), c: external_exports.number(), s: external_exports.number(), seq: external_exports.number().int().nonnegative() }),
+  external_exports.object({ t: external_exports.literal("error"), code: external_exports.enum(["version", "bad_message", "not_allowed", "table_full", "no_table", "rate_limited", "server", "replaced", "need_hello"]), message: external_exports.string() })
 ]);
 var MAX_CLIENT_BYTES = 8 * 1024;
+var MAX_SERVER_BYTES = 256 * 1024;
+function parse3(schema, raw, maxBytes) {
+  let data = raw;
+  if (typeof raw === "string") {
+    if (raw.length > maxBytes) return { ok: false, error: "Message too large" };
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      return { ok: false, error: "Not JSON" };
+    }
+  }
+  const r = schema.safeParse(data);
+  return r.success ? { ok: true, msg: r.data } : { ok: false, error: r.error.issues.map((i) => `${i.path.join(".") || "message"}: ${i.message}`).join("; ") };
+}
+var parseClient = (raw) => parse3(ClientMessage, raw, MAX_CLIENT_BYTES);
+var versionOk = (v) => SUPPORTED_VERSIONS.includes(v);
+var encode3 = (m) => JSON.stringify(m);
+
+// ../../packages/engine/src/cards.ts
+var RANKS = "23456789TJQKA";
+var SUITS = "shdc";
+var RANK_NAME = ["Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Jack", "Queen", "King", "Ace"];
+var RANK_PLURAL = ["Twos", "Threes", "Fours", "Fives", "Sixes", "Sevens", "Eights", "Nines", "Tens", "Jacks", "Queens", "Kings", "Aces"];
+var rankOf = (c) => c >> 2;
+var suitOf = (c) => c & 3;
+var cardStr = (c) => RANKS.charAt(c >> 2) + SUITS.charAt(c & 3);
+function freshDeck() {
+  const d = [];
+  for (let i = 0; i < 52; i++) d.push(i);
+  return d;
+}
+var cryptoWords = (out) => {
+  globalThis.crypto.getRandomValues(out);
+};
+function randInt(n, words = cryptoWords) {
+  if (!Number.isInteger(n) || n < 1 || n > 4294967296) throw new Error(`randInt range: ${n}`);
+  const buf = new Uint32Array(1);
+  const limit = Math.floor(4294967296 / n) * n;
+  let x;
+  do {
+    words(buf);
+    x = buf[0];
+  } while (x >= limit);
+  return x % n;
+}
+function shuffle(deck, words = cryptoWords) {
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = randInt(i + 1, words);
+    const tmp = deck[i];
+    deck[i] = deck[j];
+    deck[j] = tmp;
+  }
+  return deck;
+}
+var CATEGORY = [
+  "High Card",
+  "One Pair",
+  "Two Pair",
+  "Three of a Kind",
+  "Straight",
+  "Flush",
+  "Full House",
+  "Four of a Kind",
+  "Straight Flush",
+  "Royal Flush"
+];
+function eval5(cards) {
+  const r = cards.map(rankOf).sort((a, b) => b - a);
+  const s = cards.map(suitOf);
+  const flush2 = s.every((x) => x === s[0]);
+  const counts = /* @__PURE__ */ new Map();
+  for (const x of r) counts.set(x, (counts.get(x) ?? 0) + 1);
+  const groups = [...counts.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0]);
+  const g0 = groups[0], g1 = groups[1];
+  let straightHigh = -1;
+  if (counts.size === 5) {
+    if (r[0] - r[4] === 4) straightHigh = r[0];
+    else if (r[0] === 12 && r[1] === 3 && r[4] === 0) straightHigh = 3;
+  }
+  let cat, ranks;
+  if (straightHigh >= 0 && flush2) {
+    cat = straightHigh === 12 ? 9 : 8;
+    ranks = [straightHigh];
+  } else if (g0[1] === 4) {
+    cat = 7;
+    ranks = [g0[0], g1[0]];
+  } else if (g0[1] === 3 && g1[1] === 2) {
+    cat = 6;
+    ranks = [g0[0], g1[0]];
+  } else if (flush2) {
+    cat = 5;
+    ranks = r;
+  } else if (straightHigh >= 0) {
+    cat = 4;
+    ranks = [straightHigh];
+  } else if (g0[1] === 3) {
+    cat = 3;
+    ranks = groups.map((g) => g[0]);
+  } else if (g0[1] === 2 && g1[1] === 2) {
+    cat = 2;
+    ranks = groups.map((g) => g[0]);
+  } else if (g0[1] === 2) {
+    cat = 1;
+    ranks = groups.map((g) => g[0]);
+  } else {
+    cat = 0;
+    ranks = r;
+  }
+  let score = cat === 9 ? 8 : cat;
+  for (let i = 0; i < 5; i++) score = score * 13 + (ranks[i] ?? 0);
+  return { score, cat, ranks };
+}
+var COMBOS = {};
+function combos(n) {
+  const hit = COMBOS[n];
+  if (hit) return hit;
+  const out = [];
+  const rec = (start, acc) => {
+    if (acc.length === 5) {
+      out.push(acc.slice());
+      return;
+    }
+    for (let i = start; i < n; i++) {
+      acc.push(i);
+      rec(i + 1, acc);
+      acc.pop();
+    }
+  };
+  rec(0, []);
+  return COMBOS[n] = out;
+}
+function evalBest(cards) {
+  if (cards.length < 5) return null;
+  let best = null;
+  for (const idx of combos(cards.length)) {
+    const hand = idx.map((i) => cards[i]);
+    const e = eval5(hand);
+    if (!best || e.score > best.score) best = { ...e, cards: hand };
+  }
+  const b = best;
+  const res = { ...b, name: CATEGORY[b.cat], desc: "" };
+  res.desc = describe(res);
+  return res;
+}
+function describe(e) {
+  const R = e.ranks;
+  const n = (i) => RANK_NAME[R[i]];
+  const p = (i) => RANK_PLURAL[R[i]];
+  switch (e.cat) {
+    case 9:
+      return "Royal Flush";
+    case 8:
+      return `Straight Flush, ${n(0)} high`;
+    case 7:
+      return `Four of a Kind, ${p(0)}`;
+    case 6:
+      return `Full House, ${p(0)} full of ${p(1)}`;
+    case 5:
+      return `Flush, ${n(0)} high`;
+    case 4:
+      return `Straight, ${n(0)} high`;
+    case 3:
+      return `Three of a Kind, ${p(0)}`;
+    case 2:
+      return `Two Pair, ${p(0)} and ${p(1)}`;
+    case 1:
+      return `Pair of ${p(0)}`;
+    default:
+      return `${n(0)} high`;
+  }
+}
+
+// ../../packages/engine/src/fair.ts
+var K = new Uint32Array([
+  1116352408,
+  1899447441,
+  3049323471,
+  3921009573,
+  961987163,
+  1508970993,
+  2453635748,
+  2870763221,
+  3624381080,
+  310598401,
+  607225278,
+  1426881987,
+  1925078388,
+  2162078206,
+  2614888103,
+  3248222580,
+  3835390401,
+  4022224774,
+  264347078,
+  604807628,
+  770255983,
+  1249150122,
+  1555081692,
+  1996064986,
+  2554220882,
+  2821834349,
+  2952996808,
+  3210313671,
+  3336571891,
+  3584528711,
+  113926993,
+  338241895,
+  666307205,
+  773529912,
+  1294757372,
+  1396182291,
+  1695183700,
+  1986661051,
+  2177026350,
+  2456956037,
+  2730485921,
+  2820302411,
+  3259730800,
+  3345764771,
+  3516065817,
+  3600352804,
+  4094571909,
+  275423344,
+  430227734,
+  506948616,
+  659060556,
+  883997877,
+  958139571,
+  1322822218,
+  1537002063,
+  1747873779,
+  1955562222,
+  2024104815,
+  2227730452,
+  2361852424,
+  2428436474,
+  2756734187,
+  3204031479,
+  3329325298
+]);
+function sha256(data) {
+  const h = new Uint32Array([1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225]);
+  const bitLen = data.length * 8;
+  const padded = new Uint8Array(data.length + 9 + 63 >> 6 << 6);
+  padded.set(data);
+  padded[data.length] = 128;
+  const view2 = new DataView(padded.buffer);
+  view2.setUint32(padded.length - 8, Math.floor(bitLen / 4294967296));
+  view2.setUint32(padded.length - 4, bitLen >>> 0);
+  const w = new Uint32Array(64);
+  for (let off = 0; off < padded.length; off += 64) {
+    for (let i = 0; i < 16; i++) w[i] = view2.getUint32(off + i * 4);
+    for (let i = 16; i < 64; i++) {
+      const a2 = w[i - 15], b2 = w[i - 2];
+      const s0 = (a2 >>> 7 | a2 << 25) ^ (a2 >>> 18 | a2 << 14) ^ a2 >>> 3;
+      const s1 = (b2 >>> 17 | b2 << 15) ^ (b2 >>> 19 | b2 << 13) ^ b2 >>> 10;
+      w[i] = w[i - 16] + s0 + w[i - 7] + s1 >>> 0;
+    }
+    let a = h[0], b = h[1], c = h[2], d = h[3], e = h[4], f = h[5], g = h[6], hh = h[7];
+    for (let i = 0; i < 64; i++) {
+      const S1 = (e >>> 6 | e << 26) ^ (e >>> 11 | e << 21) ^ (e >>> 25 | e << 7);
+      const ch = e & f ^ ~e & g;
+      const t1 = hh + S1 + ch + K[i] + w[i] >>> 0;
+      const S0 = (a >>> 2 | a << 30) ^ (a >>> 13 | a << 19) ^ (a >>> 22 | a << 10);
+      const maj = a & b ^ a & c ^ b & c;
+      const t2 = S0 + maj >>> 0;
+      hh = g;
+      g = f;
+      f = e;
+      e = d + t1 >>> 0;
+      d = c;
+      c = b;
+      b = a;
+      a = t1 + t2 >>> 0;
+    }
+    h[0] = h[0] + a >>> 0;
+    h[1] = h[1] + b >>> 0;
+    h[2] = h[2] + c >>> 0;
+    h[3] = h[3] + d >>> 0;
+    h[4] = h[4] + e >>> 0;
+    h[5] = h[5] + f >>> 0;
+    h[6] = h[6] + g >>> 0;
+    h[7] = h[7] + hh >>> 0;
+  }
+  const out = new Uint8Array(32);
+  const ov = new DataView(out.buffer);
+  for (let i = 0; i < 8; i++) ov.setUint32(i * 4, h[i]);
+  return out;
+}
+var toHex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+function fromHex(s) {
+  if (!/^(?:[0-9a-f]{2})*$/.test(s)) throw new Error("Not lowercase hex");
+  const out = new Uint8Array(s.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(s.slice(i * 2, i * 2 + 2), 16);
+  return out;
+}
+function utf8(s) {
+  const out = [];
+  for (const ch of s) {
+    const c = ch.codePointAt(0);
+    if (c < 128) out.push(c);
+    else if (c < 2048) out.push(192 | c >> 6, 128 | c & 63);
+    else if (c < 65536) out.push(224 | c >> 12, 128 | c >> 6 & 63, 128 | c & 63);
+    else out.push(240 | c >> 18, 128 | c >> 12 & 63, 128 | c >> 6 & 63, 128 | c & 63);
+  }
+  return Uint8Array.from(out);
+}
+var sha256hex = (s) => toHex(sha256(utf8(s)));
+var isSeed = (s) => typeof s === "string" && /^[0-9a-f]{64}$/.test(s);
+function seededWords(seedHex) {
+  const seed2 = fromHex(seedHex);
+  let counter = 0;
+  let block = new Uint8Array(0);
+  let pos = 0;
+  const next = () => {
+    if (pos + 4 > block.length) {
+      const input = new Uint8Array(seed2.length + 4);
+      input.set(seed2);
+      new DataView(input.buffer).setUint32(seed2.length, counter++);
+      block = sha256(input);
+      pos = 0;
+    }
+    const v = new DataView(block.buffer).getUint32(pos);
+    pos += 4;
+    return v;
+  };
+  return (out) => {
+    for (let i = 0; i < out.length; i++) out[i] = next();
+  };
+}
+function combineSeeds(dealerSeed, contributions = []) {
+  if (!isSeed(dealerSeed)) throw new Error("Dealer seed must be 32 bytes of hex");
+  if (!contributions.length) return dealerSeed;
+  for (const c of contributions) if (!isSeed(c)) throw new Error("Every shared seed must be 32 bytes of hex");
+  return sha256hex(["tp-shared-v1", dealerSeed, ...[...contributions].sort()].join("|"));
+}
+function deckFromSeed(seedHex) {
+  return shuffle(freshDeck(), seededWords(seedHex));
+}
+function deckCommit(seedHex, deck) {
+  return sha256hex(`tp-deck-v1|${seedHex}|${deck.map(cardStr).join("")}`);
+}
+var seedCommit = (seedHex) => sha256hex(`tp-seed-v1|${seedHex}`);
+function randomSeed() {
+  const b = new Uint8Array(32);
+  globalThis.crypto.getRandomValues(b);
+  return toHex(b);
+}
+
+// ../../packages/engine/src/engine.ts
+var ENGINE_VERSION = 2;
+var clone2 = (o) => JSON.parse(JSON.stringify(o));
+var rid = (n) => Math.random().toString(36).slice(2, 2 + n);
+var round1 = (x) => Math.round(x * 10) / 10;
+function niceRound(x) {
+  const steps = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
+  const mag = Math.pow(10, Math.floor(Math.log10(x)));
+  let best = steps[0] * mag;
+  for (const s of steps) if (Math.abs(s * mag - x) < Math.abs(best - x)) best = s * mag;
+  return Math.max(1, Math.round(best));
+}
+var anteFor = (bb) => Math.max(1, niceRound(bb / 10));
+var TABLE_DEFAULTS = {
+  startStack: 1e3,
+  sb: 5,
+  bb: 10,
+  blindUpEvery: 0,
+  turnTime: 20,
+  timeBank: 60,
+  bankRefill: 10,
+  bankRefillEvery: 10,
+  disconnectGrace: 10,
+  rebuys: true,
+  maxRebuys: 0,
+  rebuyBelow: 0,
+  rebuyUntilLevel: 0,
+  anteFromLevel: 0,
+  straddle: false,
+  dealItTwice: false,
+  dealItTwiceVote: 10,
+  sharedShuffle: false,
+  maxPlayers: 15
+};
+function makeConfig(c = {}) {
+  const cfg = { ...TABLE_DEFAULTS, ...c };
+  if (!cfg.rebuyBelow) cfg.rebuyBelow = cfg.startStack;
+  cfg.maxPlayers = Math.min(15, Math.max(2, Math.floor(cfg.maxPlayers)));
+  return cfg;
+}
+var Engine = class _Engine {
+  s;
+  undoStack = [];
+  /** Inputs applied through apply() since this engine was created or restored. */
+  inputs = [];
+  /** Set when a hand ends after being started through apply(): everything needed to replay it. */
+  lastHandRecord = null;
+  handBefore = null;
+  handInputs = [];
+  constructor(state) {
+    this.s = _Engine.migrate(state);
+  }
+  /** Bring older saved tables (v1, from the first app) up to the current shape. */
+  static migrate(state) {
+    const st = state;
+    if (st.v === 2) return state;
+    const cfg = makeConfig({ ...st.cfg, turnTime: st.cfg.turnTime ?? 0, maxPlayers: 15 });
+    const players = st.players.map((p) => _Engine.fillPlayer(p, p.seat, cfg));
+    const v2 = {
+      ...st,
+      v: 2,
+      cfg,
+      players,
+      level: { ...st.level, ante: st.level.ante ?? 0 },
+      lastButtonChair: -1,
+      lastSBChair: -1,
+      lastBBChair: -1,
+      pendingLevel: null,
+      nextSeedCommit: null,
+      now: 0
+    };
+    if (v2.hand && v2.phase === "hand") {
+      for (const [pid, hp] of Object.entries(v2.hand.ps)) {
+        const p = v2.players.find((x) => x.id === pid);
+        if (p) p.stack += hp.total;
+      }
+      v2.phase = "between";
+    }
+    v2.hand = null;
+    if (st.button >= 0 && players.length >= 2) {
+      const n = players.length;
+      v2.lastButtonChair = st.button % n;
+      v2.lastSBChair = (st.button + 1) % n;
+      v2.lastBBChair = (st.button + 2) % n;
+    }
+    return v2;
+  }
+  static fillPlayer(p, chair, cfg) {
+    return {
+      seat: chair,
+      chair,
+      buyins: p.stack,
+      rebuysUsed: 0,
+      sittingOut: false,
+      away: false,
+      sitOutHands: 0,
+      leaving: false,
+      connected: false,
+      busted: false,
+      waitForBB: false,
+      missedSB: false,
+      missedBB: false,
+      postMissed: false,
+      wantsStraddle: false,
+      bank: cfg.timeBank,
+      ...p
+    };
+  }
+  // ---------------- setup ----------------
+  /** A new, empty table. Players join through apply({ t: 'join' }). */
+  static create(gameId, config2 = {}, now = 0) {
+    const cfg = makeConfig(config2);
+    return new _Engine({
+      v: 2,
+      gameId,
+      cfg,
+      level: { sb: cfg.sb, bb: cfg.bb, n: 1, ante: cfg.anteFromLevel === 1 ? anteFor(cfg.bb) : 0 },
+      players: [],
+      button: -1,
+      lastButtonChair: -1,
+      lastSBChair: -1,
+      lastBBChair: -1,
+      handNo: 0,
+      hand: null,
+      phase: "lobby",
+      log: [],
+      stats: {},
+      paused: false,
+      pendingLevel: null,
+      nextSeedCommit: null,
+      now
+    });
+  }
+  /** Legacy: a table with players already seated, no timer by default (the first app ran its own). */
+  static newGame(config2, names) {
+    const e = _Engine.create(rid(8), { turnTime: 0, ...config2 });
+    for (const n of names) e.addPlayer(n);
+    e.s.log = [];
+    return e;
+  }
+  static makePlayer(name, seat, stack) {
+    return _Engine.fillPlayer({ id: "p" + rid(7), name: _Engine.cleanName(name), stack }, seat, TABLE_DEFAULTS);
+  }
+  static cleanName(name) {
+    return String(name).trim().slice(0, 14) || "Player";
+  }
+  /** Restore from a snapshot. */
+  static fromSnapshot(state) {
+    return new _Engine(clone2(state));
+  }
+  /** Rebuild a table by replaying inputs on top of a snapshot. Same inputs, same table, every time. */
+  static replay(snapshot, inputs) {
+    const e = _Engine.fromSnapshot(snapshot);
+    for (const i of inputs) {
+      const r = e.apply(i);
+      if (r.error) throw new Error(`Replay diverged at ${i.t}: ${r.error}`);
+    }
+    return e;
+  }
+  snapshot() {
+    return clone2(this.s);
+  }
+  player(id2) {
+    return this.s.players.find((p) => p.id === id2);
+  }
+  P(id2) {
+    const p = this.player(id2);
+    if (!p) throw new Error(`Unknown player ${id2}`);
+    return p;
+  }
+  get H() {
+    if (!this.s.hand) throw new Error("No hand in progress");
+    return this.s.hand;
+  }
+  hp(id2) {
+    const x = this.H.ps[id2];
+    if (!x) throw new Error(`Player ${id2} is not in this hand`);
+    return x;
+  }
+  // ---------------- the input door ----------------
+  /** Apply one input. Refused inputs change nothing and are not recorded. */
+  apply(input) {
+    const res = this.dispatch(input);
+    if (res.error) return res;
+    this.inputs.push(input);
+    if (this.handBefore) this.handInputs.push(input);
+    this.finishRecordIfEnded();
+    return res;
+  }
+  dispatch(i) {
+    if (typeof i.now !== "number" || !Number.isFinite(i.now)) return { error: "Missing time" };
+    const ok = (events2) => {
+      this.s.now = Math.max(this.s.now, i.now);
+      return { events: events2 };
+    };
+    switch (i.t) {
+      case "join": {
+        if (this.player(i.id)) return { error: "Already at the table" };
+        if (this.s.phase === "ended") return { error: "The game has ended" };
+        if (this.s.players.length >= this.s.cfg.maxPlayers) return { error: "The table is full" };
+        if (i.chair !== void 0 && (i.chair < 0 || i.chair >= this.s.cfg.maxPlayers || this.s.players.some((p) => p.chair === i.chair))) return { error: "That chair is taken" };
+        this.addPlayer(i.name, { id: i.id, chair: i.chair, waitForBB: i.waitForBB ?? this.s.handNo > 0 });
+        return ok([{ t: "seat" }]);
+      }
+      case "start": {
+        if (!isSeed(i.seed)) return { error: "A new hand needs a 32-byte seed" };
+        const before = this.snapshot();
+        const r = this.startHandChecked(i.seed, i.contributions ?? [], i.now);
+        if (r.error) return r;
+        this.handBefore = before;
+        this.handInputs = [];
+        return ok(r.events);
+      }
+      case "act": {
+        const r = this.act(i.pid, i.action, i.now);
+        return r.error ? r : ok(r.events);
+      }
+      case "tick":
+        return ok(this.tick(i.now));
+      case "presence": {
+        const p = this.player(i.pid);
+        if (!p) return { error: "Unknown player" };
+        return ok(this.setPresence(p, i.connected));
+      }
+      case "sitOut": {
+        const p = this.player(i.pid);
+        if (!p) return { error: "Unknown player" };
+        this.setSitOut(i.pid, true);
+        return ok([{ t: "sit", pid: i.pid, out: true, away: p.away }]);
+      }
+      case "sitIn": {
+        const p = this.player(i.pid);
+        if (!p) return { error: "Unknown player" };
+        this.sitIn(p, i.postNow);
+        return ok([{ t: "sit", pid: i.pid, out: false, away: false }]);
+      }
+      case "rebuy": {
+        const why = this.whyNoRebuy(i.pid);
+        if (why) return { error: why };
+        return ok(this.rebuy(i.pid));
+      }
+      case "straddle": {
+        const p = this.player(i.pid);
+        if (!p) return { error: "Unknown player" };
+        if (!this.s.cfg.straddle) return { error: "Straddles are off at this table" };
+        p.wantsStraddle = i.on;
+        return ok([]);
+      }
+      case "vote":
+        return this.vote(i.pid, i.yes, i.now);
+      case "show": {
+        const ev = this.showCards(i.pid);
+        return ev.length ? ok(ev) : { error: "Nothing to show" };
+      }
+      case "commitSeed": {
+        if (!/^[0-9a-f]{64}$/.test(i.commit)) return { error: "Bad seed promise" };
+        if (this.s.phase === "hand") return { error: "Promise the next seed between hands" };
+        this.s.nextSeedCommit = i.commit;
+        return ok([]);
+      }
+      case "host":
+        return this.host(i);
+    }
+  }
+  host(i) {
+    const s = this.s;
+    const ok = (events2) => {
+      s.now = Math.max(s.now, i.now);
+      return { events: events2 };
+    };
+    switch (i.cmd) {
+      case "pause":
+        if (s.paused) return { error: "Already paused" };
+        s.paused = true;
+        this.logLine("Host paused the table");
+        return ok([{ t: "paused", paused: true }]);
+      case "resume":
+        if (!s.paused) return { error: "Not paused" };
+        s.paused = false;
+        if (s.hand?.toAct) s.hand.turnStartedAt = i.now;
+        if (s.hand?.vote) s.hand.vote.deadline = i.now + s.cfg.dealItTwiceVote * 1e3;
+        this.logLine("Host resumed the table");
+        return ok([{ t: "paused", paused: false }]);
+      case "undo": {
+        if (!this.canUndo()) return { error: "Nothing to undo" };
+        s.now = Math.max(s.now, i.now);
+        return ok(this.undo());
+      }
+      case "end":
+        if (s.phase === "ended") return { error: "The game has already ended" };
+        this.endGame();
+        return ok([{ t: "ended" }]);
+      case "move": {
+        if (!this.player(i.pid)) return { error: "Unknown player" };
+        if (s.phase === "hand") return { error: "Move seats between hands" };
+        this.movePlayer(i.pid, i.dir);
+        return ok([{ t: "seat" }]);
+      }
+      case "remove": {
+        if (!this.player(i.pid)) return { error: "Unknown player" };
+        this.removePlayer(i.pid);
+        return ok([{ t: "seat" }]);
+      }
+      case "setBlinds": {
+        const ante = i.ante ?? 0;
+        if (!(Number.isInteger(i.sb) && Number.isInteger(i.bb) && Number.isInteger(ante) && i.sb >= 1 && i.bb >= i.sb && ante >= 0 && ante <= i.bb)) return { error: "Blinds must be whole numbers with the big blind at least the small" };
+        s.pendingLevel = { sb: i.sb, bb: i.bb, ante };
+        this.logLine(`Blinds change to ${i.sb}/${i.bb}${ante ? ` (ante ${ante})` : ""} from the next hand`);
+        return ok([]);
+      }
+    }
+  }
+  finishRecordIfEnded() {
+    const s = this.s, h = s.hand;
+    if (!this.handBefore || !h || !h.results || s.phase === "hand") return;
+    const inputs = this.handInputs.slice();
+    this.lastHandRecord = {
+      engineVersion: h.engineVersion,
+      gameId: s.gameId,
+      handNo: h.id,
+      before: this.handBefore,
+      inputs,
+      results: clone2(h.results),
+      deckCommit: h.deckCommit,
+      proof: { dealerSeed: h.seedInfo.dealerSeed, contributions: h.seedInfo.contributions, dealerSeedCommit: h.seedInfo.dealerSeedCommit },
+      board: h.board.map(cardStr),
+      board2: h.board2 ? h.board2.map(cardStr) : null,
+      startedAt: h.startedAt,
+      endedAt: h.endedAt
+    };
+    this.handBefore = null;
+    this.handInputs = [];
+  }
+  // ---------------- seats ----------------
+  reseat() {
+    const s = this.s;
+    s.players.sort((a, b) => a.chair - b.chair);
+    s.players.forEach((p, i) => p.seat = i);
+    const btnId = s.hand?.buttonId;
+    const bp = btnId ? this.player(btnId) : s.players.find((p) => p.chair === s.lastButtonChair);
+    s.button = bp ? bp.seat : -1;
+  }
+  freeChair() {
+    for (let c = 0; c < this.s.cfg.maxPlayers; c++) if (!this.s.players.some((p) => p.chair === c)) return c;
+    return -1;
+  }
+  addPlayer(name, opts = {}) {
+    const chair = opts.chair ?? this.freeChair();
+    const p = _Engine.fillPlayer({ id: opts.id ?? "p" + rid(7), name: _Engine.cleanName(name), stack: this.s.cfg.startStack }, chair, this.s.cfg);
+    p.waitForBB = !!opts.waitForBB;
+    this.s.players.push(p);
+    this.reseat();
+    this.logLine(`${p.name} joins the table`);
+    return p;
+  }
+  removePlayer(id2) {
+    const p = this.player(id2);
+    if (!p) return;
+    const inHand = this.s.hand?.ps[id2];
+    if (inHand && !inHand.folded && this.s.phase === "hand") {
+      p.leaving = true;
+      return;
+    }
+    this.s.departed = (this.s.departed ?? []).concat([{ ...p }]);
+    this.s.players = this.s.players.filter((x) => x.id !== id2);
+    this.reseat();
+  }
+  movePlayer(id2, dir) {
+    const arr = this.s.players;
+    const i = arr.findIndex((p) => p.id === id2);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= arr.length) return;
+    const a = arr[i], b = arr[j];
+    [a.chair, b.chair] = [b.chair, a.chair];
+    this.reseat();
+  }
+  whyNoRebuy(id2) {
+    const s = this.s, p = this.player(id2), c = s.cfg;
+    if (!p) return "Unknown player";
+    if (s.phase === "ended") return "The game has ended";
+    if (!c.rebuys) return "Rebuys are off at this table";
+    const inHand = s.hand?.ps[id2];
+    if (s.phase === "hand" && inHand && !inHand.folded) return "Rebuy after this hand";
+    if (p.stack >= c.rebuyBelow || p.stack >= c.startStack) return "Your stack is too big to rebuy";
+    if (c.maxRebuys > 0 && p.rebuysUsed >= c.maxRebuys) return "No rebuys left";
+    if (c.rebuyUntilLevel > 0 && s.level.n > c.rebuyUntilLevel) return "Rebuys have closed";
+    return null;
+  }
+  rebuy(id2) {
+    if (this.whyNoRebuy(id2)) return [];
+    const p = this.P(id2);
+    const add = this.s.cfg.startStack - p.stack;
+    p.stack += add;
+    p.buyins += add;
+    p.rebuysUsed += 1;
+    p.busted = false;
+    p.sittingOut = false;
+    p.away = false;
+    p.sitOutHands = 0;
+    this.logLine(`${p.name} rebuys for ${add}`);
+    return [{ t: "rebuy", pid: id2, amount: add }];
+  }
+  setSitOut(id2, v) {
+    const p = this.player(id2);
+    if (!p) return;
+    if (v) {
+      p.sittingOut = true;
+      return;
+    }
+    this.sitIn(p, true);
+  }
+  sitIn(p, postNow) {
+    p.sittingOut = false;
+    p.away = false;
+    p.sitOutHands = 0;
+    if (p.missedBB || p.missedSB) {
+      if (postNow) {
+        p.postMissed = true;
+        p.waitForBB = false;
+      } else p.waitForBB = true;
+    }
+  }
+  setPresence(p, connected) {
+    p.connected = connected;
+    const h = this.s.hand;
+    if (!connected && h && this.s.phase === "hand" && h.toAct === p.id && this.s.cfg.turnTime > 0) h.graceUsed[p.id] = true;
+    return [{ t: "presence", pid: p.id, connected }];
+  }
+  logLine(text) {
+    this.s.log.push({ h: this.s.handNo, text });
+    if (this.s.log.length > 80) this.s.log.splice(0, this.s.log.length - 80);
+  }
+  /** Players who may be dealt in, in chair order (waiting players included: they may be the big blind). */
+  candidates() {
+    return this.s.players.filter((p) => p.stack > 0 && !p.sittingOut && !p.leaving);
+  }
+  canStartHand() {
+    return this.s.phase !== "hand" && this.s.phase !== "ended" && !this.s.paused && this.plan() !== null;
+  }
+  waiting(p) {
+    return p.waitForBB || (p.missedBB || p.missedSB) && !p.postMissed;
+  }
+  /** Who is dealt in and where the button and blinds go. Dead-button rule: the big blind always moves
+   *  forward to the next player; the small blind sits where the big blind was; the button where the
+   *  small blind was, even if that chair is now empty. */
+  plan() {
+    const s = this.s;
+    const cands = this.candidates();
+    if (cands.length < 2) return null;
+    const N = s.cfg.maxPlayers;
+    const atChair = (ps, c) => ps.find((p) => p.chair === c) ?? null;
+    if (s.lastBBChair < 0) {
+      const dealt2 = cands;
+      if (dealt2.length === 2) return { dealt: dealt2, button: dealt2[0], sb: dealt2[0], bb: dealt2[1], buttonChair: dealt2[0].chair, sbChair: dealt2[0].chair, bbChair: dealt2[1].chair };
+      return { dealt: dealt2, button: dealt2[0], sb: dealt2[1], bb: dealt2[2], buttonChair: dealt2[0].chair, sbChair: dealt2[1].chair, bbChair: dealt2[2].chair };
+    }
+    let bb = null;
+    for (let k = 1; k <= N && !bb; k++) bb = atChair(cands, (s.lastBBChair + k) % N);
+    let dealt = cands.filter((p) => p === bb || !this.waiting(p));
+    if (dealt.length < 2) dealt = cands;
+    const big = bb;
+    if (dealt.length === 2) {
+      const other = dealt.find((p) => p !== big);
+      return { dealt, button: other, sb: other, bb: big, buttonChair: other.chair, sbChair: other.chair, bbChair: big.chair };
+    }
+    const sbChair = s.lastBBChair;
+    const buttonChair = s.lastSBChair;
+    const sbP = atChair(dealt, sbChair);
+    const sb = sbP && sbP !== big ? sbP : null;
+    const btnP = atChair(dealt, buttonChair);
+    const button = btnP && btnP !== big && btnP !== sb ? btnP : null;
+    return { dealt, button, sb, bb: big, buttonChair, sbChair, bbChair: big.chair };
+  }
+  // ---------------- hand flow ----------------
+  /** Legacy entry: deals with a fresh random seed and the real clock. Tables driven by inputs use apply({t:'start'}). */
+  startHand(seed2, now) {
+    const r = this.startHandChecked(seed2 ?? randomSeed(), [], now ?? Date.now());
+    return r.events ?? [];
+  }
+  startHandChecked(dealerSeed, contributions, now) {
+    const s = this.s;
+    if (s.phase === "hand") return { error: "A hand is already running" };
+    if (s.phase === "ended") return { error: "The game has ended" };
+    if (s.paused) return { error: "The table is paused" };
+    const plan = this.plan();
+    if (!plan) return { error: "Need at least two players with chips" };
+    if (s.nextSeedCommit && seedCommit(dealerSeed) !== s.nextSeedCommit) return { error: "The seed does not match the dealer's promise" };
+    let seed2;
+    try {
+      seed2 = combineSeeds(dealerSeed, contributions);
+    } catch (e) {
+      return { error: e.message };
+    }
+    this.undoStack = [];
+    s.now = Math.max(s.now, now);
+    s.handNo += 1;
+    const ev = [];
+    if (s.pendingLevel) {
+      s.level = { ...s.pendingLevel, n: s.level.n + 1 };
+      s.pendingLevel = null;
+      ev.push({ t: "level", level: s.level });
+    } else if (s.cfg.blindUpEvery > 0 && s.handNo > 1 && (s.handNo - 1) % s.cfg.blindUpEvery === 0) {
+      const bb = Math.max(niceRound(s.level.bb * 1.5), s.level.bb + 1);
+      const n = s.level.n + 1;
+      s.level = { bb, sb: Math.max(1, Math.round(bb / 2)), n, ante: s.cfg.anteFromLevel > 0 && n >= s.cfg.anteFromLevel ? anteFor(bb) : 0 };
+      this.logLine(`Blinds up: ${s.level.sb}/${s.level.bb}${s.level.ante ? `, ante ${s.level.ante}` : ""}`);
+      ev.push({ t: "level", level: s.level });
+    }
+    if (s.cfg.bankRefillEvery > 0 && s.handNo > 1 && (s.handNo - 1) % s.cfg.bankRefillEvery === 0) {
+      for (const p of s.players) p.bank = Math.min(s.cfg.timeBank, round1(p.bank + s.cfg.bankRefill));
+    }
+    for (const p of s.players) if (p.sittingOut && p.stack > 0) {
+      p.sitOutHands += 1;
+      if (p.sitOutHands >= 3) p.away = true;
+    }
+    const N = s.cfg.maxPlayers;
+    if (s.lastBBChair >= 0) {
+      for (let k = 1; k < N; k++) {
+        const c = (s.lastBBChair + k) % N;
+        if (c === plan.bbChair) break;
+        const p = s.players.find((x) => x.chair === c);
+        if (p && p.sittingOut && p.stack > 0) p.missedBB = true;
+      }
+      const sbSeat = s.players.find((x) => x.chair === plan.sbChair);
+      if (sbSeat && sbSeat.sittingOut && sbSeat.stack > 0) sbSeat.missedSB = true;
+    }
+    const dist = (c) => (c - plan.buttonChair - 1 + N) % N;
+    const order = plan.dealt.slice().sort((a, b) => dist(a.chair) - dist(b.chair)).map((p) => p.id);
+    const deck = deckFromSeed(seed2);
+    const hand = {
+      id: s.handNo,
+      deck,
+      board: [],
+      board2: null,
+      burns: 0,
+      street: "preflop",
+      order,
+      ps: {},
+      currentBet: 0,
+      lastFullRaise: s.level.bb,
+      toAct: null,
+      lastAggressor: null,
+      results: null,
+      revealed: {},
+      shown: {},
+      sbId: plan.sb?.id ?? null,
+      bbId: plan.bb.id,
+      straddleId: null,
+      buttonId: plan.button?.id ?? null,
+      buttonChair: plan.buttonChair,
+      sbChair: plan.sbChair,
+      bbChair: plan.bbChair,
+      runout: false,
+      startedAt: now,
+      endedAt: null,
+      turnStartedAt: now,
+      graceUsed: {},
+      vote: null,
+      deckCommit: deckCommit(seed2, deck),
+      seedInfo: { dealerSeed, contributions: [...contributions], seed: seed2, dealerSeedCommit: s.nextSeedCommit },
+      engineVersion: ENGINE_VERSION
+    };
+    for (const pid of order) {
+      hand.ps[pid] = { cards: [], streetBet: 0, total: 0, folded: false, allIn: false, acted: false, actedAt: 0, lastAction: null };
+    }
+    s.nextSeedCommit = null;
+    s.hand = hand;
+    s.phase = "hand";
+    s.lastButtonChair = plan.buttonChair;
+    s.lastSBChair = plan.sbChair;
+    s.lastBBChair = plan.bbChair;
+    this.reseat();
+    ev.push({ t: "handStart", handNo: s.handNo, buttonId: hand.buttonId, level: s.level, deckCommit: hand.deckCommit });
+    if (s.level.ante > 0) for (const pid of order) ev.push(this.postDead(pid, s.level.ante, "ante"));
+    if (plan.sb) ev.push(this.post(plan.sb.id, s.level.sb, "sb"));
+    ev.push(this.post(plan.bb.id, s.level.bb, "bb"));
+    for (const p of plan.dealt) {
+      const owes = p !== plan.bb && p !== plan.sb && p.postMissed;
+      if (owes && p.missedSB) ev.push(this.postDead(p.id, s.level.sb, "deadsb"));
+      if (owes && p.missedBB) ev.push(this.post(p.id, s.level.bb, "missedbb"));
+      p.missedBB = false;
+      p.missedSB = false;
+      p.postMissed = false;
+      p.waitForBB = false;
+    }
+    hand.currentBet = s.level.bb;
+    hand.lastFullRaise = s.level.bb;
+    let lastBlind = plan.bb.id;
+    if (s.cfg.straddle && order.length >= 3) {
+      const utg = order[(order.indexOf(plan.bb.id) + 1) % order.length];
+      const up = this.P(utg);
+      if (up.wantsStraddle && utg !== plan.sb?.id && up.stack > 0) {
+        ev.push(this.post(utg, 2 * s.level.bb - hand.ps[utg].streetBet, "straddle"));
+        hand.straddleId = utg;
+        hand.currentBet = Math.max(hand.currentBet, hand.ps[utg].streetBet);
+        lastBlind = utg;
+      }
+    }
+    for (let round = 0; round < 2; round++) for (const pid of order) hand.ps[pid].cards.push(deck.pop());
+    ev.push({ t: "dealHole", order: order.slice() });
+    const bn = hand.buttonId ? this.P(hand.buttonId).name : "an empty seat";
+    this.logLine(`Hand #${s.handNo} \u2014 ${bn} has the button`);
+    const first = this.nextToAct(lastBlind);
+    if (!first) ev.push(...this.closeRound());
+    else ev.push(this.setTurn(first));
+    return { events: ev };
+  }
+  setTurn(pid) {
+    const h = this.H;
+    h.toAct = pid;
+    h.turnStartedAt = this.s.now;
+    return { t: "turn", pid, deadline: this.deadline() };
+  }
+  /** When the player to act will be timed out, or null if there is no timer. */
+  deadline() {
+    const s = this.s, h = s.hand;
+    if (!h || !h.toAct || s.cfg.turnTime <= 0 || s.phase !== "hand") return null;
+    const p = this.P(h.toAct);
+    const grace = h.graceUsed[h.toAct] ? s.cfg.disconnectGrace : 0;
+    return h.turnStartedAt + Math.round((s.cfg.turnTime + p.bank + grace) * 1e3);
+  }
+  post(pid, amount, kind) {
+    const p = this.P(pid);
+    const hp = this.hp(pid);
+    const amt = Math.min(amount, p.stack);
+    p.stack -= amt;
+    hp.streetBet += amt;
+    hp.total += amt;
+    if (p.stack === 0) hp.allIn = true;
+    const what = { sb: "small blind", bb: "big blind", straddle: "a straddle of", missedbb: "a missed big blind of" }[kind];
+    this.logLine(`${p.name} posts ${what} ${amt}`);
+    return { t: "blind", pid, amount: amt, kind };
+  }
+  /** Antes and a missed small blind go into the pot without counting as a bet. */
+  postDead(pid, amount, kind) {
+    const p = this.P(pid);
+    const hp = this.hp(pid);
+    const amt = Math.min(amount, p.stack);
+    p.stack -= amt;
+    hp.total += amt;
+    if (p.stack === 0) hp.allIn = true;
+    this.logLine(`${p.name} posts ${kind === "ante" ? "an ante of" : "a dead small blind of"} ${amt}`);
+    return kind === "ante" ? { t: "ante", pid, amount: amt } : { t: "blind", pid, amount: amt, kind: "deadsb" };
+  }
+  /** Next player (after `fromId` in order) who still needs to act this round. */
+  nextToAct(fromId) {
+    const h = this.H;
+    const ord = h.order;
+    const start = ord.indexOf(fromId);
+    for (let k = 1; k <= ord.length; k++) {
+      const pid = ord[(start + k) % ord.length];
+      const hp = h.ps[pid];
+      if (hp.folded || hp.allIn) continue;
+      if (!hp.acted || hp.streetBet < h.currentBet) return pid;
+    }
+    return null;
+  }
+  livePlayers() {
+    const h = this.H;
+    return h.order.filter((pid) => !h.ps[pid].folded);
+  }
+  canActPlayers() {
+    const h = this.H;
+    return h.order.filter((pid) => {
+      const hp = h.ps[pid];
+      return !hp.folded && !hp.allIn;
+    });
+  }
+  /** What `pid` may do right now, or null if it is not their turn. */
+  legal(pid) {
+    const s = this.s, h = s.hand;
+    if (!h || s.phase !== "hand" || h.toAct !== pid) return null;
+    const p = this.P(pid), hp = this.hp(pid);
+    const toCall = Math.min(h.currentBet - hp.streetBet, p.stack);
+    const maxTo = hp.streetBet + p.stack;
+    const reopened = !hp.acted || h.currentBet - hp.actedAt >= h.lastFullRaise;
+    const othersCanAct = this.canActPlayers().filter((x) => x !== pid).length > 0;
+    const canRaise = reopened && p.stack > toCall && othersCanAct;
+    const minTo = Math.min(h.currentBet === 0 ? s.level.bb : h.currentBet + h.lastFullRaise, maxTo);
+    return {
+      toCall,
+      canCheck: toCall === 0,
+      canCall: toCall > 0,
+      canRaise,
+      isBet: h.currentBet === 0,
+      minTo,
+      maxTo,
+      currentBet: h.currentBet,
+      streetBet: hp.streetBet,
+      pot: this.potTotal()
+    };
+  }
+  potTotal() {
+    const h = this.s.hand;
+    if (!h) return 0;
+    return Object.values(h.ps).reduce((a, hp) => a + hp.total, 0);
+  }
+  /** Saves the table so the host can undo the next action. */
+  pushUndo() {
+    this.undoStack.push(clone2(this.s));
+    if (this.undoStack.length > 10) this.undoStack.shift();
+  }
+  canUndo() {
+    const prev = this.undoStack[this.undoStack.length - 1];
+    if (!prev || !this.s.hand || !prev.hand) return false;
+    return prev.hand.id === this.s.hand.id && prev.hand.board.length === this.s.hand.board.length && this.s.phase === "hand";
+  }
+  undo() {
+    if (!this.canUndo()) return null;
+    const now = this.s.now;
+    this.s = this.undoStack.pop();
+    this.s.now = now;
+    this.H.turnStartedAt = now;
+    this.logLine("Dealer undoes the last action");
+    return [{ t: "undo" }, { t: "turn", pid: this.H.toAct, deadline: this.deadline() }];
+  }
+  act(pid, action2, now) {
+    const s = this.s, h = s.hand;
+    const L = this.legal(pid);
+    if (!L || !h) return { error: "Not your turn" };
+    if (s.paused) return { error: "The table is paused" };
+    const p = this.P(pid), hp = this.hp(pid);
+    let type = action2.type;
+    if (!["fold", "check", "call", "bet", "raise", "allin"].includes(type)) return { error: "Unknown action" };
+    if (type === "check" && !L.canCheck) return { error: "Cannot check" };
+    if (type === "call" && !L.canCall) return { error: "Nothing to call" };
+    if ((type === "bet" || type === "raise") && !L.canRaise) return { error: "Raising is not allowed here" };
+    this.pushUndo();
+    if (now !== void 0) {
+      s.now = Math.max(s.now, now);
+      this.chargeBank(p, h);
+    }
+    const ev = [];
+    const say = (text) => this.logLine(`${p.name} ${text}`);
+    if (type === "allin") {
+      if (L.canRaise && L.maxTo > h.currentBet) type = "raise";
+      else if (L.canCall) type = "call";
+      else type = "check";
+      action2 = { type, to: L.maxTo };
+    }
+    if (type === "fold") {
+      hp.folded = true;
+      hp.acted = true;
+      hp.lastAction = "fold";
+      say("folds");
+      ev.push({ t: "act", pid, a: "fold" });
+    } else if (type === "check") {
+      hp.acted = true;
+      hp.actedAt = h.currentBet;
+      hp.lastAction = "check";
+      say("checks");
+      ev.push({ t: "act", pid, a: "check" });
+    } else if (type === "call") {
+      const amt = L.toCall;
+      p.stack -= amt;
+      hp.streetBet += amt;
+      hp.total += amt;
+      if (p.stack === 0) hp.allIn = true;
+      hp.acted = true;
+      hp.actedAt = h.currentBet;
+      hp.lastAction = hp.allIn ? "allin" : "call";
+      say(hp.allIn ? `calls ${amt} and is all-in` : `calls ${amt}`);
+      ev.push({ t: "act", pid, a: hp.allIn ? "allin" : "call", amount: amt, to: hp.streetBet });
+    } else {
+      let to = Math.floor(Number(action2.to) || 0);
+      to = Math.max(Math.min(to, L.maxTo), L.minTo);
+      const amt = to - hp.streetBet;
+      const raiseSize = to - h.currentBet;
+      const wasBet = h.currentBet === 0;
+      p.stack -= amt;
+      hp.streetBet = to;
+      hp.total += amt;
+      if (p.stack === 0) hp.allIn = true;
+      if (raiseSize >= h.lastFullRaise) h.lastFullRaise = raiseSize;
+      h.currentBet = to;
+      h.lastAggressor = pid;
+      hp.acted = true;
+      hp.actedAt = to;
+      hp.lastAction = hp.allIn ? "allin" : wasBet ? "bet" : "raise";
+      say(hp.allIn ? `goes all-in for ${to}` : wasBet ? `bets ${to}` : `raises to ${to}`);
+      ev.push({ t: "act", pid, a: hp.lastAction, amount: amt, to });
+    }
+    if (this.livePlayers().length === 1) {
+      ev.push(...this.finishUncontested());
+      return { events: ev };
+    }
+    const next = this.nextToAct(pid);
+    if (next) ev.push(this.setTurn(next));
+    else ev.push(...this.closeRound());
+    return { events: ev };
+  }
+  /** Time past the per-action allowance comes out of the bank (after any disconnect grace). */
+  chargeBank(p, h) {
+    const c = this.s.cfg;
+    if (c.turnTime <= 0) return;
+    const elapsed = (this.s.now - h.turnStartedAt) / 1e3;
+    const grace = h.graceUsed[p.id] ? c.disconnectGrace : 0;
+    const over = elapsed - c.turnTime - grace;
+    if (over > 0) p.bank = Math.max(0, round1(p.bank - over));
+  }
+  /** Clock input: times out the player to act, or settles an unanswered Deal it twice vote. */
+  tick(now) {
+    const s = this.s, h = s.hand;
+    s.now = Math.max(s.now, now);
+    if (s.paused || !h || s.phase !== "hand") return [];
+    if (h.vote) return now >= h.vote.deadline ? this.resolveVote(false) : [];
+    const d = this.deadline();
+    if (d === null || now < d) return [];
+    const pid = h.toAct;
+    this.P(pid).bank = 0;
+    const L = this.legal(pid);
+    const events2 = this.act(pid, { type: L.canCheck ? "check" : "fold" }).events;
+    const first = events2[0];
+    if (first && first.t === "act") first.auto = true;
+    this.logLine(`${this.P(pid).name} ran out of time`);
+    return events2;
+  }
+  /** Return the uncalled part of the biggest bet this round. */
+  returnUncalled() {
+    const h = this.H;
+    const bets = h.order.map((pid) => ({ pid, b: h.ps[pid].streetBet })).sort((a, b) => b.b - a.b);
+    const top = bets[0], second = bets[1];
+    if (top.b > second.b) {
+      const extra = top.b - second.b;
+      const hp = h.ps[top.pid];
+      const p = this.P(top.pid);
+      hp.streetBet -= extra;
+      hp.total -= extra;
+      p.stack += extra;
+      if (hp.allIn && p.stack > 0) hp.allIn = false;
+      this.logLine(`Uncalled ${extra} returned to ${p.name}`);
+      return [{ t: "refund", pid: top.pid, amount: extra }];
+    }
+    return [];
+  }
+  closeRound() {
+    const h = this.H;
+    const ev = [...this.returnUncalled()];
+    ev.push({ t: "collect" });
+    for (const pid of h.order) {
+      const hp = h.ps[pid];
+      hp.streetBet = 0;
+      hp.acted = false;
+      hp.actedAt = 0;
+      if (!hp.folded && !hp.allIn) hp.lastAction = null;
+    }
+    h.currentBet = 0;
+    h.lastFullRaise = this.s.level.bb;
+    h.toAct = null;
+    if (h.street === "river") return ev.concat(this.showdown());
+    if (this.canActPlayers().length <= 1) {
+      h.runout = true;
+      ev.push(this.revealAll());
+      if (this.s.cfg.dealItTwice) {
+        const pids = this.livePlayers();
+        h.vote = { pids, yes: {}, deadline: this.s.now + this.s.cfg.dealItTwiceVote * 1e3 };
+        ev.push({ t: "voteTwice", pids, deadline: h.vote.deadline });
+        return ev;
+      }
+      return ev.concat(this.runOut(false));
+    }
+    ev.push(this.dealStreet());
+    const first = this.nextToAct(h.order[h.order.length - 1]);
+    ev.push(this.setTurn(first));
+    return ev;
+  }
+  vote(pid, yes, now) {
+    const h = this.s.hand;
+    if (!h || !h.vote || this.s.phase !== "hand") return { error: "Nothing to vote on" };
+    if (this.s.paused) return { error: "The table is paused" };
+    if (!h.vote.pids.includes(pid)) return { error: "Only players in the hand vote" };
+    if (pid in h.vote.yes) return { error: "Already voted" };
+    this.s.now = Math.max(this.s.now, now);
+    h.vote.yes[pid] = yes;
+    if (!yes) return { events: this.resolveVote(false) };
+    if (h.vote.pids.every((x) => h.vote.yes[x])) return { events: this.resolveVote(true) };
+    return { events: [] };
+  }
+  resolveVote(agreed) {
+    const h = this.H;
+    h.vote = null;
+    this.logLine(agreed ? "Everyone agrees: the rest of the board is dealt twice" : "The board is dealt once");
+    return [{ t: "twice", agreed }, ...this.runOut(agreed)];
+  }
+  runOut(twice) {
+    const h = this.H;
+    const ev = [];
+    const before = h.board.length;
+    while (h.board.length < 5) ev.push(this.dealStreet());
+    if (twice) {
+      const b2 = h.board.slice(0, before);
+      while (b2.length < 5) {
+        h.deck.pop();
+        h.burns += 1;
+        const cards = [];
+        for (let i = 0, n = b2.length === 0 ? 3 : 1; i < n; i++) cards.push(h.deck.pop());
+        b2.push(...cards);
+        const street = b2.length === 3 ? "flop" : b2.length === 4 ? "turn" : "river";
+        ev.push({ t: "street", street, cards: cards.map(cardStr), board: 2 });
+      }
+      h.board2 = b2;
+      this.logLine(`Second board: ${b2.map(cardStr).join(" ")}`);
+    }
+    return ev.concat(this.showdown());
+  }
+  dealStreet() {
+    const h = this.H;
+    h.deck.pop();
+    h.burns += 1;
+    let cards, street;
+    if (h.board.length === 0) {
+      cards = [h.deck.pop(), h.deck.pop(), h.deck.pop()];
+      street = "flop";
+    } else if (h.board.length === 3) {
+      cards = [h.deck.pop()];
+      street = "turn";
+    } else {
+      cards = [h.deck.pop()];
+      street = "river";
+    }
+    h.board.push(...cards);
+    h.street = street;
+    this.logLine(`${street.charAt(0).toUpperCase() + street.slice(1)}: ${h.board.map(cardStr).join(" ")}`);
+    return { t: "street", street, cards: cards.map(cardStr) };
+  }
+  revealAll() {
+    const h = this.H;
+    const cards = {};
+    for (const pid of this.livePlayers()) {
+      h.revealed[pid] = true;
+      cards[pid] = h.ps[pid].cards.map(cardStr);
+    }
+    return { t: "reveal", cards };
+  }
+  buildPots() {
+    const h = this.H;
+    const contrib = h.order.map((pid) => ({ pid, amt: h.ps[pid].total, live: !h.ps[pid].folded }));
+    const levels = [...new Set(contrib.filter((c) => c.amt > 0).map((c) => c.amt))].sort((a, b) => a - b);
+    const pots = [];
+    let prev = 0;
+    for (const lvl of levels) {
+      let amount = 0;
+      for (const c of contrib) amount += Math.max(0, Math.min(c.amt, lvl) - prev);
+      const elig = contrib.filter((c) => c.live && c.amt >= lvl).map((c) => c.pid);
+      prev = lvl;
+      const last = pots[pots.length - 1];
+      if (elig.length === 0 && last) {
+        last.amount += amount;
+        continue;
+      }
+      if (last && last.elig.length === elig.length && last.elig.every((x) => elig.includes(x))) last.amount += amount;
+      else pots.push({ amount, elig });
+    }
+    return pots;
+  }
+  /** Chairs clockwise from the button chair (1 = first left of the button). */
+  distFromButton(pid) {
+    const N = this.s.cfg.maxPlayers;
+    return (this.P(pid).chair - this.H.buttonChair + N) % N || N;
+  }
+  evalBoard(board, live2) {
+    const h = this.H;
+    const evals = {};
+    for (const pid of live2) {
+      const e = evalBest(h.ps[pid].cards.concat(board));
+      evals[pid] = { score: e.score, name: e.name, desc: e.desc, best: e.cards.map(cardStr) };
+    }
+    return evals;
+  }
+  award(amount, elig, evals) {
+    const best = Math.max(...elig.map((pid) => evals[pid].score));
+    const winners = elig.filter((pid) => evals[pid].score === best).sort((a, b) => this.distFromButton(a) - this.distFromButton(b));
+    const share = Math.floor(amount / winners.length);
+    let odd = amount - share * winners.length;
+    const awards = winners.map((pid) => {
+      const amt = share + (odd > 0 ? 1 : 0);
+      if (odd > 0) odd -= 1;
+      this.P(pid).stack += amt;
+      return { pid, amount: amt };
+    });
+    return { awards, winners };
+  }
+  showdown() {
+    const h = this.H;
+    const ev = [];
+    const live2 = this.livePlayers();
+    let showOrder = live2.slice().sort((a, b) => this.distFromButton(a) - this.distFromButton(b));
+    if (h.lastAggressor && live2.includes(h.lastAggressor) && !h.runout) {
+      const i = showOrder.indexOf(h.lastAggressor);
+      showOrder = showOrder.slice(i).concat(showOrder.slice(0, i));
+    }
+    const evals = this.evalBoard(h.board, live2);
+    const evals2 = h.board2 ? this.evalBoard(h.board2, live2) : void 0;
+    if (!h.runout) {
+      const cards = {};
+      for (const pid of showOrder) {
+        h.revealed[pid] = true;
+        cards[pid] = h.ps[pid].cards.map(cardStr);
+      }
+      ev.push({ t: "reveal", cards, order: showOrder });
+    }
+    const pots = this.buildPots();
+    const results = [];
+    pots.forEach((pot, i) => {
+      const label = pots.length === 1 ? "the pot" : i === 0 ? "the main pot" : `side pot ${i}`;
+      const runs = evals2 ? [{ amount: Math.ceil(pot.amount / 2), evals, board: 1, suffix: " (first board)" }, { amount: Math.floor(pot.amount / 2), evals: evals2, board: 2, suffix: " (second board)" }] : [{ amount: pot.amount, evals, suffix: "" }];
+      for (const run of runs) {
+        const { awards, winners } = this.award(run.amount, pot.elig, run.evals);
+        for (const a of awards) this.logLine(`${this.P(a.pid).name} wins ${a.amount} from ${label}${run.suffix} with ${run.evals[a.pid].desc}`);
+        const r = { label: label + run.suffix, amount: run.amount, awards, hand: run.evals[winners[0]] };
+        if (run.board) r.board = run.board;
+        results.push(r);
+      }
+    });
+    h.results = { pots: results, evals, showdown: true };
+    if (evals2) {
+      h.results.evals2 = evals2;
+      h.results.twice = true;
+    }
+    this.endHand();
+    ev.push({ t: "win", results: h.results }, this.deckRevealEvent());
+    return ev;
+  }
+  finishUncontested() {
+    const h = this.H;
+    const ev = [...this.returnUncalled(), { t: "collect" }];
+    for (const pid of h.order) h.ps[pid].streetBet = 0;
+    const winner = this.livePlayers()[0];
+    const amount = this.potTotal();
+    this.P(winner).stack += amount;
+    this.logLine(`${this.P(winner).name} wins ${amount} uncontested`);
+    h.results = { pots: [{ label: "the pot", amount, awards: [{ pid: winner, amount }], hand: null }], evals: {}, showdown: false };
+    this.endHand();
+    ev.push({ t: "win", results: h.results }, this.deckRevealEvent());
+    return ev;
+  }
+  deckRevealEvent() {
+    const h = this.H;
+    return { t: "deckReveal", dealerSeed: h.seedInfo.dealerSeed, contributions: h.seedInfo.contributions, deckCommit: h.deckCommit };
+  }
+  endHand() {
+    const s = this.s, h = this.H;
+    h.toAct = null;
+    h.endedAt = s.now;
+    s.phase = "between";
+    for (const pot of h.results.pots) for (const a of pot.awards) {
+      const st = s.stats[a.pid] ??= { won: 0, biggest: 0 };
+      st.won += 1;
+      st.biggest = Math.max(st.biggest, a.amount);
+    }
+    for (const p of s.players) if (p.stack === 0) p.busted = true;
+    const leaving = s.players.filter((p) => p.leaving);
+    if (leaving.length) {
+      s.departed = (s.departed ?? []).concat(leaving.map((p) => ({ ...p })));
+      s.players = s.players.filter((p) => !p.leaving);
+    }
+    this.reseat();
+    this.undoStack = [];
+  }
+  /** Winner of an uncontested pot may choose to show. */
+  showCards(pid) {
+    const h = this.s.hand;
+    const hp = h?.ps[pid];
+    if (!h || !hp || this.s.phase !== "between" || h.shown[pid] || h.revealed[pid]) return [];
+    h.shown[pid] = true;
+    this.logLine(`${this.P(pid).name} shows ${hp.cards.map(cardStr).join(" ")}`);
+    return [{ t: "show", pid, cards: hp.cards.map(cardStr) }];
+  }
+  /** Timer / away handling: check if possible, otherwise fold. */
+  autoAct(pid) {
+    const L = this.legal(pid);
+    if (!L) return null;
+    return this.act(pid, { type: L.canCheck ? "check" : "fold" });
+  }
+  endGame() {
+    this.s.phase = "ended";
+    const h = this.s.hand;
+    if (h && !h.results) {
+      for (const [pid, hp] of Object.entries(h.ps)) {
+        const p = this.player(pid);
+        if (p) p.stack += hp.total;
+      }
+    }
+    this.s.hand = null;
+    return this.standings();
+  }
+  standings() {
+    const all = this.s.players.concat(this.s.departed ?? []);
+    return all.map((p) => ({
+      id: p.id,
+      name: p.name,
+      stack: p.stack,
+      buyins: p.buyins,
+      net: p.stack - p.buyins,
+      won: this.s.stats[p.id]?.won ?? 0,
+      biggest: this.s.stats[p.id]?.biggest ?? 0
+    })).sort((a, b) => b.net - a.net);
+  }
+  // ---------------- views ----------------
+  /** What `pid` may see; pass null for a spectator (public cards only). */
+  viewFor(pid) {
+    const s = this.s, h = s.hand;
+    const c = s.cfg;
+    const v = {
+      gameId: s.gameId,
+      phase: s.phase,
+      handNo: s.handNo,
+      level: s.level,
+      cfg: { startStack: c.startStack, rebuys: c.rebuys, turnTime: c.turnTime, blindUpEvery: c.blindUpEvery, timeBank: c.timeBank, dealItTwice: c.dealItTwice, straddle: c.straddle, maxPlayers: c.maxPlayers },
+      button: s.button,
+      paused: s.paused,
+      players: s.players.map((p) => ({
+        id: p.id,
+        name: p.name,
+        seat: p.seat,
+        chair: p.chair,
+        stack: p.stack,
+        sittingOut: p.sittingOut,
+        away: p.away,
+        connected: p.connected,
+        busted: p.busted,
+        leaving: p.leaving,
+        buyins: p.buyins,
+        bank: p.bank,
+        waitForBB: p.waitForBB,
+        missedSB: p.missedSB,
+        missedBB: p.missedBB,
+        rebuysUsed: p.rebuysUsed
+      })),
+      log: s.log.slice(-30),
+      me: pid,
+      hand: null,
+      legal: null,
+      canUndo: this.canUndo(),
+      engineVersion: ENGINE_VERSION
+    };
+    if (h) {
+      const ps = {};
+      for (const id2 of h.order) {
+        const hp = h.ps[id2];
+        const show = id2 === pid || h.revealed[id2] || h.shown[id2];
+        ps[id2] = {
+          streetBet: hp.streetBet,
+          total: hp.total,
+          folded: hp.folded,
+          allIn: hp.allIn,
+          lastAction: hp.lastAction,
+          inHand: true,
+          cards: show ? hp.cards.map(cardStr) : null,
+          revealed: !!(h.revealed[id2] || h.shown[id2])
+        };
+      }
+      const ended = !!h.results;
+      v.hand = {
+        id: h.id,
+        board: h.board.map(cardStr),
+        board2: h.board2 ? h.board2.map(cardStr) : null,
+        street: h.street,
+        order: h.order,
+        ps,
+        toAct: h.toAct,
+        currentBet: h.currentBet,
+        pot: this.potTotal(),
+        collected: Object.values(h.ps).reduce((a, x) => a + x.total - x.streetBet, 0),
+        sbId: h.sbId,
+        bbId: h.bbId,
+        straddleId: h.straddleId,
+        buttonId: h.buttonId,
+        results: h.results,
+        runout: h.runout,
+        pots: s.phase === "hand" ? this.livePotsPreview() : null,
+        deadline: this.deadline(),
+        deckCommit: h.deckCommit,
+        proof: ended ? { dealerSeed: h.seedInfo.dealerSeed, contributions: h.seedInfo.contributions, dealerSeedCommit: h.seedInfo.dealerSeedCommit } : null,
+        vote: h.vote ? { pids: h.vote.pids, deadline: h.vote.deadline, voted: Object.keys(h.vote.yes) } : null
+      };
+      v.legal = pid ? this.legal(pid) : null;
+    }
+    return v;
+  }
+  /** Pots made only of collected chips (for showing side pots mid-hand). */
+  livePotsPreview() {
+    const h = this.H;
+    const anyAllIn = h.order.some((pid) => h.ps[pid].allIn);
+    if (!anyAllIn) return null;
+    return this.buildPots().map((p) => ({ amount: p.amount, n: p.elig.length }));
+  }
+};
+
+// ../../packages/table/src/room.ts
+var hashToken = (t) => sha256hex(t);
+var ACKS_KEPT = 64;
+var ACKS_SAVED = 16;
+var REACT_GAP_MS = 800;
+var TableRoom = class {
+  constructor(code, clock, store, saved, opt = {}) {
+    this.clock = clock;
+    this.store = store;
+    this.code = code;
+    this.opt = { handPauseMs: 4e3, rateLimit: 40, rateWindowMs: 2e3, keepUpdates: 200, offlineAfterMs: 3e3, seed: randomSeed, ...opt };
+    this.createdAt = clock.now();
+    if (saved) this.restore(saved);
+  }
+  code;
+  engine = null;
+  seq = 0;
+  host = null;
+  running = false;
+  nextDealAt = null;
+  createdAt;
+  base = null;
+  inputs = [];
+  tokens = {};
+  conns = /* @__PURE__ */ new Map();
+  acks = /* @__PURE__ */ new Map();
+  recent = [];
+  lastRecord = null;
+  /** Players whose last connection dropped, and when they will be shown as gone. */
+  goingOffline = /* @__PURE__ */ new Map();
+  /** Inside one incoming message or wake-up, saves are collected into one at the end. */
+  batchDepth = 0;
+  needSave = false;
+  opt;
+  // ---------------- doors in ----------------
+  connect(conn) {
+    this.conns.set(conn, { pid: null, hello: false, spectator: false, windowStart: this.clock.now(), count: 0, lastReact: 0 });
+  }
+  disconnect(conn) {
+    const st = this.conns.get(conn);
+    if (!st) return;
+    this.conns.delete(conn);
+    if (st.pid && this.engine?.player(st.pid) && !this.connsOf(st.pid).length) {
+      this.goingOffline.set(st.pid, this.clock.now() + this.opt.offlineAfterMs);
+      this.reschedule();
+    }
+  }
+  message(conn, raw) {
+    this.batch(() => this.onMessage(conn, raw));
+  }
+  onMessage(conn, raw) {
+    const st = this.conns.get(conn);
+    if (!st) return;
+    const now = this.clock.now();
+    if (now - st.windowStart >= this.opt.rateWindowMs) {
+      st.windowStart = now;
+      st.count = 0;
+    }
+    if (++st.count > this.opt.rateLimit) return this.send(conn, { t: "error", code: "rate_limited", message: "Too many messages" });
+    const p = parseClient(raw);
+    if (!p.ok) return this.send(conn, { t: "error", code: "bad_message", message: p.error });
+    const m = p.msg;
+    if (m.t === "ping") return this.send(conn, { t: "pong", c: m.c, s: now, seq: this.seq });
+    if (m.t === "hello") return this.hello(conn, st, m);
+    if (!st.hello) return this.send(conn, { t: "error", code: "need_hello", message: "Say hello first" });
+    if (m.t === "react") return this.react(conn, st, m.reaction);
+    if (m.t === "seed") return;
+    if (!st.pid || !this.engine) return this.ack(conn, null, m.actionId, "Spectators cannot play");
+    const pid = st.pid;
+    const done = this.acks.get(pid)?.get(m.actionId);
+    if (done) return this.send(conn, done);
+    this.ack(conn, pid, m.actionId, this.handle(pid, m, now));
+  }
+  /** The clock door: called at (or after) the time last passed to clock.schedule. */
+  wake() {
+    this.batch(() => this.onWake());
+  }
+  onWake() {
+    const now = this.clock.now();
+    const e = this.engine;
+    if (e && e.s.phase === "hand" && !e.s.paused) {
+      const due = this.handDeadline();
+      if (due !== null && now >= due) this.apply({ t: "tick", now });
+    }
+    for (const [pid, at] of this.goingOffline) {
+      if (now < at) continue;
+      this.goingOffline.delete(pid);
+      if (!this.connsOf(pid).length && this.engine?.player(pid)?.connected) this.apply({ t: "presence", pid, connected: false, now });
+    }
+    if (this.nextDealAt !== null && now >= this.nextDealAt) {
+      this.nextDealAt = null;
+      this.tryDeal(now);
+    }
+    this.reschedule();
+  }
+  // ---------------- messages ----------------
+  hello(conn, st, m) {
+    const now = this.clock.now();
+    const fail = (code, message) => {
+      this.send(conn, { t: "error", code, message });
+      conn.close(4e3, code);
+    };
+    if (!versionOk(m.v)) return fail("version", "Please update the app");
+    if (m.table !== this.code) return fail("no_table", "Wrong table");
+    if (st.hello) return this.send(conn, { t: "error", code: "bad_message", message: "Already said hello" });
+    if (m.spectate || !m.token) {
+      if (!this.engine) return fail("no_table", "This table has not started");
+      st.hello = true;
+      st.spectator = true;
+      return this.welcome(conn, null, m.lastSeq);
+    }
+    const tokenHash = hashToken(m.token);
+    if (this.tokens[m.player] && this.tokens[m.player] !== tokenHash) return fail("not_allowed", "That seat belongs to another phone");
+    if (!this.engine) this.create(m.settings, now);
+    const e = this.engine;
+    if (!e.player(m.player)) {
+      if (!m.name) return fail("bad_message", "A name is needed to join");
+      const r = this.apply({ t: "join", id: m.player, name: m.name, now });
+      if (r) return fail(r === "The table is full" ? "table_full" : "not_allowed", r);
+      this.tokens[m.player] = tokenHash;
+      if (!this.host) this.host = m.player;
+      this.persist();
+    }
+    for (const old of this.connsOf(m.player)) {
+      this.conns.delete(old);
+      this.send(old, { t: "error", code: "replaced", message: "This seat opened somewhere else" });
+      old.close(4001, "replaced");
+    }
+    this.goingOffline.delete(m.player);
+    if (!e.player(m.player).connected) this.apply({ t: "presence", pid: m.player, connected: true, now });
+    st.hello = true;
+    st.pid = m.player;
+    this.welcome(conn, m.player, m.lastSeq);
+    this.tryDeal(now);
+    this.reschedule();
+  }
+  handle(pid, m, now) {
+    const e = this.engine;
+    const handNo = "handNo" in m ? m.handNo : null;
+    if (handNo !== null && (e.s.phase !== "hand" || e.s.handNo !== handNo) && m.t !== "show") return "That hand is over";
+    switch (m.t) {
+      case "act":
+        return this.apply({ t: "act", pid, action: m.action.to === void 0 ? { type: m.action.type } : { type: m.action.type, to: m.action.to }, now });
+      case "sit": {
+        const r = this.apply(m.out ? { t: "sitOut", pid, now } : { t: "sitIn", pid, postNow: !!m.postNow, now });
+        if (!r && !m.out) this.tryDeal(now);
+        return r;
+      }
+      case "rebuy": {
+        const r = this.apply({ t: "rebuy", pid, now });
+        if (!r) this.tryDeal(now);
+        return r;
+      }
+      case "vote":
+        return this.apply({ t: "vote", pid, yes: m.yes, now });
+      case "straddle":
+        return this.apply({ t: "straddle", pid, on: m.on, now });
+      case "show":
+        return e.s.handNo === m.handNo ? this.apply({ t: "show", pid, now }) : "That hand is over";
+      case "host": {
+        if (pid !== this.host) return "Only the host can do that";
+        if (m.cmd === "deal") {
+          if (e.s.phase === "hand") return "A hand is already running";
+          const r2 = this.deal(now);
+          if (!r2) this.running = true;
+          this.persist();
+          return r2;
+        }
+        let input;
+        if (m.cmd === "move" || m.cmd === "remove") {
+          if (!m.pid) return "Which player?";
+          input = m.cmd === "move" ? { t: "host", cmd: "move", pid: m.pid, dir: m.dir ?? 1, now } : { t: "host", cmd: "remove", pid: m.pid, now };
+        } else if (m.cmd === "setBlinds") {
+          if (m.sb === void 0 || m.bb === void 0) return "Blinds needed";
+          input = { t: "host", cmd: "setBlinds", sb: m.sb, bb: m.bb, ...m.ante !== void 0 ? { ante: m.ante } : {}, now };
+        } else input = { t: "host", cmd: m.cmd, now };
+        const r = this.apply(input);
+        if (!r && m.cmd === "remove") {
+          for (const c of this.connsOf(m.pid)) {
+            const st = this.conns.get(c);
+            st.pid = null;
+            st.spectator = true;
+          }
+          if (this.host === m.pid) this.host = this.pickHost(m.pid);
+        }
+        if (!r && m.cmd === "end") {
+          this.running = false;
+          this.nextDealAt = null;
+        }
+        if (!r && m.cmd === "resume") this.tryDeal(now);
+        this.persist();
+        return r;
+      }
+    }
+  }
+  react(conn, st, reaction) {
+    if (!st.pid) return;
+    const now = this.clock.now();
+    if (now - st.lastReact < REACT_GAP_MS) return this.send(conn, { t: "error", code: "rate_limited", message: "One reaction at a time" });
+    st.lastReact = now;
+    this.broadcastRaw({ t: "react", from: st.pid, reaction });
+  }
+  // ---------------- the table ----------------
+  create(settings, now) {
+    this.engine = Engine.create(this.code, settings ?? {}, now);
+    this.base = this.engine.snapshot();
+    this.inputs = [];
+  }
+  /** Apply one input; on success bump seq, tell everyone and save. Returns an error text or null. */
+  apply(input) {
+    const e = this.engine;
+    const r = e.apply(input);
+    if (r.error !== void 0) return r.error;
+    const events2 = r.events;
+    if (e.s.phase === "hand") this.inputs.push(input);
+    else {
+      this.base = e.snapshot();
+      this.inputs = [];
+    }
+    this.seq++;
+    this.recent.push({ seq: this.seq, events: events2 });
+    if (this.recent.length > this.opt.keepUpdates) this.recent.shift();
+    const rec = e.lastHandRecord;
+    if (rec && rec !== this.lastRecord) {
+      this.lastRecord = rec;
+      this.store.appendHand(rec);
+      if (this.running && e.s.phase !== "ended") this.nextDealAt = input.now + this.opt.handPauseMs;
+    }
+    for (const [c, st] of this.conns) if (st.hello) this.send(c, { t: "update", seq: this.seq, events: events2, view: this.view(st.pid), host: this.host });
+    this.persist();
+    this.reschedule();
+    return null;
+  }
+  deal(now) {
+    return this.apply({ t: "start", seed: this.opt.seed(), now });
+  }
+  tryDeal(now) {
+    const e = this.engine;
+    if (!e || !this.running || e.s.paused || e.s.phase === "hand" || e.s.phase === "ended") return;
+    if (this.nextDealAt !== null && now < this.nextDealAt) return;
+    this.nextDealAt = null;
+    if (e.canStartHand()) this.deal(now);
+  }
+  /** When the hand in progress next needs the clock: the turn timer or the Deal it twice vote. */
+  handDeadline() {
+    const e = this.engine;
+    if (!e || e.s.phase !== "hand" || e.s.paused) return null;
+    return e.s.hand?.vote ? e.s.hand.vote.deadline : e.deadline();
+  }
+  reschedule() {
+    const times = [this.handDeadline(), this.nextDealAt, ...this.goingOffline.values()].filter((x) => x !== null);
+    this.clock.schedule(times.length ? Math.min(...times) : null);
+  }
+  pickHost(not) {
+    const others = this.engine.s.players.filter((p) => p.id !== not && !p.leaving);
+    return others.find((p) => p.connected)?.id ?? others[0]?.id ?? null;
+  }
+  // ---------------- doors out ----------------
+  view(pid) {
+    return this.engine.viewFor(pid);
+  }
+  welcome(conn, pid, lastSeq) {
+    const missed = lastSeq > 0 && lastSeq < this.seq && this.recent[0] && this.recent[0].seq <= lastSeq + 1 ? this.recent.filter((u) => u.seq > lastSeq).flatMap((u) => u.events) : void 0;
+    this.send(conn, { t: "welcome", v: PROTOCOL_VERSION, seq: this.seq, you: pid, host: this.host, view: this.view(pid), serverTime: this.clock.now(), ...missed ? { missed } : {} });
+  }
+  ack(conn, pid, actionId, error46) {
+    const a = error46 ? { t: "ack", actionId, ok: false, error: error46 } : { t: "ack", actionId, ok: true };
+    if (pid) {
+      let m = this.acks.get(pid);
+      if (!m) this.acks.set(pid, m = /* @__PURE__ */ new Map());
+      m.set(actionId, a);
+      if (m.size > ACKS_KEPT) m.delete(m.keys().next().value);
+      if (!error46) this.persist();
+    }
+    this.send(conn, a);
+  }
+  send(conn, m) {
+    try {
+      conn.send(encode3(m));
+    } catch {
+    }
+  }
+  broadcastRaw(m) {
+    const text = encode3(m);
+    for (const [c, st] of this.conns) if (st.hello) try {
+      c.send(text);
+    } catch {
+    }
+  }
+  connsOf(pid) {
+    return [...this.conns].filter(([, st]) => st.pid === pid).map(([c]) => c);
+  }
+  // ---------------- saving ----------------
+  persisted() {
+    if (!this.engine || !this.base) return null;
+    const acks = {};
+    for (const [pid, m] of this.acks) acks[pid] = [...m.values()].slice(-ACKS_SAVED);
+    return {
+      v: 1,
+      code: this.code,
+      base: this.base,
+      inputs: this.inputs,
+      seq: this.seq,
+      host: this.host,
+      tokens: this.tokens,
+      running: this.running,
+      nextDealAt: this.nextDealAt,
+      createdAt: this.createdAt,
+      acks
+    };
+  }
+  persist() {
+    if (this.batchDepth) {
+      this.needSave = true;
+      return;
+    }
+    const p = this.persisted();
+    if (p) this.store.save(p);
+  }
+  batch(fn) {
+    this.batchDepth++;
+    try {
+      fn();
+    } finally {
+      if (--this.batchDepth === 0 && this.needSave) {
+        this.needSave = false;
+        this.persist();
+      }
+    }
+  }
+  restore(p) {
+    this.engine = Engine.replay(p.base, p.inputs);
+    this.lastRecord = this.engine.lastHandRecord;
+    this.base = p.base;
+    this.inputs = p.inputs.slice();
+    this.seq = p.seq;
+    this.host = p.host;
+    this.tokens = { ...p.tokens };
+    this.running = p.running;
+    this.nextDealAt = p.nextDealAt;
+    this.createdAt = p.createdAt;
+    for (const [pid, list] of Object.entries(p.acks ?? {})) this.acks.set(pid, new Map(list.map((a) => [a.actionId, a])));
+  }
+  /**
+   * After a restore, connections that survived (a Durable Object waking from hibernation keeps its
+   * sockets) are handed back with the seat they had said hello for.
+   */
+  adopt(conn, pid) {
+    this.conns.set(conn, { pid, hello: true, spectator: pid === null, windowStart: this.clock.now(), count: 0, lastReact: 0 });
+  }
+  /** Call once after a restore (and any adopt calls): players with no connection are shown as gone. */
+  settleAfterRestart() {
+    const e = this.engine;
+    if (!e) return;
+    const now = Math.max(this.clock.now(), e.s.now);
+    for (const pl of e.s.players) if (pl.connected && !this.connsOf(pl.id).length) this.apply({ t: "presence", pid: pl.id, connected: false, now });
+    this.reschedule();
+  }
+  /** What a connection said hello as (kept by servers that may sleep, like a Durable Object). */
+  connInfo(conn) {
+    const st = this.conns.get(conn);
+    return st ? { pid: st.pid, hello: st.hello } : null;
+  }
+  /** Numbers for /health and tests. */
+  stats() {
+    return { players: this.engine?.s.players.length ?? 0, connections: this.conns.size, handNo: this.engine?.s.handNo ?? 0, phase: this.engine?.s.phase ?? "new" };
+  }
+  get connectionCount() {
+    return this.conns.size;
+  }
+  /** Has this connection introduced itself? (Servers close connections that never do.) */
+  hasSaidHello(conn) {
+    return !!this.conns.get(conn)?.hello;
+  }
+};
 
 // src/latency-page.ts
 var LATENCY_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -16254,7 +18181,7 @@ var LATENCY_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><
   let edge = {};
   for (let i = 0; i < 15; i++) { const t0 = performance.now(); edge = await fetch('/health?i=' + i, { cache: 'no-store' }).then((r) => r.json()); http.push(performance.now() - t0); }
   // 2) phone to the table server (Durable Object) over the live connection
-  const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/table/LAT' + Math.floor(Math.random() * 1e6));
+  const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/echo/LAT' + Math.floor(Math.random() * 1e6));
   await new Promise((r) => (ws.onopen = r));
   const next = () => new Promise((r) => (ws.onmessage = (m) => r(m.data)));
   ws.send('where');
@@ -16283,6 +18210,7 @@ var LATENCY_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><
 // src/node.ts
 var PORT = Number(process.env.PORT ?? 8080);
 var SITE = process.env.SITE_NAME ?? "HYD";
+var DATA = process.env.DATA_DIR ?? (process.env.VERSION_FILE ? join(dirname(process.env.VERSION_FILE), "data") : join(process.cwd(), "data"));
 var VERSION = (() => {
   try {
     return readFileSync(process.env.VERSION_FILE ?? "", "utf8").trim();
@@ -16290,13 +18218,66 @@ var VERSION = (() => {
     return "dev";
   }
 })();
-var rooms = /* @__PURE__ */ new Map();
+var HELLO_WITHIN_MS = 15e3;
+var IDLE_EVICT_MS = 30 * 6e4;
+var SAVE_EVERY_MS = 100;
+mkdirSync(join(DATA, "tables"), { recursive: true });
+mkdirSync(join(DATA, "hands"), { recursive: true });
+var live = /* @__PURE__ */ new Map();
+var echo = /* @__PURE__ */ new Map();
+var tableFile = (code) => join(DATA, "tables", `${code}.json`);
+function flush(code, l) {
+  if (l.saveTimer) {
+    clearTimeout(l.saveTimer);
+    l.saveTimer = null;
+  }
+  if (!l.dirty) return;
+  const file2 = tableFile(code);
+  writeFileSync(`${file2}.tmp`, JSON.stringify(l.dirty));
+  renameSync(`${file2}.tmp`, file2);
+  l.dirty = null;
+}
+function getRoom(code) {
+  const have = live.get(code);
+  if (have) return have;
+  let saved = null;
+  if (existsSync(tableFile(code))) {
+    try {
+      saved = JSON.parse(readFileSync(tableFile(code), "utf8"));
+    } catch (e) {
+      console.error(`table ${code}: unreadable save`, e);
+    }
+  }
+  const l = { room: null, timer: null, dirty: null, saveTimer: null, idleSince: Date.now() };
+  l.room = new TableRoom(code, {
+    now: () => Date.now(),
+    schedule: (at) => {
+      if (l.timer) clearTimeout(l.timer);
+      l.timer = at === null ? null : setTimeout(() => {
+        l.timer = null;
+        l.room.wake();
+      }, Math.min(Math.max(0, at - Date.now()), 2 ** 31 - 1));
+    }
+  }, {
+    save: (p) => {
+      l.dirty = p;
+      if (p.inputs.length === 0) flush(code, l);
+      else l.saveTimer ??= setTimeout(() => flush(code, l), SAVE_EVERY_MS);
+    },
+    appendHand: (h) => appendFileSync(join(DATA, "hands", `${code}.jsonl`), JSON.stringify(h) + "\n")
+  }, saved, process.env.HAND_PAUSE_MS ? { handPauseMs: Number(process.env.HAND_PAUSE_MS) } : {});
+  l.room.settleAfterRestart();
+  live.set(code, l);
+  return l;
+}
 var server = createServer((req, res) => {
   const url2 = new URL(req.url ?? "/", "http://local");
   const cors = { "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" };
   if (url2.pathname === "/health") {
+    let connections = 0;
+    for (const l of live.values()) connections += l.room.connectionCount;
     res.writeHead(200, { "content-type": "application/json", ...cors });
-    res.end(JSON.stringify({ ok: true, protocol: PROTOCOL_VERSION, colo: SITE, country: req.headers["cf-ipcountry"] ?? null, version: VERSION, rooms: rooms.size }));
+    res.end(JSON.stringify({ ok: true, protocol: PROTOCOL_VERSION, colo: SITE, country: req.headers["cf-ipcountry"] ?? null, version: VERSION, rooms: live.size, connections }));
     return;
   }
   if (url2.pathname === "/latency") {
@@ -16308,27 +18289,77 @@ var server = createServer((req, res) => {
   res.end("Not found");
 });
 var wss = new import_websocket_server.default({ noServer: true, maxPayload: 8 * 1024 });
+var alive = /* @__PURE__ */ new WeakMap();
 server.on("upgrade", (req, socket, head) => {
-  const m = /^\/table\/([A-Z0-9]{4,12})$/.exec(new URL(req.url ?? "/", "http://local").pathname);
+  const path = new URL(req.url ?? "/", "http://local").pathname;
+  const m = /^\/(table|echo)\/([A-Z0-9]{4,12})$/.exec(path);
   if (!m) {
     socket.destroy();
     return;
   }
-  const code = m[1];
+  const [, kind, code] = m;
   wss.handleUpgrade(req, socket, head, (ws) => {
-    const room = rooms.get(code) ?? /* @__PURE__ */ new Set();
-    rooms.set(code, room);
-    room.add(ws);
+    alive.set(ws, true);
+    ws.on("pong", () => alive.set(ws, true));
+    if (kind === "echo") return echoRoom(ws, code);
+    const l = getRoom(code);
+    const conn = { send: (t) => {
+      if (ws.readyState === ws.OPEN) ws.send(t);
+    }, close: (c, r) => ws.close(c, r) };
+    l.room.connect(conn);
+    const helloTimer = setTimeout(() => {
+      if (!l.room.hasSaidHello(conn)) ws.close(4004, "no hello");
+    }, HELLO_WITHIN_MS);
     ws.on("message", (data) => {
-      const text = data.toString();
-      if (text === "where") return ws.send(`where:${SITE}`);
-      if (text.startsWith("ping:")) return ws.send(`pong:${text.slice(5)}`);
-      for (const peer of room) peer.send(`echo:${text}`);
+      try {
+        l.room.message(conn, data.toString());
+      } catch (e) {
+        console.error(`table ${code}:`, e);
+      }
     });
     ws.on("close", () => {
-      room.delete(ws);
-      if (!room.size) rooms.delete(code);
+      clearTimeout(helloTimer);
+      l.room.disconnect(conn);
+      if (!l.room.connectionCount) l.idleSince = Date.now();
     });
   });
 });
-server.listen(PORT, "127.0.0.1", () => console.log(`table server ${VERSION} on 127.0.0.1:${PORT} (${SITE})`));
+function echoRoom(ws, code) {
+  const room = echo.get(code) ?? /* @__PURE__ */ new Set();
+  echo.set(code, room);
+  room.add(ws);
+  ws.on("message", (data) => {
+    const text = data.toString();
+    if (text === "where") return ws.send(`where:${SITE}`);
+    if (text.startsWith("ping:")) return ws.send(`pong:${text.slice(5)}`);
+    for (const peer of room) peer.send(`echo:${text}`);
+  });
+  ws.on("close", () => {
+    room.delete(ws);
+    if (!room.size) echo.delete(code);
+  });
+}
+setInterval(() => {
+  for (const ws of wss.clients) {
+    if (!alive.get(ws)) {
+      ws.terminate();
+      continue;
+    }
+    alive.set(ws, false);
+    ws.ping();
+  }
+  const now = Date.now();
+  for (const [code, l] of live) {
+    if (l.room.connectionCount || now - l.idleSince < IDLE_EVICT_MS) continue;
+    flush(code, l);
+    if (l.timer) clearTimeout(l.timer);
+    live.delete(code);
+  }
+}, 3e4).unref();
+function shutdown() {
+  for (const [code, l] of live) flush(code, l);
+  process.exit(0);
+}
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);
+server.listen(PORT, process.env.HOST ?? "127.0.0.1", () => console.log(`table server ${VERSION} on ${process.env.HOST ?? "127.0.0.1"}:${PORT} (${SITE}), data in ${DATA}`));
