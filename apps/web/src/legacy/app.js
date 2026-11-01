@@ -7,6 +7,8 @@ import { infoContent } from './info.js';
 import { settings, saveSettings, unlockAudio, keepAwake, sfx } from './fx.js';
 import { warmUpCamera, parsePayload } from './net.js';
 import { accountScreens } from './account-ui.js';
+import { offlineStart, hostPhoneHome, hostPhoneTable } from '../offline-screens.ts';
+import { onHostPhonePage } from '../offline.ts';
 
 const app = $('#app');
 let host = null;
@@ -42,6 +44,7 @@ function openSheet(content, { label = 'Panel', onClose, tall = false } = {}) {
 }
 
 const accounts = accountScreens({ screen, openSheet, home: () => home() });
+const ui = { screen, openSheet, home: () => home() };
 window.addEventListener('hashchange', () => accounts.route());
 
 // The info button is always on top of everything.
@@ -71,8 +74,9 @@ function home() {
         h('p', { class: 'tagline' }, "No-limit Texas Hold'em, one phone each, no internet needed.")),
       h('div', { class: 'home-actions' },
         saved && h('button', { class: 'btn primary', onclick: () => resumeHost() }, 'Resume your table', h('small', {}, `${saved.players} players, hand ${saved.handNo}`)),
-        h('button', { class: 'btn ' + (saved ? 'secondary' : 'primary'), onclick: () => setup() }, 'Host a new table', h('small', {}, 'This phone deals the game')),
-        h('button', { class: 'btn secondary', onclick: () => join() }, gsaved ? 'Join or rejoin a table' : 'Join a table', h('small', {}, gsaved ? `Last time you were ${gsaved.name}` : 'Scan the host’s code')),
+        h('button', { class: 'btn ' + (saved ? 'secondary' : 'primary'), 'data-testid': 'play-offline', onclick: () => offlineStart(ui) }, 'Play offline', h('small', {}, 'One phone runs the host app on its hotspot')),
+        h('button', { class: 'btn ghost', onclick: () => setup() }, 'Host a new table', h('small', {}, 'Without the host app: phones pair by QR code')),
+        h('button', { class: 'btn ghost', onclick: () => join() }, gsaved ? 'Join or rejoin a table' : 'Join a table', h('small', {}, gsaved ? `Last time you were ${gsaved.name}` : 'Scan the host’s QR code')),
         h('button', { class: 'btn ghost', 'data-testid': 'open-profile', onclick: () => accounts.profile() }, 'Profile and crews', h('small', {}, 'Recovery code, crews, invites'))),
       h('details', { class: 'howto' },
         h('summary', {}, 'How phones connect without WiFi'),
@@ -440,6 +444,10 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 // test hooks
 window.__tp = { get host() { return host; }, get guest() { return guest; }, get table() { return table; } };
 
+// on the host phone's own page (http://<hotspot>:8765): the offline table, or the host app's screen
+if (onHostPhonePage()) {
+  if (location.pathname === '/join') hostPhoneTable(ui); else hostPhoneHome(ui);
+} else
 // make sure this browser can actually connect phones
 if (!window.RTCPeerConnection || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
   app.replaceChildren(h('main', { class: 'screen home' }, h('div', { class: 'home-hero' }, h('h1', {}, 'Train Poker'),

@@ -67,6 +67,8 @@ export function accountScreens({ screen, openSheet, home }) {
 
   async function render(body, a) {
     const p = a.profile;
+    // kept on this phone for nights with no internet (offline tables): who I am
+    try { localStorage.setItem('tp-me', JSON.stringify({ account: p.id, name: p.name })); } catch { /* storage full or blocked */ }
     const nameIn = h('input', { type: 'text', maxlength: 20, value: p.name, 'aria-label': 'Your name', 'data-testid': 'name',
       onchange: async (e) => { const n = e.target.value.trim(); if (!n) return; try { await a.rename(n); localStorage.setItem('tp-name', n); toast('Name saved'); } catch (err) { toast(err.message); } } });
     const codeBox = h('div', { class: 'block-inner' });
@@ -154,6 +156,7 @@ export function accountScreens({ screen, openSheet, home }) {
     busy(box);
     try {
       const crews = await a.crews();
+      try { localStorage.setItem('tp-crews', JSON.stringify(crews.filter((c) => c.status === 'active').map((c) => ({ id: c.id, name: c.name })))); } catch { /* see above */ }
       box.replaceChildren(crews.length
         ? h('ul', { class: 'crew-list', 'data-testid': 'crews' }, ...crews.map((c) => h('li', {},
           h('button', { class: 'crew-row', onclick: () => crewScreen(c.id) },

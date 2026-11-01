@@ -12,6 +12,7 @@
   "dependencies": {
     "@tp/engine": "workspace:*",
     "@tp/protocol": "workspace:*",
-    "@tp/account": "workspace:*"
+    "@tp/account": "workspace:*",
+    "@tp/table": "workspace:*"
   }
 }

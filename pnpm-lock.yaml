@@ -112,6 +112,9 @@ importers:
       '@tp/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
+      '@tp/table':
+        specifier: workspace:*
+        version: link:../../packages/table
 
   packages/account:
     dependencies:

@@ -1,10 +1,10 @@
 -- Phase 5: nights played offline on the host phone.
 -- The host phone has no internet during the night, so it cannot check who each phone is. Its hands are
 -- uploaded later (by the host phone through a table server, which replays every hand to check it) and the
--- game waits as 'pending' until two of its players confirm it from their own phones, or a crew admin does.
+-- game waits (awaiting_confirmation) until two of its players confirm it from their own phones, or a crew
+-- admin does; until then it is not in the league and gives no trophies.
 -- A player whose name was used by someone else says "That wasn't me" and the seat becomes a guest.
-alter table public.games drop constraint games_status_check;
-alter table public.games add constraint games_status_check check (status in ('live', 'ended', 'void', 'pending'));
+alter table public.games add column awaiting_confirmation boolean not null default false;
 
 create table public.offline_confirmations (
   game_id uuid not null references public.games(id) on delete cascade,
@@ -75,7 +75,7 @@ end $$;
 
 create or replace function public.record_game_end(p_body text, p_sig text) returns text
 language plpgsql security definer set search_path = '' as $$
-declare b jsonb; g jsonb; gid uuid; st text; p jsonb; acc uuid; c uuid; v_casual boolean; v_end timestamptz; srv text;
+declare b jsonb; g jsonb; gid uuid; st text; p jsonb; acc uuid; c uuid; v_casual boolean; v_end timestamptz; srv text; waiting boolean;
 begin
   if not private.recorder_ok(p_body, p_sig) then raise exception 'Not a table server' using errcode = '42501'; end if;
   begin
@@ -96,9 +96,9 @@ begin
   insert into public.games (id, crew_id, table_code, server, casual, start_stack, big_blind, started_at)
     values (gid, c, g ->> 'table', g ->> 'server', coalesce((g ->> 'casual')::boolean, false), (g ->> 'startStack')::int, (g ->> 'bigBlind')::int, (g ->> 'startedAt')::timestamptz)
     on conflict (id) do nothing;
-  select x.status, x.casual, x.crew_id, x.server into st, v_casual, c, srv from public.games x where x.id = gid for update;
+  select x.status, x.casual, x.crew_id, x.server, x.awaiting_confirmation into st, v_casual, c, srv, waiting from public.games x where x.id = gid for update;
   if srv is distinct from (g ->> 'server') then raise exception 'That game was played elsewhere' using errcode = '22023'; end if;
-  if st <> 'live' then return 'duplicate'; end if;
+  if st <> 'live' or waiting then return 'duplicate'; end if;
   for p in select * from jsonb_array_elements(b -> 'players') loop
     acc := nullif(p ->> 'account', '')::uuid;
     if acc is not null and not exists (select 1 from public.accounts where id = acc) then acc := null; end if;
@@ -107,7 +107,7 @@ begin
       on conflict (game_id, player_key) do update set name = excluded.name, buyins = excluded.buyins, final_chips = excluded.final_chips, min_stack = excluded.min_stack;
   end loop;
   -- an offline night counts once two of its players (or a crew admin) confirm it online
-  update public.games set status = case when srv = 'host' then 'pending' else 'ended' end, ended_at = v_end,
+  update public.games set status = case when srv = 'host' then 'live' else 'ended' end, awaiting_confirmation = (srv = 'host'), ended_at = v_end,
     season_id = case when c is not null and not v_casual then private.season_for(c, v_end) end
   where id = gid;
   perform private.score_game(gid);
@@ -132,10 +132,10 @@ end $$;
 -- "Yes, I played this and the results are right." Two players (or one crew admin) make it count.
 create function public.confirm_offline_game(p_game uuid) returns text
 language plpgsql security definer set search_path = '' as $$
-declare me uuid := private.need_me(); g public.games; n int;
+declare me uuid := private.need_me(); g public.games; n int; admin boolean;
 begin
   select * into g from public.games where id = p_game for update;
-  if g is null or g.status <> 'pending' then raise exception 'This game is not waiting for confirmation' using errcode = 'P0002'; end if;
+  if g is null or g.status <> 'live' or not g.awaiting_confirmation then raise exception 'This game is not waiting for confirmation' using errcode = 'P0002'; end if;
   if not exists (select 1 from public.game_players where game_id = p_game and account_id = me)
      and not coalesce(private.role_in(g.crew_id, me) in ('owner', 'admin'), false) then
     raise exception 'Only its players or a crew admin can confirm this game' using errcode = '42501';
@@ -143,7 +143,22 @@ begin
   insert into public.offline_confirmations (game_id, account_id) values (p_game, me) on conflict do nothing;
   select count(*) into n from public.offline_confirmations x join public.game_players gp on gp.game_id = x.game_id and gp.account_id = x.account_id where x.game_id = p_game;
   if n >= 2 or coalesce(private.role_in(g.crew_id, me) in ('owner', 'admin'), false) then
-    update public.games set status = 'ended' where id = p_game;
+    admin := coalesce(private.role_in(g.crew_id, me) in ('owner', 'admin'), false);
+    -- every account vouches for itself: a seat whose account never confirmed becomes a guest's seat (so an
+    -- upload can never put a made-up night into someone's history); a crew admin vouches for the crew's members
+    update public.game_players p set account_id = null where p.game_id = p_game and p.account_id is not null
+      and not exists (select 1 from public.offline_confirmations o where o.game_id = p_game and o.account_id = p.account_id)
+      and not (admin and private.role_in(g.crew_id, p.account_id) is not null);
+    update public.hand_players hp set account_id = null where hp.game_id = p_game and hp.account_id is not null
+      and not exists (select 1 from public.game_players p where p.game_id = p_game and p.account_id = hp.account_id);
+    delete from public.hand_cards_private c where c.game_id = p_game
+      and not exists (select 1 from public.game_players p where p.game_id = p_game and p.account_id = c.account_id);
+    -- and it reaches the crew's league only when two of the crew's own members (or an admin) confirmed it
+    if g.crew_id is not null and not admin and (select count(*) from public.offline_confirmations o where o.game_id = p_game and private.role_in(g.crew_id, o.account_id) is not null) < 2 then
+      update public.games set crew_id = null, season_id = null where id = p_game;
+      g.crew_id := null;
+    end if;
+    update public.games set status = 'ended', awaiting_confirmation = false where id = p_game;
     perform private.score_game(p_game);
     perform private.award_comeback(p_game);
     perform private.award_hand_trophies(p_game);
@@ -162,7 +177,7 @@ language plpgsql security definer set search_path = '' as $$
 declare me uuid := private.need_me(); g public.games;
 begin
   select * into g from public.games where id = p_game for update;
-  if g is null or g.server <> 'host' or g.status not in ('pending', 'live') then raise exception 'Only an offline game waiting for confirmation can be disputed' using errcode = 'P0002'; end if;
+  if g is null or g.server <> 'host' or g.status <> 'live' then raise exception 'Only an offline game waiting for confirmation can be disputed' using errcode = 'P0002'; end if;
   if not exists (select 1 from public.game_players where game_id = p_game and account_id = me) then raise exception 'You are not in this game' using errcode = 'P0002'; end if;
   update public.game_players set account_id = null where game_id = p_game and account_id = me;
   update public.hand_players set account_id = null where game_id = p_game and account_id = me;
@@ -180,7 +195,7 @@ language sql stable security definer set search_path = '' as $$
     exists (select 1 from public.offline_confirmations o where o.game_id = g.id and o.account_id = private.me()),
     (select count(*)::int from public.offline_confirmations o where o.game_id = g.id)
   from public.games g join public.game_players gp on gp.game_id = g.id and gp.account_id = private.me() left join public.crews c on c.id = g.crew_id
-  where g.status = 'pending'
+  where g.status = 'live' and g.awaiting_confirmation
   order by g.ended_at desc limit 20
 $$;
 
@@ -213,3 +228,19 @@ begin
 end $$;
 revoke all on function public.rescue_status(uuid) from public, anon, authenticated;
 grant execute on function public.rescue_status(uuid) to authenticated;
+
+-- History lists finished games only: an uploaded night waiting for confirmation is shown on its own
+-- (pending_offline_games), where the player confirms it or says it was not them.
+create or replace function public.my_games(p_limit int default 50, p_before timestamptz default null) returns table (
+  game_id uuid, ended_at timestamptz, crew_id uuid, crew_name text, table_code text, players int, hands int,
+  net int, bb_won numeric, place int, casual boolean, status text)
+language sql stable security definer set search_path = '' as $$
+  select g.id, coalesce(g.ended_at, g.started_at), g.crew_id, c.name, g.table_code,
+    (select count(*)::int from public.game_players x where x.game_id = g.id), g.hands,
+    gp.net, gp.bb_won, gp.place, g.casual, g.status
+  from public.game_players gp join public.games g on g.id = gp.game_id left join public.crews c on c.id = g.crew_id
+  where gp.account_id = private.me() and not g.awaiting_confirmation and (p_before is null or coalesce(g.ended_at, g.started_at) < p_before)
+  order by coalesce(g.ended_at, g.started_at) desc limit least(greatest(p_limit, 1), 200)
+$$;
+revoke all on function public.my_games(int, timestamptz) from public, anon, authenticated;
+grant execute on function public.my_games(int, timestamptz) to authenticated;

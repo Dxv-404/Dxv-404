@@ -95,7 +95,10 @@ const server = createServer(async (req, res) => {
   }
   // only the host's own screen (this phone) may start over or carry on another table
   if (url.pathname === '/continue' || url.pathname === '/reset') {
-    if (req.method !== 'POST' || !local(req)) return json(403, { error: 'Only on the host phone' });
+    // only from this phone, and only from its own pages: a website open in the host's browser must not be
+    // able to reset the table (browsers always say where a POST comes from)
+    const origin = req.headers.origin;
+    if (req.method !== 'POST' || !local(req) || (origin && !/^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(origin))) return json(403, { error: 'Only on the host phone' });
     try {
       if (url.pathname === '/reset') return json(200, { ok: call(() => rt.reset()) });
       const b = JSON.parse(await readBody(req)) as { checkpoint: string; player: string };

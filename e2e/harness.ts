@@ -68,7 +68,8 @@ export async function newPhone(browser: Browser, name: string, model: PhoneModel
     freeze: async (on) => { await cdp.send('Page.setWebLifecycleState', { state: on ? 'frozen' : 'active' }); },
   };
   await page.goto('/');
-  await expect(page.getByRole('button', { name: 'Host a new table' })).toBeVisible();
+  // (the offline host phone's own pages start elsewhere)
+  if (!baseURL.includes(':8765')) await expect(page.getByRole('button', { name: 'Host a new table' })).toBeVisible();
   return phone;
 }
 

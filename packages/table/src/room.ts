@@ -458,7 +458,10 @@ export class TableRoom {
   /** Players whose phones should add a seed: connected players who will be dealt in. */
   private seedsExpected(): PlayerId[] {
     const e = this.engine!;
-    return e.s.players.filter((p) => p.stack > 0 && !p.sittingOut && this.connsOf(p.id).length).map((p) => p.id);
+    // a phone with its screen locked keeps its socket for a while but answers nothing: do not wait for it
+    const now = this.clock.now();
+    const heard = (pid: PlayerId) => [...this.conns.values()].some((st) => st.pid === pid && now - st.lastSeen < 10_000);
+    return e.s.players.filter((p) => p.stack > 0 && !p.sittingOut && heard(p.id)).map((p) => p.id);
   }
 
   private onSeed(st: ConnState, handNo: number, seed: string): void {

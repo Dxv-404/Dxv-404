@@ -117,6 +117,9 @@ export class TableClient {
     return this.send({ t: 'act', handNo: this.view.handNo, action: action.to === undefined ? { type: action.type } : { type: action.type, to: action.to } });
   }
 
+  /** The server's clock, as best this phone knows it (for turn timers). */
+  serverNow(): number { return this.t.now() + this.clockOffset; }
+
   react(reaction: Extract<ClientMessage, { t: 'react' }>['reaction']): void {
     this.raw({ t: 'react', reaction });
   }

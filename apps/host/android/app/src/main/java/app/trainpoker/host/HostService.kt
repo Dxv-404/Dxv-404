@@ -35,8 +35,8 @@ class HostService : Service() {
             wifi = (applicationContext.getSystemService(WIFI_SERVICE) as WifiManager)
                 .createWifiLock(if (Build.VERSION.SDK_INT >= 29) WifiManager.WIFI_MODE_FULL_LOW_LATENCY else WifiManager.WIFI_MODE_FULL_HIGH_PERF, "TrainPoker:table")
                 .apply { acquire() }
-            // no read timeout: a phone with its screen off keeps its socket; the table closes silent ones itself
-            server = TableServer(this).also { it.boot(); it.start(0, false) }
+            // phones ping every few seconds; a socket silent for 30 s is gone (the table also closes silent ones itself)
+            server = TableServer(this).also { it.boot(); it.start(30_000, false) }
             Executors.newSingleThreadExecutor().execute {
                 engineCheck = try { JsTable.selfCheck(this) } catch (e: Throwable) { Log.e(TAG, "engine", e); "{\"error\":\"${e.message}\"}" }
             }
@@ -118,7 +118,11 @@ class TableServer(private val service: HostService) : NanoWSD(HostService.PORT) 
                 put("android", Build.VERSION.RELEASE)
             })
             "/continue", "/reset" -> {
-                if (session.method != Method.POST || !local(session)) return json(JSONObject().put("error", "Only on the host phone"), Response.Status.FORBIDDEN)
+                // only from this phone, and only from its own pages: a website open in the host's browser must
+                // not be able to reset the table (browsers always say where a POST comes from)
+                val origin = session.headers["origin"]
+                val sameSite = origin == null || Regex("^http://(127\\.0\\.0\\.1|localhost):\\d+$").matches(origin)
+                if (session.method != Method.POST || !local(session) || !sameSite) return json(JSONObject().put("error", "Only on the host phone"), Response.Status.FORBIDDEN)
                 try {
                     if (path == "/reset") json(JSONObject().put("ok", bridge.reset()))
                     else {
