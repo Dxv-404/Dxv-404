@@ -5319,20 +5319,20 @@ var $ZodCheckMultipleOf = /* @__PURE__ */ $constructor("$ZodCheckMultipleOf", (i
 var $ZodCheckNumberFormat = /* @__PURE__ */ $constructor("$ZodCheckNumberFormat", (inst, def) => {
   $ZodCheck.init(inst, def);
   def.format = def.format || "float64";
-  const isInt = def.format?.includes("int");
-  const origin = isInt ? "int" : "number";
+  const isInt2 = def.format?.includes("int");
+  const origin = isInt2 ? "int" : "number";
   const [minimum, maximum] = NUMBER_FORMAT_RANGES[def.format];
   inst._zod.onattach.push((inst2) => {
     const bag = inst2._zod.bag;
     bag.format = def.format;
     bag.minimum = minimum;
     bag.maximum = maximum;
-    if (isInt)
+    if (isInt2)
       bag.pattern = integer;
   });
   inst._zod.check = (payload) => {
     const input = payload.value;
-    if (isInt) {
+    if (isInt2) {
       if (!Number.isInteger(input)) {
         payload.issues.push({
           expected: origin,
@@ -16227,8 +16227,23 @@ var TableSettings = external_exports.object({
   casual: external_exports.boolean()
 }).partial().strict().refine((c) => c.sb === void 0 || c.bb === void 0 || c.bb >= c.sb, { message: "Big blind must be at least the small blind" });
 var token = external_exports.string().min(16).max(128);
+var OfflineClaim = external_exports.object({ account: external_exports.string().uuid(), device: id, crews: external_exports.array(external_exports.string().uuid()).max(10) }).strict();
 var ClientMessage = external_exports.discriminatedUnion("t", [
-  external_exports.object({ t: external_exports.literal("hello"), v: external_exports.number().int(), table: tableCode, player: id, token: token.optional(), ticket: external_exports.string().min(16).max(128).optional(), lastSeq: external_exports.number().int().nonnegative(), name: external_exports.string().min(1).max(20).optional(), spectate: external_exports.boolean().optional(), settings: TableSettings.optional() }),
+  external_exports.object({
+    t: external_exports.literal("hello"),
+    v: external_exports.number().int(),
+    table: tableCode,
+    player: id,
+    token: token.optional(),
+    ticket: external_exports.string().min(16).max(128).optional(),
+    lastSeq: external_exports.number().int().nonnegative(),
+    name: external_exports.string().min(1).max(20).optional(),
+    spectate: external_exports.boolean().optional(),
+    settings: TableSettings.optional(),
+    claim: OfflineClaim.optional(),
+    /** Offline: fingerprint of the last table checkpoint this phone holds (checked when a table is continued on another phone). */
+    cp: external_exports.string().regex(/^[0-9a-f]{64}$/).optional()
+  }),
   external_exports.object({ t: external_exports.literal("act"), actionId: id, handNo: external_exports.number().int().positive(), action }),
   external_exports.object({ t: external_exports.literal("sit"), actionId: id, out: external_exports.boolean(), postNow: external_exports.boolean().optional() }),
   external_exports.object({ t: external_exports.literal("rebuy"), actionId: id }),
@@ -16258,6 +16273,10 @@ var ServerMessage = external_exports.discriminatedUnion("t", [
   external_exports.object({ t: external_exports.literal("react"), from: id, reaction: external_exports.enum(REACTIONS), at: external_exports.number().optional() }),
   external_exports.object({ t: external_exports.literal("seedRequest"), handNo: external_exports.number().int().positive(), dealerSeedCommit: seed }),
   external_exports.object({ t: external_exports.literal("pong"), c: external_exports.number(), s: external_exports.number(), seq: external_exports.number().int().nonnegative() }),
+  /** Offline: the table between hands (no cards), kept by every phone so another phone can carry the night on. */
+  external_exports.object({ t: external_exports.literal("checkpoint"), handNo: external_exports.number().int().nonnegative(), hash: external_exports.string().regex(/^[0-9a-f]{64}$/), data: external_exports.string().max(2e5) }),
+  /** Something everyone at the table should be told (not part of the game itself). */
+  external_exports.object({ t: external_exports.literal("notice"), text: external_exports.string().max(300) }),
   external_exports.object({ t: external_exports.literal("error"), code: external_exports.enum(["version", "bad_message", "not_allowed", "table_full", "no_table", "rate_limited", "server", "replaced", "need_hello", "ticket"]), message: external_exports.string() })
 ]);
 var MAX_CLIENT_BYTES = 8 * 1024;
@@ -18017,12 +18036,15 @@ var UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 var ACKS_KEPT = 64;
 var ACKS_SAVED = 16;
 var REACT_GAP_MS = 800;
+var OFFLINE_MAX_PLAYERS = 10;
+var OFFLINE_FULL = "This offline table is full. For more than 10 players, play online.";
 var TableRoom = class {
   constructor(code, clock, store, saved, opt = {}) {
     this.clock = clock;
     this.store = store;
     this.code = code;
-    this.opt = { handPauseMs: 4e3, rateLimit: 40, rateWindowMs: 2e3, keepUpdates: 200, offlineAfterMs: 3e3, seed: randomSeed, identify: async () => null, server: "test", autoEndAfterMs: 20 * 6e4, hostHandoverMs: 6e4, maxConnections: 60, silentCloseMs: 3e4, helloWithinMs: 15e3, ...opt };
+    this.opt = { handPauseMs: 4e3, rateLimit: 40, rateWindowMs: 2e3, keepUpdates: 200, offlineAfterMs: 3e3, seed: randomSeed, identify: async () => null, server: "test", autoEndAfterMs: 20 * 6e4, hostHandoverMs: 6e4, maxConnections: 60, silentCloseMs: 3e4, helloWithinMs: 15e3, offline: false, sharedShuffle: !!opt.offline, shuffleWaitMs: 1500, ...opt };
+    if (this.opt.offline) this.opt.maxConnections = Math.min(this.opt.maxConnections, OFFLINE_MAX_PLAYERS + 4);
     this.createdAt = clock.now();
     if (saved) this.restore(saved);
   }
@@ -18047,6 +18069,13 @@ var TableRoom = class {
   emptySince = null;
   /** When hosting passes on if the host is still gone (see hostHandoverMs). */
   hostHandoverAt = null;
+  /** Shared shuffle: the dealer's seed is promised; phones' seeds are collected until `until`. */
+  pendingDeal = null;
+  /** Offline: the checkpoint phones last got, and the one this table was continued from. */
+  checkpointHash = null;
+  checkpointLater = false;
+  checkpointCache = null;
+  continuedFrom = null;
   conns = /* @__PURE__ */ new Map();
   acks = /* @__PURE__ */ new Map();
   recent = [];
@@ -18096,7 +18125,7 @@ var TableRoom = class {
     if (m.t === "hello") return this.hello(conn, st, m);
     if (!st.hello) return this.send(conn, { t: "error", code: "need_hello", message: "Say hello first" });
     if (m.t === "react") return this.react(conn, st, m.reaction);
-    if (m.t === "seed") return;
+    if (m.t === "seed") return this.onSeed(st, m.handNo, m.seed);
     if (!st.pid || !this.engine) return this.ack(conn, null, m.actionId, "Spectators cannot play");
     const pid = st.pid;
     const done = this.acks.get(pid)?.get(m.actionId);
@@ -18134,6 +18163,7 @@ var TableRoom = class {
       this.nextDealAt = null;
       if (!this.apply({ t: "host", cmd: "end", now })) this.endToLeague();
     }
+    if (this.pendingDeal && now >= this.pendingDeal.until) this.finishDeal(now);
     if (this.nextDealAt !== null && now >= this.nextDealAt) {
       this.nextDealAt = null;
       this.tryDeal(now);
@@ -18149,6 +18179,13 @@ var TableRoom = class {
     if (!versionOk(m.v)) return fail("version", "Please update the app");
     if (m.table !== this.code) return fail("no_table", "Wrong table");
     if (st.hello || st.checking) return this.send(conn, { t: "error", code: "bad_message", message: "Already said hello" });
+    if (this.opt.offline) {
+      if (m.cp && this.continuedFrom && m.cp !== this.continuedFrom) {
+        this.broadcastRaw({ t: "notice", text: `${(m.name ?? "A player").slice(0, 20)}'s phone has a different copy of the last hand than the phone carrying the table on.` });
+      }
+      const c = m.claim;
+      return this.seat(conn, st, m, c && c.account === m.player ? { account: c.account, device: c.device, name: m.name ?? "Player", crews: c.crews } : null);
+    }
     if (!m.ticket) return this.seat(conn, st, m, null);
     st.checking = true;
     this.opt.identify(m.ticket, this.code).then(
@@ -18204,7 +18241,7 @@ var TableRoom = class {
       const name = m.name ?? who?.name;
       if (!name) return fail("bad_message", "A name is needed to join");
       const r = this.apply({ t: "join", id: m.player, name: this.uniqueName(name), now });
-      if (r) return fail(r === "The table is full" ? "table_full" : "not_allowed", r);
+      if (r) return fail(r === "The table is full" ? "table_full" : "not_allowed", r === "The table is full" && this.opt.offline ? OFFLINE_FULL : r);
       if (m.token && !who) this.tokens[m.player] = hashToken(m.token);
       if (who) this.accountSeats.add(m.player);
       if (!this.host) this.host = m.player;
@@ -18222,6 +18259,7 @@ var TableRoom = class {
     if (who) st.device = who.device;
     this.trackEmpty();
     this.welcome(conn, m.player, m.lastSeq);
+    if (this.opt.offline) this.sendCheckpoint(conn);
     this.tryDeal(now);
     this.reschedule();
   }
@@ -18297,6 +18335,7 @@ var TableRoom = class {
     const rules = { ...settings };
     delete rules.crew;
     delete rules.casual;
+    if (this.opt.offline) rules.maxPlayers = Math.min(rules.maxPlayers ?? OFFLINE_MAX_PLAYERS, OFFLINE_MAX_PLAYERS);
     this.engine = Engine.create(this.code, rules, now);
     const c = this.engine.s.cfg;
     this.game = { id: newGameId(), startedAt: new Date(now).toISOString(), casual: !!settings?.casual, bigBlind: c.bb, startStack: c.startStack, ended: false };
@@ -18324,9 +18363,14 @@ var TableRoom = class {
       this.store.appendHand(rec);
       this.toLeague(rec);
       if (this.running && e.s.phase !== "ended") this.nextDealAt = input.now + this.opt.handPauseMs;
+      if (this.opt.offline) this.checkpointLater = true;
     }
     for (const [c, st] of this.conns) if (st.hello) this.send(c, { t: "update", seq: this.seq, events: events2, view: this.view(st.pid), host: this.host, at: input.now });
     this.persist();
+    if (this.checkpointLater) {
+      this.checkpointLater = false;
+      for (const c of this.conns.keys()) this.sendCheckpoint(c);
+    }
     this.foldLeaving(input.now);
     this.reschedule();
     return null;
@@ -18343,11 +18387,43 @@ var TableRoom = class {
     this.apply({ t: "act", pid, action: { type: L?.canCheck ? "check" : "fold" }, now });
   }
   deal(now) {
-    return this.apply({ t: "start", seed: this.opt.seed(), now });
+    if (!this.opt.sharedShuffle) return this.apply({ t: "start", seed: this.opt.seed(), now });
+    if (this.pendingDeal) return null;
+    const seed2 = this.opt.seed();
+    const commit = seedCommit(seed2);
+    const r = this.apply({ t: "commitSeed", commit, now });
+    if (r) return r;
+    const handNo = this.engine.s.handNo + 1;
+    this.pendingDeal = { seed: seed2, handNo, got: /* @__PURE__ */ new Map(), until: now + this.opt.shuffleWaitMs };
+    for (const [c, st] of this.conns) if (st.hello && st.pid) this.send(c, { t: "seedRequest", handNo, dealerSeedCommit: commit });
+    if (!this.seedsExpected().length) return this.finishDeal(now);
+    this.reschedule();
+    return null;
+  }
+  /** Players whose phones should add a seed: connected players who will be dealt in. */
+  seedsExpected() {
+    const e = this.engine;
+    const now = this.clock.now();
+    const heard = (pid) => [...this.conns.values()].some((st) => st.pid === pid && now - st.lastSeen < 1e4);
+    return e.s.players.filter((p) => p.stack > 0 && !p.sittingOut && heard(p.id)).map((p) => p.id);
+  }
+  onSeed(st, handNo, seed2) {
+    const p = this.pendingDeal;
+    if (!p || !st.pid || handNo !== p.handNo || p.got.has(st.pid) || !isSeed(seed2)) return;
+    p.got.set(st.pid, seed2);
+    if (this.seedsExpected().every((pid) => p.got.has(pid))) this.finishDeal(this.clock.now());
+  }
+  finishDeal(now) {
+    const p = this.pendingDeal;
+    this.pendingDeal = null;
+    const r = this.apply({ t: "start", seed: p.seed, contributions: [...p.got.values()], now });
+    if (r && this.running) this.nextDealAt = now + this.opt.handPauseMs;
+    this.reschedule();
+    return r;
   }
   tryDeal(now) {
     const e = this.engine;
-    if (!e || !this.running || e.s.paused || e.s.phase === "hand" || e.s.phase === "ended") return;
+    if (!e || !this.running || e.s.paused || e.s.phase === "hand" || e.s.phase === "ended" || this.pendingDeal) return;
     if (this.nextDealAt !== null && now < this.nextDealAt) return;
     this.nextDealAt = null;
     if (e.canStartHand()) this.deal(now);
@@ -18360,7 +18436,7 @@ var TableRoom = class {
   }
   reschedule() {
     this.checkHost(this.clock.now());
-    const times = [this.handDeadline(), this.nextDealAt, this.autoEndAt(), this.hostHandoverAt, this.nextSilentCheck(), ...this.goingOffline.values()].filter((x) => x !== null);
+    const times = [this.handDeadline(), this.nextDealAt, this.autoEndAt(), this.hostHandoverAt, this.nextSilentCheck(), this.pendingDeal?.until ?? null, ...this.goingOffline.values()].filter((x) => x !== null);
     this.clock.schedule(times.length ? Math.min(...times) : null);
   }
   /**
@@ -18387,6 +18463,55 @@ var TableRoom = class {
     this.hostHandoverAt = null;
     this.host = next.id;
     this.announce();
+  }
+  // ---------------- offline checkpoints ----------------
+  /**
+   * The table between hands, as every phone keeps it: no cards (the finished hand is left out), no
+   * answers to old taps. Another phone with the host app can carry the night on from it.
+   */
+  checkpoint() {
+    if (!this.engine || !this.base) return null;
+    if (this.checkpointCache?.seq === this.seq) return { handNo: this.base.handNo, data: this.checkpointCache.data, hash: this.checkpointCache.hash };
+    const base = { ...this.base, hand: null, log: [] };
+    const cp = {
+      v: 1,
+      code: this.code,
+      base,
+      inputs: [],
+      seq: 0,
+      host: this.host,
+      tokens: this.tokens,
+      running: false,
+      nextDealAt: null,
+      createdAt: this.createdAt,
+      crew: this.crew,
+      accountSeats: [...this.accountSeats],
+      ...this.game ? { game: { ...this.game } } : {},
+      minStacks: this.minStacks
+    };
+    const data = JSON.stringify(cp);
+    const hash2 = sha256hex(data);
+    this.checkpointCache = { seq: this.seq, data, hash: hash2 };
+    return { handNo: base.handNo, data, hash: hash2 };
+  }
+  sendCheckpoint(conn) {
+    const st = this.conns.get(conn);
+    if (!st?.hello || !st.pid) return;
+    const cp = this.checkpoint();
+    if (!cp) return;
+    this.checkpointHash = cp.hash;
+    this.send(conn, { t: "checkpoint", handNo: cp.handNo, hash: cp.hash, data: cp.data });
+  }
+  /**
+   * Carry a night on from a checkpoint a phone kept (the host phone died). The hand in progress when it
+   * died is gone: stacks are as they were before it. `host` is the player whose phone carries it on.
+   */
+  static fromCheckpoint(data, host) {
+    const p = JSON.parse(data);
+    if (p.v !== 1 || !p.base || !Array.isArray(p.base.players) || p.base.hand !== null) throw new Error("Not a table checkpoint");
+    if (!p.base.players.some((x) => x.id === host)) throw new Error("That player is not at this table");
+    Engine.replay(p.base, []);
+    return { ...p, inputs: [], acks: {}, host, running: false, nextDealAt: null, continuedFrom: sha256hex(data) };
   }
   /** A change outside the rules engine (who hosts): numbered like any other update so phones keep in step. */
   announce() {
@@ -18530,7 +18655,8 @@ var TableRoom = class {
       crew: this.crew,
       accountSeats: [...this.accountSeats],
       ...this.game ? { game: this.game } : {},
-      minStacks: this.minStacks
+      minStacks: this.minStacks,
+      ...this.continuedFrom ? { continuedFrom: this.continuedFrom } : {}
     };
   }
   persist() {
@@ -18567,6 +18693,7 @@ var TableRoom = class {
     this.accountSeats = new Set(p.accountSeats ?? []);
     this.game = p.game ?? null;
     this.minStacks = { ...p.minStacks ?? {} };
+    this.continuedFrom = p.continuedFrom ?? null;
     for (const [pid, list] of Object.entries(p.acks ?? {})) this.acks.set(pid, new Map(list.map((a) => [a.actionId, a])));
   }
   /**
@@ -18609,6 +18736,55 @@ function newGameId() {
   b[8] = b[8] & 63 | 128;
   const h = toHex(b);
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
+// ../../packages/table/src/offline-upload.ts
+var UUID2 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+var KEY = /^[A-Za-z0-9_-]{1,64}$/;
+var MAX_UPLOAD_BYTES = 96 * 1024;
+var isInt = (x, min = 0, max = 1e9) => Number.isInteger(x) && x >= min && x <= max;
+function gameInfo(g) {
+  const x = g;
+  if (!x || typeof x !== "object") throw new Error("no game");
+  if (typeof x.id !== "string" || !UUID2.test(x.id)) throw new Error("bad game id");
+  if (x.crew !== null && (typeof x.crew !== "string" || !UUID2.test(x.crew))) throw new Error("bad crew");
+  if (!isInt(x.startStack, 1) || !isInt(x.bigBlind, 1)) throw new Error("bad stakes");
+  if (typeof x.startedAt !== "string" || Number.isNaN(Date.parse(x.startedAt))) throw new Error("bad start time");
+  return { id: x.id, crew: x.crew ?? null, table: "OFFLINE", server: "host", casual: !!x.casual, startStack: x.startStack, bigBlind: x.bigBlind, startedAt: new Date(x.startedAt).toISOString() };
+}
+function checkOfflineUpload(item) {
+  if (typeof item.body !== "string" || item.body.length > MAX_UPLOAD_BYTES) throw new Error("missing or too large");
+  const body = JSON.parse(item.body);
+  const game = gameInfo(body.game);
+  if (item.fn === "record_hand") {
+    const hand = body.hand;
+    if (!hand || !isInt(hand.no, 1, 1e5) || !hand.full || !Array.isArray(hand.players)) throw new Error("bad hand");
+    const rec = hand.full;
+    if (rec.handNo !== hand.no || !rec.before || !Array.isArray(rec.inputs)) throw new Error("bad record");
+    const replayed = Engine.replay(rec.before, rec.inputs).lastHandRecord;
+    if (!replayed || replayed.handNo !== rec.handNo || JSON.stringify(replayed.results) !== JSON.stringify(rec.results)) throw new Error("the hand does not replay to its result");
+    const claimed = new Map(hand.players.filter((p) => p && KEY.test(p.key) && typeof p.account === "string" && UUID2.test(p.account) && p.account === p.key).map((p) => [p.key, p.account]));
+    const { rows, pot } = handPlayers(replayed, (pid) => claimed.get(pid) ?? null);
+    return {
+      fn: "record_hand",
+      id: `${game.id}:${rec.handNo}`,
+      payload: { game, hand: { no: rec.handNo, playedAt: new Date(replayed.endedAt).toISOString(), deckCommit: replayed.deckCommit, pot, replay: publicReplay(replayed), full: slimRecord(replayed), players: rows } }
+    };
+  }
+  if (item.fn === "record_game_end") {
+    const players = body.players;
+    if (!Array.isArray(players) || !players.length || players.length > 40) throw new Error("bad players");
+    const rows = players.map((p) => {
+      if (typeof p.key !== "string" || !KEY.test(p.key) || typeof p.name !== "string" || p.name.length > 40 || !isInt(p.buyins) || !isInt(p.final) || !isInt(p.minStack)) throw new Error("bad player");
+      const account = typeof p.account === "string" && UUID2.test(p.account) && p.account === p.key ? p.account : null;
+      return { key: p.key, account, name: p.name, buyins: p.buyins, final: p.final, minStack: p.minStack };
+    });
+    if (rows.reduce((s, r) => s + r.final - r.buyins, 0) !== 0) throw new Error("final chips do not add up");
+    const endedAt = typeof body.endedAt === "string" && !Number.isNaN(Date.parse(body.endedAt)) ? new Date(body.endedAt).toISOString() : null;
+    if (!endedAt) throw new Error("bad end time");
+    return { fn: "record_game_end", id: `${game.id}:end`, payload: { game, endedAt, players: rows } };
+  }
+  throw new Error("unknown kind");
 }
 
 // ../../packages/account/src/ticket.ts
@@ -18889,6 +19065,10 @@ var server = createServer((req, res) => {
     res.end(JSON.stringify({ ok: true, protocol: PROTOCOL_VERSION, colo: SITE, country: req.headers["cf-ipcountry"] ?? null, version: VERSION, rooms: live.size, connections, league: recorder ? { waiting: recorder.pending, refused: recorder.refused.length } : null }));
     return;
   }
+  if (url2.pathname === "/offline/upload" && req.method === "POST") {
+    offlineUpload(req, res, cors);
+    return;
+  }
   if (url2.pathname === "/latency" || url2.pathname === "/tap") {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8", ...cors });
     res.end(url2.pathname === "/tap" ? TAP_PAGE : LATENCY_PAGE);
@@ -18897,6 +19077,41 @@ var server = createServer((req, res) => {
   res.writeHead(404, cors);
   res.end("Not found");
 });
+var uploadsFrom = /* @__PURE__ */ new Map();
+function offlineUpload(req, res, cors) {
+  const addr = String(req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "").split(",").pop().trim();
+  const u = uploadsFrom.get(addr) ?? { n: 0, since: Date.now() };
+  if (Date.now() - u.since > 36e5) {
+    u.n = 0;
+    u.since = Date.now();
+  }
+  uploadsFrom.set(addr, u);
+  const reply = (code, o) => {
+    res.writeHead(code, { "content-type": "application/json", ...cors });
+    res.end(JSON.stringify(o));
+  };
+  if (++u.n > 3e3) return reply(429, { error: "Too many uploads; try again later" });
+  let text = "";
+  req.on("data", (c) => {
+    text += c;
+    if (text.length > MAX_UPLOAD_BYTES + 1024) {
+      reply(413, { error: "Too large" });
+      req.destroy();
+    }
+  });
+  req.on("end", () => {
+    if (res.headersSent) return;
+    let up;
+    try {
+      up = checkOfflineUpload(JSON.parse(text));
+    } catch (e) {
+      return reply(422, { error: e.message });
+    }
+    if (recorder) void recorder.add(up.fn, up.id, up.payload);
+    else void outboxStore.put({ id: up.id, fn: up.fn, body: JSON.stringify(up.payload), tries: 0, nextAt: 0, order: Date.now() });
+    reply(200, { queued: up.id });
+  });
+}
 var wss = new import_websocket_server.default({ noServer: true, maxPayload: 8 * 1024 });
 var alive = /* @__PURE__ */ new WeakMap();
 server.on("upgrade", (req, socket, head) => {
