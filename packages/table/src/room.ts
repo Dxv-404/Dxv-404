@@ -10,7 +10,7 @@
 //   which is also exactly the hand's replay log.
 import { Engine, randomSeed, sha256hex, toHex, type GameEvent, type GameState, type HandRecord, type Input, type PlayerId } from '@tp/engine';
 import { PROTOCOL_VERSION, encode, parseClient, versionOk, type ClientMessage, type ServerMessage, type TableSettings } from '@tp/protocol';
-import { handPlayers, type EndPlayerRow, type GameInfo } from './record';
+import { handPlayers, publicReplay, slimRecord, type EndPlayerRow, type GameInfo } from './record';
 
 export interface Conn {
   send(text: string): void;
@@ -71,6 +71,8 @@ export interface RoomOptions {
   seed?: () => string;
   /** Which server this is, as the league records it. */
   server?: GameInfo['server'];
+  /** A started game nobody has been connected to for this long ends by itself (and is recorded). */
+  autoEndAfterMs?: number;
   /** Checks an account ticket (phones that are signed in send one). Needed for crew-only tables. */
   identify?: (ticket: string, table: string) => Promise<Identity | null>;
 }
@@ -105,6 +107,8 @@ export class TableRoom {
   /** This game in the league (made with the table). */
   game: NonNullable<Persisted['game']> | null = null;
   private minStacks: Record<PlayerId, number> = {};
+  /** Since when no player has been connected (for ending abandoned games). */
+  private emptySince: number | null = null;
   private conns = new Map<Conn, ConnState>();
   private acks = new Map<PlayerId, Map<string, Ack>>();
   private recent: { seq: number; events: GameEvent[] }[] = [];
@@ -118,7 +122,7 @@ export class TableRoom {
 
   constructor(code: string, private clock: RoomClock, private store: RoomStore, saved?: Persisted | null, opt: RoomOptions = {}) {
     this.code = code;
-    this.opt = { handPauseMs: 4000, rateLimit: 40, rateWindowMs: 2000, keepUpdates: 200, offlineAfterMs: 3000, seed: randomSeed, identify: async () => null, server: 'test', ...opt };
+    this.opt = { handPauseMs: 4000, rateLimit: 40, rateWindowMs: 2000, keepUpdates: 200, offlineAfterMs: 3000, seed: randomSeed, identify: async () => null, server: 'test', autoEndAfterMs: 20 * 60_000, ...opt };
     this.createdAt = clock.now();
     if (saved) this.restore(saved);
   }
@@ -134,6 +138,7 @@ export class TableRoom {
     this.conns.delete(conn);
     if (st.pid && this.engine?.player(st.pid) && !this.connsOf(st.pid).length) {
       this.goingOffline.set(st.pid, this.clock.now() + this.opt.offlineAfterMs);
+      this.trackEmpty();
       this.reschedule();
     }
   }
@@ -179,6 +184,12 @@ export class TableRoom {
       if (now < at) continue;
       this.goingOffline.delete(pid);
       if (!this.connsOf(pid).length && this.engine?.player(pid)?.connected) this.apply({ t: 'presence', pid, connected: false, now });
+    }
+    const endAt = this.autoEndAt();
+    if (endAt !== null && now >= endAt) {
+      // everyone left without pressing End game: end it so the night counts and the table can be cleared
+      this.running = false; this.nextDealAt = null;
+      if (!this.apply({ t: 'host', cmd: 'end', now })) this.endToLeague();
     }
     if (this.nextDealAt !== null && now >= this.nextDealAt) {
       this.nextDealAt = null;
@@ -256,6 +267,7 @@ export class TableRoom {
     // mark the player back before this connection counts as listening, so its first message is the welcome
     if (!e.player(m.player)!.connected) this.apply({ t: 'presence', pid: m.player, connected: true, now });
     st.hello = true; st.pid = m.player; if (who) st.device = who.device;
+    this.trackEmpty();
     this.welcome(conn, m.player, m.lastSeq);
     this.tryDeal(now); // a returning or new player may be all a waiting table needs
     this.reschedule();
@@ -371,8 +383,23 @@ export class TableRoom {
   }
 
   private reschedule(): void {
-    const times = [this.handDeadline(), this.nextDealAt, ...this.goingOffline.values()].filter((x): x is number => x !== null);
+    const times = [this.handDeadline(), this.nextDealAt, this.autoEndAt(), ...this.goingOffline.values()].filter((x): x is number => x !== null);
     this.clock.schedule(times.length ? Math.min(...times) : null);
+  }
+
+  /** Notice when the last player leaves, or someone comes back. */
+  private trackEmpty(): void {
+    const e = this.engine;
+    if (!e) return;
+    const anyone = e.s.players.some((p) => this.connsOf(p.id).length > 0);
+    if (anyone) this.emptySince = null;
+    else if (this.emptySince === null) this.emptySince = this.clock.now();
+  }
+
+  private autoEndAt(): number | null {
+    const e = this.engine;
+    if (this.emptySince === null || !e || e.s.phase === 'ended' || e.s.handNo === 0) return null;
+    return this.emptySince + this.opt.autoEndAfterMs;
   }
 
   private gameInfo(): GameInfo {
@@ -389,7 +416,7 @@ export class TableRoom {
       const { rows, pot } = handPlayers(rec, this.accountOf);
       this.store.league('hand', `${this.game.id}:${rec.handNo}`, {
         game: this.gameInfo(),
-        hand: { no: rec.handNo, playedAt: new Date(rec.endedAt).toISOString(), deckCommit: rec.deckCommit, pot, record: rec, players: rows },
+        hand: { no: rec.handNo, playedAt: new Date(rec.endedAt).toISOString(), deckCommit: rec.deckCommit, pot, replay: publicReplay(rec), full: slimRecord(rec), players: rows },
       });
     } catch (err) { console.error(`table ${this.code}: hand ${rec.handNo} not recorded`, err); }
   }
@@ -513,6 +540,7 @@ export class TableRoom {
     if (!e) return;
     const now = Math.max(this.clock.now(), e.s.now);
     for (const pl of e.s.players) if (pl.connected && !this.connsOf(pl.id).length) this.apply({ t: 'presence', pid: pl.id, connected: false, now });
+    this.trackEmpty();
     this.reschedule();
   }
 

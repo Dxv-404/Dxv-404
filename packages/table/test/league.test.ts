@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import pg from 'pg';
-import { Engine, type HandRecord } from '@tp/engine';
+import { Engine, cardStr, type HandRecord } from '@tp/engine';
 import { decide, rng, STRATEGIES } from '@tp/bots';
 import { Recorder, tokenSigner, type OutboxItem, type Send } from '../src/record';
 import type { TableClient } from '../src/client';
@@ -128,7 +128,7 @@ describe.skipIf(!up)('league from live tables (local Postgres)', () => {
     const gameId = w.room.game!.id;
     const q = async (sql: string, args: unknown[] = []) => (await db.query(sql, args)).rows;
     // every hand exactly once
-    const stored = await q('select hand_no, record from hands where game_id = $1 order by hand_no', [gameId]);
+    const stored = await q('select h.hand_no, r.record, h.record as replay from hands h join private.hand_records r using (game_id, hand_no) where h.game_id = $1 order by h.hand_no', [gameId]);
     expect(stored.map((x) => x.hand_no)).toEqual(Array.from({ length: e.s.handNo }, (_, i) => i + 1));
     expect((await q('select hands, status from games where id = $1', [gameId]))[0]).toEqual({ hands: e.s.handNo, status: 'ended' });
     // league totals = sum of hands, for every player
@@ -151,11 +151,20 @@ describe.skipIf(!up)('league from live tables (local Postgres)', () => {
     const lg = league[0].v as { account_id: string; total_bb: number; games: number }[];
     for (const p of gp) expect(lg.find((x) => x.account_id === p.account_id)).toMatchObject({ games: 1, total_bb: Number(p.bb_won) });
     for (const u of phones) expect(JSON.stringify((await q('select testing.as_phone($1, $2) as v', [u, 'select game_id from public.my_games()']))[0].v)).toBe(JSON.stringify([{ game_id: gameId }]));
-    // every stored hand replays to the same result (no matter how it got there)
+    // every stored hand replays to the same result (no matter how it got there), and its public replay
+    // carries neither the seed nor any hole cards that were not turned face up
     for (const row of stored) {
       const recd = row.record as HandRecord;
-      expect(Engine.replay(recd.before, recd.inputs).s.hand!.results).toEqual(recd.results);
+      const end = Engine.replay(recd.before, recd.inputs).s.hand!;
+      expect(end.results).toEqual(recd.results);
+      const pub = JSON.stringify(row.replay);
+      expect(pub).not.toContain(recd.proof.dealerSeed);
+      for (const pid of end.order) if (!end.revealed[pid] && !end.shown[pid]) expect(pub).not.toContain(JSON.stringify(end.ps[pid]!.cards.map(cardStr)));
     }
+    // each player can read their own cards for every hand they were dealt, and nobody else's
+    const own = await q('select testing.as_phone($1, $2) as v', [phones[2], `select count(*)::int n, count(distinct account_id)::int who from hand_cards_private where game_id = '${gameId}'`]);
+    const dealt = (await q('select count(*)::int n from hand_players where game_id = $1 and player_key = $2', [gameId, ids[2]]))[0].n;
+    expect(own[0].v).toEqual([{ n: dealt, who: 1 }]);
     console.log(`hands ${e.s.handNo}, database calls ${calls} (${failures} failed and were retried), each success sent twice; players ${gp.map((p) => `${p.net > 0 ? '+' : ''}${p.net}`).join(' ')}`);
   }, 300_000);
 });

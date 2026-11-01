@@ -96,44 +96,43 @@ export function leagueScreens({ screen, openSheet, account, back }) {
   }
 
   // ---------------- replay ----------------
+  // A replay is stored as what everyone at the table saw, step by step (no deck, no folded cards), plus
+  // the viewer's own cards. It is drawn as it is: no rules engine, so old replays always look the same.
   async function replay(gameId, handNo, onBack) {
-    const [{ Engine }, a] = await Promise.all([import('@tp/engine'), account()]);
+    const a = await account();
     screen((el) => {
       el.className = 'screen replay';
       const body = h('div', {});
       el.append(head(`Hand #${handNo}`, onBack), body);
       (async () => {
         busy(body);
-        let rec;
-        try { rec = await a.hand(gameId, handNo); } catch (err) { return failed(body, err, () => replay(gameId, handNo, onBack)); }
-        if (!rec) return body.replaceChildren(h('p', { class: 'hint' }, 'This hand is not available.'));
+        let got, info;
+        try { [got, info] = await Promise.all([a.hand(gameId, handNo), a.game(gameId)]); } catch (err) { return failed(body, err, () => replay(gameId, handNo, onBack)); }
+        if (!got) return body.replaceChildren(h('p', { class: 'hint' }, 'This replay is no longer kept (replays are kept 90 days; hands with a trophy for ever).'));
+        const rp = got.replay;
         const me = a.profile?.id ?? null;
-        // play the hand forward one input at a time; each step is what this player could see then
-        const e = Engine.fromSnapshot(rec.before);
-        const frames = [];
-        const names = new Map(rec.before.players.map((p) => [p.id, p.name]));
-        for (const input of rec.inputs) {
-          e.apply(input);
-          if (input.t === 'tick' || input.t === 'presence' || input.t === 'commitSeed') continue;
-          frames.push({ view: e.viewFor(me), say: describe(input, names) });
-        }
-        // at the end, show what was revealed at the showdown (and nothing else)
+        const names = new Map((info?.players ?? []).map((p) => [p.player_key, p.name]));
+        const nm = (k) => names.get(k) || 'A player';
+        // frames give the board only when it changes: carry it forward
+        let board = [], board2 = null;
+        const frames = rp.frames.map((f) => { if (f.board) board = f.board; if (f.board2) board2 = f.board2.length ? f.board2 : null; return { ...f, board, board2 }; });
+        const keyName = (n) => nm(rp.keys[n]);
         let i = 0;
         const stage = h('div', { class: 'replay-stage', 'aria-live': 'polite' });
         const draw = () => {
-          const { view: v, say } = frames[i];
-          const hd = v.hand;
+          const f = frames[i];
           stage.replaceChildren(
-            h('p', { class: 'replay-say', 'data-testid': 'replay-say' }, say),
-            h('div', { class: 'replay-board' }, ...(hd ? hd.board : []).map((c) => cardEl(c, { size: 'sm' })), hd?.board2 ? h('span', { class: 'hint' }, ' · ') : null, ...(hd?.board2 ?? []).map((c) => cardEl(c, { size: 'sm' }))),
-            h('p', { class: 'hint' }, `Pot ${fmt(hd?.pot ?? 0)}`),
-            h('ul', { class: 'member-list' }, ...v.players.filter((p) => hd?.ps[p.id]).map((p) => {
-              const hp = hd.ps[p.id];
-              return h('li', { class: hp.folded ? 'folded' : '' },
-                h('div', { class: 'who' }, h('strong', {}, p.name + (p.id === me ? ' (you)' : '')), h('small', {}, `${fmt(p.stack)}${hp.streetBet ? ` · bet ${fmt(hp.streetBet)}` : ''}${hp.folded ? ' · folded' : hp.allIn ? ' · all in' : ''}`)),
-                h('div', { class: 'mini-cards' }, ...(hp.cards ? hp.cards.map((c) => cardEl(c, { size: 'xs' })) : [cardEl(null, { size: 'xs' }), cardEl(null, { size: 'xs' })])));
+            h('p', { class: 'replay-say', 'data-testid': 'replay-say' }, describe(f.say, keyName)),
+            h('div', { class: 'replay-board' }, ...f.board.map((c) => cardEl(c, { size: 'sm' })), f.board2 ? h('span', { class: 'hint' }, ' · ') : null, ...(f.board2 ?? []).map((c) => cardEl(c, { size: 'sm' }))),
+            h('p', { class: 'hint' }, `Pot ${fmt(f.pot)}`),
+            h('ul', { class: 'member-list' }, ...rp.keys.map((k, n) => {
+              const folded = !!(f.folded & (1 << n)), allIn = !!(f.allIn & (1 << n));
+              const cards = k === me && got.myCards ? got.myCards : f.cards?.[n] ?? null;
+              return h('li', { class: folded ? 'folded' : '' },
+                h('div', { class: 'who' }, h('strong', {}, nm(k) + (k === me ? ' (you)' : '')), h('small', {}, `${fmt(f.stacks[n])}${f.bets[n] ? ` · bet ${fmt(f.bets[n])}` : ''}${folded ? ' · folded' : allIn ? ' · all in' : ''}`)),
+                h('div', { class: 'mini-cards' }, ...(cards ? cards.map((c) => cardEl(c, { size: 'xs' })) : [cardEl(null, { size: 'xs' }), cardEl(null, { size: 'xs' })])));
             })),
-            i === frames.length - 1 && hd?.results && h('div', { class: 'replay-result' }, ...hd.results.pots.map((pot) => h('p', {}, `${pot.label}: ${pot.awards.map((w) => `${names.get(w.pid)} wins ${fmt(w.amount)}`).join(', ')}${pot.hand ? ` with ${pot.hand.name.toLowerCase()}` : ''}`))));
+            i === frames.length - 1 && rp.results && h('div', { class: 'replay-result' }, ...rp.results.pots.map((pot) => h('p', {}, `${pot.label}: ${pot.awards.map((w) => `${keyName(w.k)} wins ${fmt(w.amount)}`).join(', ')}${pot.hand ? ` with ${pot.hand.toLowerCase()}` : ''}`))));
           prev.disabled = i === 0; next.disabled = i === frames.length - 1;
           counter.textContent = `${i + 1} / ${frames.length}`;
         };
@@ -142,24 +141,24 @@ export function leagueScreens({ screen, openSheet, account, back }) {
         const end = h('button', { class: 'btn ghost small', onclick: () => { i = frames.length - 1; draw(); } }, 'End');
         const counter = h('span', { class: 'hint' });
         body.replaceChildren(stage, h('div', { class: 'replay-controls' }, prev, counter, next, end),
-          h('p', { class: 'hint small' }, `Deck fingerprint ${rec.deckCommit.slice(0, 12)}… checked against the seed revealed after the hand.`));
+          h('p', { class: 'hint small' }, `Deck fingerprint ${rp.deckCommit.slice(0, 12)}…`));
         draw();
       })();
     });
   }
 
-  function describe(input, names) {
-    const n = (pid) => names.get(pid) || 'Someone';
-    switch (input.t) {
-      case 'start': return 'The cards are dealt';
+  function describe(say, nm) { // nm takes the player's position in the replay's keys
+    switch (say.t) {
+      case 'deal': return 'The cards are dealt';
       case 'act': {
-        const t = input.action.type;
-        return t === 'fold' ? `${n(input.pid)} folds` : t === 'check' ? `${n(input.pid)} checks` : t === 'call' ? `${n(input.pid)} calls`
-          : t === 'allin' ? `${n(input.pid)} goes all in` : `${n(input.pid)} ${t === 'bet' ? 'bets' : 'raises to'} ${fmt(input.action.to)}`;
+        const t = say.a;
+        return t === 'fold' ? `${nm(say.k)} folds` : t === 'check' ? `${nm(say.k)} checks` : t === 'call' ? `${nm(say.k)} calls`
+          : t === 'allin' ? `${nm(say.k)} goes all in` : `${nm(say.k)} ${t === 'bet' ? 'bets' : 'raises to'} ${fmt(say.to)}`;
       }
-      case 'vote': return `${n(input.pid)} ${input.yes ? 'wants' : 'doesn’t want'} to deal it twice`;
-      case 'show': return `${n(input.pid)} shows`;
-      case 'host': return `The host: ${input.cmd}`;
+      case 'auto': return 'Time ran out: the table acted';
+      case 'vote': return `${nm(say.k)} ${say.yes ? 'wants' : 'doesn’t want'} to deal it twice`;
+      case 'show': return `${nm(say.k)} shows`;
+      case 'host': return `The host: ${say.a}`;
       default: return '';
     }
   }

@@ -9,7 +9,7 @@ const identify = cachedTicketChecker();
 import { LATENCY_PAGE } from './latency-page';
 import { TAP_PAGE } from './tap-page';
 
-export interface Env { TABLES: DurableObjectNamespace<Table>; ECHO: DurableObjectNamespace<Echo>; RECORDER_TOKEN?: string }
+export interface Env { TABLES: DurableObjectNamespace<Table>; ECHO: DurableObjectNamespace<Echo>; RECORDER_TOKEN?: string; BACKUPS?: KVNamespace }
 
 type Region = 'apac' | 'weur' | 'eeur' | 'wnam' | 'enam' | 'sam' | 'oc' | 'afr' | 'me';
 const REGIONS: Region[] = ['apac', 'weur', 'eeur', 'wnam', 'enam', 'sam', 'oc', 'afr', 'me'];
@@ -199,10 +199,23 @@ export default {
       (e: unknown) => console.error('keep-alive failed', e),
     ));
     if (env.RECORDER_TOKEN) {
-      const body = JSON.stringify({ closeSeasons: new Date().toISOString() });
-      ctx.waitUntil(tokenSigner(env.RECORDER_TOKEN)(body).then((sig) => fetch(`${SUPABASE_URL}/rest/v1/rpc/close_due_seasons`, {
-        method: 'POST', headers: { apikey: SUPABASE_KEY, 'content-type': 'application/json' }, body: JSON.stringify({ p_body: body, p_sig: sig }),
-      })).then(async (r) => console.log(`seasons closed: ${await r.text()}`), (e: unknown) => console.error('closing seasons failed', e)));
+      const call = (fn: string, body: string) => fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+        method: 'POST', headers: { apikey: SUPABASE_KEY, 'content-type': 'application/json' }, body: JSON.stringify({ p_body: body, p_sig: env.RECORDER_TOKEN }),
+      });
+      // close finished seasons, drop replays older than 90 days
+      ctx.waitUntil(call('daily_upkeep', JSON.stringify({ upkeep: new Date().toISOString() })).then(async (r) => console.log(`upkeep: ${await r.text()}`), (e: unknown) => console.error('upkeep failed', e)));
+      // a second copy of the nightly backup, away from the Oracle machine (last 30 nights)
+      if (env.BACKUPS) {
+        const kv = env.BACKUPS;
+        ctx.waitUntil((async () => {
+          const r = await call('export_backup', JSON.stringify({ backup: new Date().toISOString() }));
+          if (!r.ok) throw new Error(`export ${r.status}`);
+          const gz = await new Response(r.body!.pipeThrough(new CompressionStream('gzip'))).arrayBuffer();
+          const day = new Date().toISOString().slice(0, 10);
+          await kv.put(`backup:${day}`, gz, { expirationTtl: 31 * 86_400, metadata: { bytes: gz.byteLength } });
+          console.log(`backup ${day}: ${gz.byteLength} bytes`);
+        })().catch((e: unknown) => console.error('backup failed', e)));
+      }
     }
   },
 } satisfies ExportedHandler<Env>;

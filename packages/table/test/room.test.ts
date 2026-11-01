@@ -380,6 +380,36 @@ describe('table room', () => {
     new TableRoom('ZZZZ', t.clock, t.store, null, {}).settleAfterRestart(); // nothing to settle
   });
 
+  it('a started game that everyone has left ends by itself after 20 minutes, and is recorded once', () => {
+    const t = setup();
+    const league: [string, string][] = [];
+    (t.store as { league?: (k: string, id: string) => void }).league = (k, id) => league.push([k, id]);
+    const c = { a: t.join('a'), b: t.join('b') };
+    t.send(c.a, { t: 'host', cmd: 'deal' });
+    t.room.disconnect(c.a); t.room.disconnect(c.b);
+    t.advance(3000); // both shown as gone
+    t.advance(10 * 60_000);
+    expect(t.room.engine!.s.phase).not.toBe('ended');
+    // someone comes back for a moment: the clock starts again when they leave
+    const back = t.join('a');
+    t.room.disconnect(back);
+    t.advance(15 * 60_000);
+    expect(t.room.engine!.s.phase).not.toBe('ended');
+    for (let i = 0; i < 30 && t.room.engine!.s.phase !== 'ended'; i++) t.advance(60_000);
+    expect(t.room.engine!.s.phase).toBe('ended');
+    expect(league.filter(([k]) => k === 'end')).toHaveLength(1);
+    expect(t.room.running).toBe(false);
+  });
+
+  it('a table that never dealt does not end by itself', () => {
+    const t = setup();
+    const a = t.join('a');
+    t.room.disconnect(a);
+    t.advance(3000);
+    t.advance(60 * 60_000);
+    expect(t.room.engine!.s.phase).toBe('lobby');
+  });
+
   it('stats and connection counts', () => {
     const t = setup();
     expect(t.room.stats().phase).toBe('new');

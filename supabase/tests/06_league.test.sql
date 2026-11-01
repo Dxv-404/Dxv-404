@@ -27,7 +27,7 @@ select testing.one(:ARJUN, $$select public.join_crew('$$ || :'inv' || $$')$$);
 \set G1 '11111111-1111-4111-8111-000000000001'
 select format('{"id":"%s","crew":"%s","table":"LG01","server":"test","casual":false,"startStack":1000,"bigBlind":20,"startedAt":"2026-11-02T14:00:00Z"}', :'G1', :'crew') as game1 \gset
 create function pg_temp.hand(game text, no int, players text, pot int default 100) returns text language sql as $$
-  select format('{"game":%s,"hand":{"no":%s,"playedAt":"2026-11-02T14:%s:00Z","deckCommit":"abc","pot":%s,"record":{"inputs":[]},"players":%s}}', game, no, lpad((no % 60)::text, 2, '0'), pot, players) $$;
+  select format('{"game":%s,"hand":{"no":%s,"playedAt":"2026-11-02T14:%s:00Z","deckCommit":"abc","pot":%s,"replay":{"v":1,"frames":[]},"full":{"inputs":[]},"players":%s}}', game, no, lpad((no % 60)::text, 2, '0'), pot, players) $$;
 select format('[{"key":"%s","account":"%s","name":"Owner","net":-50,"vpip":true},{"key":"%s","account":"%s","name":"Riya","net":70,"vpip":true,"pfr":true,"showdown":true,"won":true,"bestHand":7},{"key":"%s","account":"%s","name":"Arjun","net":-10},{"key":"guest1","name":"Guest","net":-10}]',
   :'owner', :'owner', :'riya', :'riya', :'arjun', :'arjun') as h1players \gset
 
@@ -50,7 +50,8 @@ select format('{"game":%s,"endedAt":"2026-11-02T17:00:00Z","players":[{"key":"%s
 select is(pg_temp.rec('record_game_end', replace(:'end1', '"final":2700', '"final":2800')), 'Final chips do not add up to what was bought in', 'an end that does not balance is refused');
 select is(pg_temp.rec('record_game_end', :'end1'), 'ok', 'the game ends');
 select is(pg_temp.rec('record_game_end', :'end1'), 'duplicate', 'and ends once');
-select is(pg_temp.rec('record_hand', pg_temp.hand(:'game1', 11, :'h1players')), 'game over', 'no hands after the end');
+select is(pg_temp.rec('record_hand', pg_temp.hand(:'game1', 11, :'h1players')), 'ok', 'a hand arriving after the end (a recorder catching up) is still stored');
+delete from hands where game_id = :'G1' and hand_no = 11; update games set hands = 10 where id = :'G1'; select private.score_game(:'G1');
 select is((select bb_won::text from game_players where game_id = :'G1' and player_key = :'riya'), '35.00', 'big blinds won = (final - bought) / big blind');
 select is((select string_agg(name || ':' || place || ':' || points, ' ' order by place, name) from game_players where game_id = :'G1'), 'Riya:1:10 Guest:2:7 Arjun:3:5 Owner:4:3', 'places and points 10/7/5/3');
 select is((select hands || '/' || vpip || '/' || pfr || '/' || showdowns_won from game_players where game_id = :'G1' and player_key = :'riya'), '10/10/10/10', 'per-game stats come from the hands');

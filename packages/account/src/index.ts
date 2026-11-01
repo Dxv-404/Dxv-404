@@ -199,11 +199,17 @@ export class Account {
     return data as { hand_no: number; pot: number; played_at: string }[];
   }
 
-  /** One hand's full record, for the replay viewer. */
-  async hand(gameId: string, handNo: number): Promise<unknown> {
-    const { data, error } = await this.db.from('hands').select('record').eq('game_id', gameId).eq('hand_no', handNo).maybeSingle();
-    if (error) throw new AccountError(error.message, error.code);
-    return (data as { record: unknown } | null)?.record ?? null;
+  /** One hand's public replay (what everyone at the table saw), plus this player's own cards if they
+   * were dealt in. Null if the replay has been cleared (replays are kept 90 days). */
+  async hand(gameId: string, handNo: number): Promise<{ replay: unknown; myCards: string[] | null } | null> {
+    const [h, c] = await Promise.all([
+      this.db.from('hands').select('record').eq('game_id', gameId).eq('hand_no', handNo).maybeSingle(),
+      this.db.from('hand_cards_private').select('cards').eq('game_id', gameId).eq('hand_no', handNo).maybeSingle(),
+    ]);
+    if (h.error) throw new AccountError(h.error.message, h.error.code);
+    const replay = (h.data as { record: unknown } | null)?.record ?? null;
+    if (!replay) return null;
+    return { replay, myCards: (c.data as { cards: string[] } | null)?.cards ?? null };
   }
 
   async seasons(crewId: string): Promise<Season[]> {

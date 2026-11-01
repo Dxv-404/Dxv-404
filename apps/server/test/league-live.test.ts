@@ -1,11 +1,10 @@
 // Phase 4 live (LIVE_SUPABASE=1 TABLE_URL=wss://...): real accounts play a short crew game on a deployed
 // table server; the server records every hand and the end; then the game is in each player's history
-// once, the league adds up to the hands, and every stored hand replays.
+// once, the league adds up to the hands, and every stored hand has a public replay and the player's own cards.
 import { afterAll, describe, expect, it } from 'vitest';
 import WS from 'ws';
 import { Account, type KeyStore } from '@tp/account';
 import { TableClient, type SocketLike } from '@tp/table';
-import { Engine, type HandRecord } from '@tp/engine';
 
 const URL_BASE = process.env.TABLE_URL;
 const store = (): KeyStore => { const m = new Map<string, string>(); return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => void m.set(k, v), removeItem: (k) => void m.delete(k) }; };
@@ -73,8 +72,13 @@ describe.skipIf(!process.env.LIVE_SUPABASE || !URL_BASE)(`league from a live tab
     const list = await a0.hands(gid);
     expect(list.map((x) => x.hand_no)).toEqual(Array.from({ length: hands }, (_, i) => i + 1));
     for (const x of list) {
-      const rec = (await a0.hand(gid, x.hand_no)) as HandRecord;
-      expect(Engine.replay(rec.before, rec.inputs).s.hand!.results).toEqual(rec.results);
+      // the public replay (what the table saw) plus this player's own cards; never anyone else's
+      const got = (await a0.hand(gid, x.hand_no))!;
+      const rp = got.replay as { keys: string[]; frames: { cards?: Record<number, string[]> }[]; results: { pots: { amount: number; awards: { amount: number }[] }[] } };
+      expect(rp.frames.length).toBeGreaterThan(0);
+      for (const pot of rp.results.pots) expect(pot.awards.reduce((s, w) => s + w.amount, 0)).toBe(pot.amount);
+      expect(got.myCards).toHaveLength(2);
+      expect(JSON.stringify(rp)).not.toMatch(/dealerSeed|"deck"/);
     }
     console.log(`${URL_BASE}: ${hands} hands recorded once; results ${got.players.map((p) => `${p.name} ${p.bb_won}bb`).join(', ')}`);
     await a0.deleteCrew(crew.id);

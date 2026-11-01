@@ -133,6 +133,14 @@ function getRoom(code: string): Live {
   return l;
 }
 
+// Tables still in a game come back at start, so their timers run (turns, and ending a game everyone left).
+for (const f of readdirSync(join(DATA, 'tables')).filter((x) => x.endsWith('.json'))) {
+  try {
+    const p = JSON.parse(readFileSync(join(DATA, 'tables', f), 'utf8')) as Persisted;
+    if (p.game && !p.game.ended) getRoom(p.code);
+  } catch (e) { console.error(`table file ${f}:`, e); }
+}
+
 const server = createServer((req, res) => {
   const url = new URL(req.url ?? '/', 'http://local');
   const cors = { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' };

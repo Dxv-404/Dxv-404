@@ -1,13 +1,85 @@
 // Turning finished hands and games into league records, and getting them to the database exactly once.
 // The table server builds a payload from the engine's own hand record (never from what phones say),
 // signs it with the recorder key, and keeps it in an outbox until the database says "ok" or "duplicate".
-import { CATEGORY, Engine, type HandRecord, type PlayerId } from '@tp/engine';
+import { CATEGORY, Engine, cardStr, type GameState, type HandRecord, type Input, type PlayerId } from '@tp/engine';
 
 export interface GameInfo {
   id: string; crew: string | null; table: string; server: 'oracle' | 'cloudflare' | 'host' | 'test';
   casual: boolean; startStack: number; bigBlind: number; startedAt: string;
 }
-export interface HandPlayerRow { key: string; account: string | null; name: string; net: number; vpip: boolean; pfr: boolean; showdown: boolean; won: boolean; bestHand: number | null }
+export interface HandPlayerRow { key: string; account: string | null; name: string; net: number; vpip: boolean; pfr: boolean; showdown: boolean; won: boolean; bestHand: number | null; cards?: string[] }
+
+/** One step of a public replay: what everyone at the table could see after it. Compact on purpose (it is
+ * stored for every hand): players are listed once in `keys`; per step their stacks and bets are lists in
+ * that order, folded and all-in are bit masks, the board is only given when it changes, and cards only
+ * for players whose cards are face up. Names are not stored (the screen takes them from the results). */
+export interface ReplayFrame {
+  say: { t: 'deal' | 'act' | 'auto' | 'vote' | 'show' | 'host'; k?: number; a?: string; to?: number; yes?: boolean };
+  board?: string[]; board2?: string[];
+  pot: number; stacks: number[]; bets: number[]; folded: number; allIn: number;
+  cards?: Record<number, string[]>;
+}
+export interface PublicReplay {
+  v: 2; handNo: number; deckCommit: string; keys: string[]; frames: ReplayFrame[];
+  results: { pots: { label: string; amount: number; hand: string | null; board?: 1 | 2; awards: { k: number; amount: number }[] }[]; showdown: boolean } | null;
+}
+
+/** The full record without what it does not need: the previous hand (cards and deck of a finished hand)
+ * and the game log. Replaying it gives exactly the same hand. */
+export function slimRecord(rec: HandRecord): HandRecord {
+  const before: GameState = { ...rec.before, hand: null, log: [] };
+  return { ...rec, before };
+}
+
+/** What everyone at the table saw, step by step: board, pot, stacks, bets, and only the cards that were
+ * turned face up. No seed, no deck, no folded cards: safe to show to the whole crew. */
+export function publicReplay(rec: HandRecord): PublicReplay {
+  const e = Engine.fromSnapshot(slimRecord(rec).before);
+  const frames: ReplayFrame[] = [];
+  let keys: string[] = [];
+  const idx = (k: string) => keys.indexOf(k);
+  let lastBoard = '', lastBoard2 = '';
+  const say = (i: Input): ReplayFrame['say'] | null => {
+    switch (i.t) {
+      case 'start': return { t: 'deal' };
+      case 'act': return { t: 'act', k: idx(i.pid), a: i.action.type, ...(i.action.to !== undefined ? { to: i.action.to } : {}) };
+      case 'tick': return { t: 'auto' };
+      case 'vote': return { t: 'vote', k: idx(i.pid), yes: i.yes };
+      case 'show': return { t: 'show', k: idx(i.pid) };
+      case 'host': return { t: 'host', a: i.cmd };
+      default: return null; // presence, seats, seeds: nothing to see
+    }
+  };
+  for (const input of rec.inputs) {
+    const r = e.apply(input);
+    if (r.error) throw new Error(`hand ${rec.handNo} does not replay: ${r.error}`);
+    const v = e.viewFor(null);
+    if (!v.hand) continue;
+    if (input.t === 'start') keys = v.hand.order.slice();
+    const s = say(input);
+    if (!s) continue;
+    if (s.t === 'auto' && !(r.events ?? []).some((ev) => ev.t === 'act' || ev.t === 'twice')) continue; // a tick that did nothing
+    const f: ReplayFrame = { say: s, pot: v.hand.pot, stacks: [], bets: [], folded: 0, allIn: 0 };
+    keys.forEach((k, n) => {
+      const hp = v.hand!.ps[k]!;
+      f.stacks.push(v.players.find((x) => x.id === k)!.stack);
+      f.bets.push(hp.streetBet);
+      if (hp.folded) f.folded |= 1 << n;
+      if (hp.allIn) f.allIn |= 1 << n;
+      if (hp.cards) (f.cards ??= {})[n] = hp.cards;
+    });
+    const b = v.hand.board.join(' '), b2 = (v.hand.board2 ?? []).join(' ');
+    if (b !== lastBoard) { f.board = v.hand.board; lastBoard = b; }
+    if (b2 !== lastBoard2) { f.board2 = v.hand.board2 ?? []; lastBoard2 = b2; }
+    frames.push(f);
+  }
+  const res = e.s.hand?.results;
+  return {
+    v: 2, handNo: rec.handNo, deckCommit: rec.deckCommit, keys, frames,
+    results: res ? { showdown: res.showdown, pots: res.pots.map((p) => ({ label: p.label, amount: p.amount, hand: p.hand?.name ?? null, ...(p.board ? { board: p.board } : {}), awards: p.awards.map((a) => ({ k: idx(a.pid), amount: a.amount })) })) } : null,
+  };
+}
+
 export interface EndPlayerRow { key: string; account: string | null; name: string; buyins: number; final: number; minStack: number }
 
 /** Who put money in voluntarily, who raised before the flop, who reached a showdown and what they held. */
@@ -41,6 +113,7 @@ export function handPlayers(rec: HandRecord, accountOf: (pid: PlayerId) => strin
       net: (after.get(pid)?.stack ?? 0) - (before.get(pid)?.stack ?? 0) - ((after.get(pid)?.buyins ?? 0) - (before.get(pid)?.buyins ?? 0)),
       vpip: vpip.has(pid), pfr: pfr.has(pid), showdown, won: (won.get(pid) ?? 0) > 0,
       bestHand: showdown && cat >= 0 ? cat : null,
+      ...(accountOf(pid) ? { cards: hp.cards.map(cardStr) } : {}), // only for the player themselves
     };
   });
   return { rows, pot: results.pots.reduce((s, p) => s + p.amount, 0) };
@@ -53,7 +126,7 @@ export function tokenSigner(token: string): Signer {
   return async () => token;
 }
 
-export interface OutboxItem { id: string; fn: 'record_hand' | 'record_game_end'; body: string; tries: number; nextAt: number }
+export interface OutboxItem { id: string; fn: 'record_hand' | 'record_game_end'; body: string; tries: number; nextAt: number; /** Send order (stores list items alphabetically, which is not the order they were made). */ order?: number }
 export interface OutboxStore { load(): Promise<OutboxItem[]>; put(item: OutboxItem): Promise<void>; remove(id: string): Promise<void> }
 export type Send = (fn: OutboxItem['fn'], body: string, sig: string) => Promise<'ok' | 'duplicate' | 'game over' | 'refused'>;
 
@@ -67,11 +140,17 @@ export class Recorder {
   refused: OutboxItem[] = [];
   constructor(private store: OutboxStore, private sign: Signer, private send: Send, private now: () => number = Date.now, private log: (m: string) => void = () => {}) {}
 
-  async start(): Promise<void> { for (const it of await this.store.load()) this.items.set(it.id, it); }
+  private nextOrder = 0;
+
+  async start(): Promise<void> {
+    const loaded = (await this.store.load()).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    for (const it of loaded) { this.items.set(it.id, it); this.nextOrder = Math.max(this.nextOrder, (it.order ?? 0) + 1); }
+  }
 
   async add(fn: OutboxItem['fn'], id: string, payload: unknown): Promise<void> {
     if (this.items.has(id)) return;
-    const it: OutboxItem = { id, fn, body: JSON.stringify(payload), tries: 0, nextAt: 0 };
+    this.nextOrder = Math.max(this.nextOrder + 1, this.now() * 1000);
+    const it: OutboxItem = { id, fn, body: JSON.stringify(payload), tries: 0, nextAt: 0, order: this.nextOrder };
     this.items.set(id, it);
     await this.store.put(it);
     await this.flush();
@@ -93,9 +172,14 @@ export class Recorder {
   private running: Promise<void> | null = null;
 
   private async flushOnce(): Promise<void> {
-    const due = [...this.items.values()].filter((it) => it.nextAt <= this.now());
+    const due = [...this.items.values()].filter((it) => it.nextAt <= this.now()).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     for (const it of due) {
       if (!this.items.has(it.id)) continue;
+      // a game's end waits until every hand of that game is in
+      if (it.fn === 'record_game_end') {
+        const game = it.id.split(':')[0];
+        if ([...this.items.values()].some((x) => x.fn === 'record_hand' && x.id.startsWith(`${game}:`))) continue;
+      }
       let res: Awaited<ReturnType<Send>>;
       try { res = await this.send(it.fn, it.body, await this.sign(it.body)); }
       catch (e) {

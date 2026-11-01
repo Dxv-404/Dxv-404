@@ -5,6 +5,7 @@
   "compatibility_date": "2025-10-01",
   "observability": { "enabled": true },
   "triggers": { "crons": ["23 21 * * *"] },
+  "kv_namespaces": [{ "binding": "BACKUPS", "id": "84f416b247a941c6a8803a402328e8aa" }],
   "durable_objects": {
     "bindings": [{ "name": "TABLES", "class_name": "Table" }, { "name": "ECHO", "class_name": "Echo" }]
   },
