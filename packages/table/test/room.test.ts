@@ -305,6 +305,7 @@ describe('table room', () => {
     const saved = t.saves.at(-1)!;
     expect(saved.inputs.length).toBeGreaterThan(0); // mid-hand: the hand's inputs so far
     const room2 = new TableRoom('ABCD', t.clock, t.store, saved, { handPauseMs: 1000 });
+    room2.settleAfterRestart();
     const after = room2.engine!.snapshot();
     // the same table, except that nobody is connected to a just-restarted server (which also starts the
     // once-per-hand disconnect grace for the player to act)
@@ -326,6 +327,44 @@ describe('table room', () => {
     expect(replayed.s.hand!.results).toEqual(rec.results);
   });
 
+  it('a resent tap is still applied once after a restart', () => {
+    const t = setup();
+    const c = { a: t.join('a'), b: t.join('b') };
+    t.send(c.a, { t: 'host', cmd: 'deal' });
+    const e = t.room.engine!;
+    const pid = e.s.hand!.toAct! as 'a';
+    const msg = JSON.stringify({ t: 'act', actionId: 'keep-1', handNo: e.s.handNo, action: { type: 'call' } });
+    t.room.message(c[pid], msg);
+    const room2 = new TableRoom('ABCD', t.clock, t.store, t.saves.at(-1)!, {});
+    room2.settleAfterRestart();
+    const seq = room2.seq;
+    const again = new FakeConn(); room2.connect(again);
+    room2.message(again, JSON.stringify({ t: 'hello', v: 1, table: 'ABCD', player: pid, lastSeq: 0, token: t.tokens[pid] }));
+    const seqAfterHello = room2.seq;
+    room2.message(again, msg);
+    expect(room2.seq).toBe(seqAfterHello);
+    expect(again.last('ack')).toMatchObject({ actionId: 'keep-1', ok: true });
+    expect(seqAfterHello).toBeGreaterThan(seq);
+  });
+
+  it('a sleeping server wakes with its sockets: adopted connections keep their seats, nobody is marked gone', () => {
+    const t = setup();
+    const c = { a: t.join('a'), b: t.join('b') };
+    t.send(c.a, { t: 'host', cmd: 'deal' });
+    expect(t.room.connInfo(c.a)).toEqual({ pid: 'a', hello: true });
+    expect(t.room.connInfo(new FakeConn())).toBeNull();
+    const woke = new TableRoom('ABCD', t.clock, t.store, t.saves.at(-1)!, {});
+    woke.adopt(c.a, 'a'); woke.adopt(c.b, 'b');
+    const seq = woke.seq;
+    woke.settleAfterRestart();
+    expect(woke.seq).toBe(seq);
+    expect(woke.engine!.s.players.every((p) => p.connected)).toBe(true);
+    const pid = woke.engine!.s.hand!.toAct! as 'a';
+    woke.message(c[pid], JSON.stringify({ t: 'act', actionId: 'w1', handNo: woke.engine!.s.handNo, action: { type: 'call' } }));
+    expect(c[pid].last('ack')).toMatchObject({ actionId: 'w1', ok: true });
+    new TableRoom('ZZZZ', t.clock, t.store, null, {}).settleAfterRestart(); // nothing to settle
+  });
+
   it('stats and connection counts', () => {
     const t = setup();
     expect(t.room.stats().phase).toBe('new');
@@ -333,5 +372,9 @@ describe('table room', () => {
     t.join('a');
     expect(t.room.stats()).toMatchObject({ players: 1, connections: 1, phase: 'lobby' });
     expect(t.room.connectionCount).toBe(1);
+    const quiet = new FakeConn();
+    t.room.connect(quiet);
+    expect(t.room.hasSaidHello(quiet)).toBe(false);
+    expect(t.room.hasSaidHello(new FakeConn())).toBe(false);
   });
 });

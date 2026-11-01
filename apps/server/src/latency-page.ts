@@ -10,7 +10,7 @@ export const LATENCY_PAGE = `<!doctype html><html lang="en"><head><meta charset=
   let edge = {};
   for (let i = 0; i < 15; i++) { const t0 = performance.now(); edge = await fetch('/health?i=' + i, { cache: 'no-store' }).then((r) => r.json()); http.push(performance.now() - t0); }
   // 2) phone to the table server (Durable Object) over the live connection
-  const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/table/LAT' + Math.floor(Math.random() * 1e6));
+  const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/echo/LAT' + Math.floor(Math.random() * 1e6));
   await new Promise((r) => (ws.onopen = r));
   const next = () => new Promise((r) => (ws.onmessage = (m) => r(m.data)));
   ws.send('where');

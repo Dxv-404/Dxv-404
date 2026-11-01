@@ -48,6 +48,7 @@ function seatBots(w: World, n: number, seed: number, settings = {}) {
     bot.client = w.client({
       player: pid, token: newSeatToken(), name: `Bot ${i}`, ...(i === 0 ? { settings: { startStack: 1000, turnTime: 20, timeBank: 60, dealItTwice: true, ...settings } } : {}),
       onView: (v) => think(v),
+      onStatus: (s) => { if (s === 'live') bot.busy = null; },
       onAck: (_id, ok, err) => { if (!ok && err) bot.errors.push(err); },
     });
     bots.push(bot);

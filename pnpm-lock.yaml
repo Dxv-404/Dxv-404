@@ -56,6 +56,9 @@ importers:
       '@tp/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
+      '@tp/table':
+        specifier: workspace:*
+        version: link:../../packages/table
       ws:
         specifier: 8.18.3
         version: 8.18.3
@@ -63,6 +66,9 @@ importers:
       '@cloudflare/workers-types':
         specifier: 5.20261101.1
         version: 5.20261101.1
+      '@tp/bots':
+        specifier: workspace:*
+        version: link:../../tools/bots
       '@types/ws':
         specifier: 8.18.1
         version: 8.18.1

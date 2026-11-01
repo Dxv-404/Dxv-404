@@ -41,6 +41,7 @@ export class World {
   restartServer(): void {
     for (const s of this.sockets) s.cut();
     this.room = this.makeRoom(this.room.code, this.saved);
+    this.room.settleAfterRestart();
   }
 
   at(t: number, fn: () => void): unknown { const e = { at: t, n: this.n++, fn }; this.q.push(e); return e; }

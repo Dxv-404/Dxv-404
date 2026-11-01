@@ -76,7 +76,7 @@ After=network-online.target
 [Service]
 User=tp
 Environment=PORT=8080 SITE_NAME=HYD
-Environment=VERSION_FILE=/opt/tp/VERSION
+Environment=VERSION_FILE=/opt/tp/VERSION DATA_DIR=/opt/tp/data
 ExecStart=/opt/node/bin/node /opt/tp/node-server.mjs
 Restart=always
 RestartSec=2

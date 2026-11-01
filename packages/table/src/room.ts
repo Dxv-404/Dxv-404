@@ -42,6 +42,8 @@ export interface Persisted {
   running: boolean;
   nextDealAt: number | null;
   createdAt: number;
+  /** Recent answers per seat, so a tap resent across a restart is still applied once. */
+  acks?: Record<PlayerId, Ack[]>;
 }
 
 export interface RoomOptions {
@@ -59,10 +61,11 @@ export interface RoomOptions {
 }
 
 interface ConnState { pid: PlayerId | null; hello: boolean; spectator: boolean; windowStart: number; count: number; lastReact: number }
-type Ack = Extract<ServerMessage, { t: 'ack' }>;
+export type Ack = Extract<ServerMessage, { t: 'ack' }>;
 
 const hashToken = (t: string): string => sha256hex(t);
 const ACKS_KEPT = 64;
+const ACKS_SAVED = 16;
 const REACT_GAP_MS = 800;
 
 export class TableRoom {
@@ -82,6 +85,9 @@ export class TableRoom {
   private lastRecord: HandRecord | null = null;
   /** Players whose last connection dropped, and when they will be shown as gone. */
   private goingOffline = new Map<PlayerId, number>();
+  /** Inside one incoming message or wake-up, saves are collected into one at the end. */
+  private batchDepth = 0;
+  private needSave = false;
   private readonly opt: Required<RoomOptions>;
 
   constructor(code: string, private clock: RoomClock, private store: RoomStore, saved?: Persisted | null, opt: RoomOptions = {}) {
@@ -107,6 +113,10 @@ export class TableRoom {
   }
 
   message(conn: Conn, raw: string): void {
+    this.batch(() => this.onMessage(conn, raw));
+  }
+
+  private onMessage(conn: Conn, raw: string): void {
     const st = this.conns.get(conn);
     if (!st) return;
     const now = this.clock.now();
@@ -129,6 +139,10 @@ export class TableRoom {
 
   /** The clock door: called at (or after) the time last passed to clock.schedule. */
   wake(): void {
+    this.batch(() => this.onWake());
+  }
+
+  private onWake(): void {
     const now = this.clock.now();
     const e = this.engine;
     if (e && e.s.phase === 'hand' && !e.s.paused) {
@@ -317,6 +331,7 @@ export class TableRoom {
       if (!m) this.acks.set(pid, (m = new Map()));
       m.set(actionId, a);
       if (m.size > ACKS_KEPT) m.delete(m.keys().next().value!);
+      if (!error) this.persist();
     }
     this.send(conn, a);
   }
@@ -337,15 +352,25 @@ export class TableRoom {
   // ---------------- saving ----------------
   persisted(): Persisted | null {
     if (!this.engine || !this.base) return null;
+    const acks: Record<PlayerId, Ack[]> = {};
+    for (const [pid, m] of this.acks) acks[pid] = [...m.values()].slice(-ACKS_SAVED);
     return {
       v: 1, code: this.code, base: this.base, inputs: this.inputs, seq: this.seq, host: this.host, tokens: this.tokens,
-      running: this.running, nextDealAt: this.nextDealAt, createdAt: this.createdAt,
+      running: this.running, nextDealAt: this.nextDealAt, createdAt: this.createdAt, acks,
     };
   }
 
   private persist(): void {
+    if (this.batchDepth) { this.needSave = true; return; }
     const p = this.persisted();
     if (p) this.store.save(p);
+  }
+
+  private batch(fn: () => void): void {
+    this.batchDepth++;
+    try { fn(); } finally {
+      if (--this.batchDepth === 0 && this.needSave) { this.needSave = false; this.persist(); }
+    }
   }
 
   private restore(p: Persisted): void {
@@ -355,10 +380,30 @@ export class TableRoom {
     this.base = p.base; this.inputs = p.inputs.slice();
     this.seq = p.seq; this.host = p.host; this.tokens = { ...p.tokens };
     this.running = p.running; this.nextDealAt = p.nextDealAt; this.createdAt = p.createdAt;
-    // nobody is connected to a freshly restored room
-    const now = Math.max(this.clock.now(), this.engine.s.now);
-    for (const pl of this.engine.s.players) if (pl.connected) this.apply({ t: 'presence', pid: pl.id, connected: false, now });
+    for (const [pid, list] of Object.entries(p.acks ?? {})) this.acks.set(pid, new Map(list.map((a) => [a.actionId, a])));
+  }
+
+  /**
+   * After a restore, connections that survived (a Durable Object waking from hibernation keeps its
+   * sockets) are handed back with the seat they had said hello for.
+   */
+  adopt(conn: Conn, pid: PlayerId | null): void {
+    this.conns.set(conn, { pid, hello: true, spectator: pid === null, windowStart: this.clock.now(), count: 0, lastReact: 0 });
+  }
+
+  /** Call once after a restore (and any adopt calls): players with no connection are shown as gone. */
+  settleAfterRestart(): void {
+    const e = this.engine;
+    if (!e) return;
+    const now = Math.max(this.clock.now(), e.s.now);
+    for (const pl of e.s.players) if (pl.connected && !this.connsOf(pl.id).length) this.apply({ t: 'presence', pid: pl.id, connected: false, now });
     this.reschedule();
+  }
+
+  /** What a connection said hello as (kept by servers that may sleep, like a Durable Object). */
+  connInfo(conn: Conn): { pid: PlayerId | null; hello: boolean } | null {
+    const st = this.conns.get(conn);
+    return st ? { pid: st.pid, hello: st.hello } : null;
   }
 
   /** Numbers for /health and tests. */
@@ -367,6 +412,9 @@ export class TableRoom {
   }
 
   get connectionCount(): number { return this.conns.size; }
+
+  /** Has this connection introduced itself? (Servers close connections that never do.) */
+  hasSaidHello(conn: Conn): boolean { return !!this.conns.get(conn)?.hello; }
 }
 
 /** A fresh random seat token for a phone (keep it in the phone's storage). */

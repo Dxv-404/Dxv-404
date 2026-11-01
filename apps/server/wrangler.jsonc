@@ -5,7 +5,7 @@
   "compatibility_date": "2025-10-01",
   "observability": { "enabled": true },
   "durable_objects": {
-    "bindings": [{ "name": "TABLES", "class_name": "Table" }]
+    "bindings": [{ "name": "TABLES", "class_name": "Table" }, { "name": "ECHO", "class_name": "Echo" }]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Table"] }]
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Table"] }, { "tag": "v2", "new_sqlite_classes": ["Echo"] }]
 }
