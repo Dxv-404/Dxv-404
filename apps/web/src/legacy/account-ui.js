@@ -102,8 +102,21 @@ export function accountScreens({ screen, openSheet, home }) {
   // Another phone asked a crew to become this account: this phone is told, and can stop it
   async function drawRescueAlerts(box, a) {
     try {
-      const list = await a.rescuesOfMe();
-      box.replaceChildren(...list.map((r) => h('section', { class: 'block alert', role: 'alert', 'data-testid': 'rescue-alert' },
+      const [list, nights] = await Promise.all([a.rescuesOfMe(), a.pendingOfflineGames().catch(() => [])]);
+      const chips = (n) => (n > 0 ? `+${n}` : String(n ?? 0));
+      box.replaceChildren(...nights.map((g) => h('section', { class: 'block alert', 'data-testid': 'offline-pending' },
+        h('h2', {}, 'A night played offline'),
+        h('p', {}, `${new Date(g.ended_at).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })}${g.crew_name ? `, ${g.crew_name}` : ''}: ${g.players} players, ${g.hands} hands, you ${chips(g.net)} chips. `
+          + (g.confirmed ? `You confirmed it. It counts once one more player does (${g.confirmations} so far).` : 'It counts in your history and the league once two of its players confirm it.')),
+        !g.confirmed && h('div', { class: 'two' },
+          h('button', { class: 'btn primary', 'data-testid': 'offline-confirm', onclick: async () => {
+            try { toast((await a.confirmOfflineGame(g.game_id)) === 'ended' ? 'Confirmed. It is in your history now.' : 'Confirmed. Waiting for one more player.'); drawRescueAlerts(box, a); } catch (err) { toast(err.message); }
+          } }, 'Yes, I played'),
+          h('button', { class: 'btn ghost', 'data-testid': 'offline-dispute', onclick: async () => {
+            if (!confirm('Say this seat was not you? It becomes a guest seat and leaves your history.')) return;
+            try { await a.disputeOfflineSeat(g.game_id); toast('Done. That seat is a guest now.'); drawRescueAlerts(box, a); } catch (err) { toast(err.message); }
+          } }, 'That wasn’t me')))),
+        ...list.map((r) => h('section', { class: 'block alert', role: 'alert', 'data-testid': 'rescue-alert' },
         h('h2', {}, 'Someone is asking to be you'),
         h('p', {}, r.status === 'approved'
           ? `A new phone asked ${r.crew_name} to move your account to it, and an admin said yes. It happens ${new Date(r.finishes_at).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })} unless you stop it.`

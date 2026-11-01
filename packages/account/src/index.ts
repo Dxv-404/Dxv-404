@@ -167,6 +167,15 @@ export class Account {
     return this.rpc('rescues_of_me');
   }
 
+  /** Nights played offline that I was in, uploaded and waiting for two players (or a crew admin) to confirm. */
+  pendingOfflineGames(): Promise<{ game_id: string; ended_at: string; crew_name: string | null; players: number; hands: number; net: number | null; confirmed: boolean; confirmations: number }[]> {
+    return this.rpc('pending_offline_games');
+  }
+  /** "Yes, I played this and the results are right." Returns 'ended' once the game counts, else 'pending'. */
+  confirmOfflineGame(gameId: string): Promise<'ended' | 'pending'> { return this.rpc('confirm_offline_game', { p_game: gameId }); }
+  /** "That wasn't me": my seat in an offline game becomes a guest's. */
+  disputeOfflineSeat(gameId: string): Promise<void> { return this.rpc('dispute_offline_seat', { p_game: gameId }); }
+
   /** Withdraw every invite link of a crew (admins). */
   revokeInvites(crewId: string): Promise<number> { return this.rpc<number>('revoke_invites', { p_crew: crewId }); }
 

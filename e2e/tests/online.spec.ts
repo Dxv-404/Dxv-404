@@ -109,6 +109,6 @@ test('@perf smooth on a mid-range phone (60 fps while playing) and still when mo
   expect(p95).toBeLessThan(50); // no visible stutter (a dropped frame now and then while the table redraws)
   // reduced motion: nothing moves
   await expect(guest.page.locator('.tp.live.still')).toBeVisible();
-  const moving = await guest.page.evaluate(() => [...document.querySelectorAll('.tp.live *')].filter((e) => { const s = getComputedStyle(e); return s.animationName !== 'none' && s.animationDuration !== '0s'; }).length);
+  const moving = await guest.page.evaluate(() => Array.from(document.querySelectorAll('.tp.live *')).filter((e) => { const s = getComputedStyle(e); return s.animationName !== 'none' && s.animationDuration !== '0s'; }).length);
   expect(moving).toBe(0);
 });
