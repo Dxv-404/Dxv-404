@@ -3645,7 +3645,8 @@ var require_websocket_server = __commonJS({
 
 // src/node.ts
 import { createServer } from "node:http";
-import { appendFileSync, mkdirSync, readFileSync, renameSync, writeFileSync, existsSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, renameSync, writeFileSync, existsSync, readdirSync, unlinkSync, chmodSync } from "node:fs";
+import { gzipSync } from "node:zlib";
 import { dirname, join } from "node:path";
 
 // ../../node_modules/.pnpm/ws@8.18.3/node_modules/ws/wrapper.mjs
@@ -16221,7 +16222,9 @@ var TableSettings = external_exports.object({
   dealItTwice: external_exports.boolean(),
   maxPlayers: external_exports.number().int().min(2).max(15),
   /** A crew-only table: only active members of this crew may sit or watch. */
-  crew: external_exports.string().uuid()
+  crew: external_exports.string().uuid(),
+  /** A casual table: results go to the players' history but not the crew's league. */
+  casual: external_exports.boolean()
 }).partial().strict().refine((c) => c.sb === void 0 || c.bb === void 0 || c.bb >= c.sb, { message: "Big blind must be at least the small blind" });
 var token = external_exports.string().min(16).max(128);
 var ClientMessage = external_exports.discriminatedUnion("t", [
@@ -17795,6 +17798,124 @@ var Engine = class _Engine {
   }
 };
 
+// ../../packages/table/src/record.ts
+function handPlayers(rec, accountOf) {
+  const e = Engine.fromSnapshot(rec.before);
+  const vpip = /* @__PURE__ */ new Set(), pfr = /* @__PURE__ */ new Set();
+  for (const input of rec.inputs) {
+    const street = e.s.hand?.street;
+    const bet = e.s.hand?.currentBet ?? 0;
+    if (input.t === "act" && street === "preflop" && e.s.hand?.toAct === input.pid) {
+      const t = input.action.type;
+      if (t === "call" || t === "bet" || t === "raise" || t === "allin") vpip.add(input.pid);
+      if (t === "raise" || t === "bet" || t === "allin" && e.player(input.pid).stack + (e.s.hand.ps[input.pid]?.streetBet ?? 0) > bet) pfr.add(input.pid);
+    }
+    const r = e.apply(input);
+    if (r.error) throw new Error(`hand ${rec.handNo} does not replay: ${r.error}`);
+  }
+  const h = e.s.hand;
+  const results = h.results;
+  const won = /* @__PURE__ */ new Map();
+  for (const pot of results.pots) for (const a of pot.awards) won.set(a.pid, (won.get(a.pid) ?? 0) + a.amount);
+  const before = new Map(rec.before.players.map((p) => [p.id, p]));
+  const after = new Map(e.s.players.concat(e.s.departed ?? []).map((p) => [p.id, p]));
+  const rows = h.order.map((pid) => {
+    const hp = h.ps[pid];
+    const showdown = results.showdown && !hp.folded;
+    const ev = results.evals[pid];
+    const cat = ev ? CATEGORY.indexOf(ev.name) : -1;
+    return {
+      key: pid,
+      account: accountOf(pid),
+      name: (after.get(pid) ?? before.get(pid)).name,
+      net: (after.get(pid)?.stack ?? 0) - (before.get(pid)?.stack ?? 0) - ((after.get(pid)?.buyins ?? 0) - (before.get(pid)?.buyins ?? 0)),
+      vpip: vpip.has(pid),
+      pfr: pfr.has(pid),
+      showdown,
+      won: (won.get(pid) ?? 0) > 0,
+      bestHand: showdown && cat >= 0 ? cat : null
+    };
+  });
+  return { rows, pot: results.pots.reduce((s, p) => s + p.amount, 0) };
+}
+function tokenSigner(token2) {
+  return async () => token2;
+}
+var Recorder = class {
+  constructor(store, sign, send, now = Date.now, log = () => {
+  }) {
+    this.store = store;
+    this.sign = sign;
+    this.send = send;
+    this.now = now;
+    this.log = log;
+  }
+  items = /* @__PURE__ */ new Map();
+  refused = [];
+  async start() {
+    for (const it of await this.store.load()) this.items.set(it.id, it);
+  }
+  async add(fn, id2, payload) {
+    if (this.items.has(id2)) return;
+    const it = { id: id2, fn, body: JSON.stringify(payload), tries: 0, nextAt: 0 };
+    this.items.set(id2, it);
+    await this.store.put(it);
+    await this.flush();
+  }
+  get pending() {
+    return this.items.size;
+  }
+  /** When the next retry is due (for servers that schedule a wake-up), or null if nothing is waiting. */
+  get nextAt() {
+    let m = null;
+    for (const it of this.items.values()) m = m === null ? it.nextAt : Math.min(m, it.nextAt);
+    return m;
+  }
+  /** Send whatever is due, oldest first (hands before the game's end). Calling it while a send is running
+   * waits for that one and then sends anything still due, so "await flush()" always means "done". */
+  flush() {
+    const run = (this.running ?? Promise.resolve()).then(() => this.flushOnce());
+    this.running = run.finally(() => {
+      if (this.running === tail) this.running = null;
+    });
+    const tail = this.running;
+    return run;
+  }
+  running = null;
+  async flushOnce() {
+    const due = [...this.items.values()].filter((it) => it.nextAt <= this.now());
+    for (const it of due) {
+      if (!this.items.has(it.id)) continue;
+      let res;
+      try {
+        res = await this.send(it.fn, it.body, await this.sign(it.body));
+      } catch (e) {
+        it.tries++;
+        it.nextAt = this.now() + Math.min(10 * 6e4, 2e3 * 2 ** Math.min(it.tries, 9));
+        await this.store.put(it);
+        this.log(`recorder: ${it.id} failed (try ${it.tries}): ${String(e)}`);
+        if (it.fn === "record_hand") break;
+        continue;
+      }
+      if (res === "refused") {
+        this.refused.push(it);
+        this.log(`recorder: ${it.id} refused by the database`);
+      }
+      this.items.delete(it.id);
+      await this.store.remove(it.id);
+    }
+  }
+};
+function supabaseSend(url2, key, fetchFn = fetch) {
+  return async (fn, body, sig) => {
+    const res = await fetchFn(`${url2}/rest/v1/rpc/${fn}`, { method: "POST", headers: { apikey: key, "content-type": "application/json" }, body: JSON.stringify({ p_body: body, p_sig: sig }) });
+    if (res.ok) return await res.json();
+    const err = await res.json().catch(() => ({}));
+    if (err.code === "22023") return "refused";
+    throw new Error(`${fn}: ${res.status} ${err.message ?? ""}`);
+  };
+}
+
 // ../../packages/table/src/room.ts
 var hashToken = (t) => sha256hex(t);
 var UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -17806,7 +17927,7 @@ var TableRoom = class {
     this.clock = clock;
     this.store = store;
     this.code = code;
-    this.opt = { handPauseMs: 4e3, rateLimit: 40, rateWindowMs: 2e3, keepUpdates: 200, offlineAfterMs: 3e3, seed: randomSeed, identify: async () => null, ...opt };
+    this.opt = { handPauseMs: 4e3, rateLimit: 40, rateWindowMs: 2e3, keepUpdates: 200, offlineAfterMs: 3e3, seed: randomSeed, identify: async () => null, server: "test", ...opt };
     this.createdAt = clock.now();
     if (saved) this.restore(saved);
   }
@@ -17824,6 +17945,9 @@ var TableRoom = class {
   tokens = {};
   /** Seats taken by signed-in accounts: only a ticket for that account may use them. */
   accountSeats = /* @__PURE__ */ new Set();
+  /** This game in the league (made with the table). */
+  game = null;
+  minStacks = {};
   conns = /* @__PURE__ */ new Map();
   acks = /* @__PURE__ */ new Map();
   recent = [];
@@ -18030,6 +18154,7 @@ var TableRoom = class {
         if (!r && m.cmd === "end") {
           this.running = false;
           this.nextDealAt = null;
+          this.endToLeague();
         }
         if (!r && m.cmd === "resume") this.tryDeal(now);
         this.persist();
@@ -18048,7 +18173,10 @@ var TableRoom = class {
   create(settings, now) {
     const rules = { ...settings };
     delete rules.crew;
+    delete rules.casual;
     this.engine = Engine.create(this.code, rules, now);
+    const c = this.engine.s.cfg;
+    this.game = { id: newGameId(), startedAt: new Date(now).toISOString(), casual: !!settings?.casual, bigBlind: c.bb, startStack: c.startStack, ended: false };
     this.base = this.engine.snapshot();
     this.inputs = [];
   }
@@ -18066,10 +18194,12 @@ var TableRoom = class {
     this.seq++;
     this.recent.push({ seq: this.seq, events: events2 });
     if (this.recent.length > this.opt.keepUpdates) this.recent.shift();
+    for (const p of e.s.players) this.minStacks[p.id] = Math.min(this.minStacks[p.id] ?? p.stack, p.stack);
     const rec = e.lastHandRecord;
     if (rec && rec !== this.lastRecord) {
       this.lastRecord = rec;
       this.store.appendHand(rec);
+      this.toLeague(rec);
       if (this.running && e.s.phase !== "ended") this.nextDealAt = input.now + this.opt.handPauseMs;
     }
     for (const [c, st] of this.conns) if (st.hello) this.send(c, { t: "update", seq: this.seq, events: events2, view: this.view(st.pid), host: this.host, at: input.now });
@@ -18096,6 +18226,40 @@ var TableRoom = class {
   reschedule() {
     const times = [this.handDeadline(), this.nextDealAt, ...this.goingOffline.values()].filter((x) => x !== null);
     this.clock.schedule(times.length ? Math.min(...times) : null);
+  }
+  gameInfo() {
+    const g = this.game;
+    return { id: g.id, crew: this.crew, table: this.code, server: this.opt.server, casual: g.casual, startStack: g.startStack, bigBlind: g.bigBlind, startedAt: g.startedAt };
+  }
+  accountOf = (pid) => this.accountSeats.has(pid) ? pid : null;
+  /** A finished hand goes to history and the league (worked out from the engine's own record). */
+  toLeague(rec) {
+    if (!this.store.league || !this.game) return;
+    try {
+      const { rows, pot } = handPlayers(rec, this.accountOf);
+      this.store.league("hand", `${this.game.id}:${rec.handNo}`, {
+        game: this.gameInfo(),
+        hand: { no: rec.handNo, playedAt: new Date(rec.endedAt).toISOString(), deckCommit: rec.deckCommit, pot, record: rec, players: rows }
+      });
+    } catch (err) {
+      console.error(`table ${this.code}: hand ${rec.handNo} not recorded`, err);
+    }
+  }
+  /** The night is over: final chips against buy-ins, once. */
+  endToLeague() {
+    if (!this.store.league || !this.game || this.game.ended) return;
+    this.game.ended = true;
+    const e = this.engine;
+    const everyone = e.s.players.concat(e.s.departed ?? []);
+    const seen = /* @__PURE__ */ new Set();
+    const players = [];
+    for (const p of everyone) {
+      if (seen.has(p.id)) continue;
+      seen.add(p.id);
+      players.push({ key: p.id, account: this.accountOf(p.id), name: p.name, buyins: p.buyins, final: p.stack, minStack: Math.min(this.minStacks[p.id] ?? p.stack, p.stack) });
+    }
+    this.store.league("end", `${this.game.id}:end`, { game: this.gameInfo(), endedAt: new Date(this.clock.now()).toISOString(), players });
+    this.persist();
   }
   /** Two players called Riya at one table: the second becomes "Riya 2" (names are cut to 14 at the table). */
   uniqueName(name) {
@@ -18165,7 +18329,9 @@ var TableRoom = class {
       createdAt: this.createdAt,
       acks,
       crew: this.crew,
-      accountSeats: [...this.accountSeats]
+      accountSeats: [...this.accountSeats],
+      ...this.game ? { game: this.game } : {},
+      minStacks: this.minStacks
     };
   }
   persist() {
@@ -18200,6 +18366,8 @@ var TableRoom = class {
     this.createdAt = p.createdAt;
     this.crew = p.crew ?? null;
     this.accountSeats = new Set(p.accountSeats ?? []);
+    this.game = p.game ?? null;
+    this.minStacks = { ...p.minStacks ?? {} };
     for (const [pid, list] of Object.entries(p.acks ?? {})) this.acks.set(pid, new Map(list.map((a) => [a.actionId, a])));
   }
   /**
@@ -18234,6 +18402,14 @@ var TableRoom = class {
     return !!this.conns.get(conn)?.hello;
   }
 };
+function newGameId() {
+  const b = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(b);
+  b[6] = b[6] & 15 | 64;
+  b[8] = b[8] & 63 | 128;
+  const h = toHex(b);
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
 
 // ../../packages/account/src/ticket.ts
 var SUPABASE_URL = "https://yghyartpurzwogtldzii.supabase.co";
@@ -18371,6 +18547,73 @@ var IDLE_EVICT_MS = 30 * 6e4;
 var SAVE_EVERY_MS = 100;
 mkdirSync(join(DATA, "tables"), { recursive: true });
 mkdirSync(join(DATA, "hands"), { recursive: true });
+mkdirSync(join(DATA, "outbox"), { recursive: true });
+mkdirSync(join(DATA, "backups"), { recursive: true, mode: 448 });
+async function recorderKey() {
+  if (process.env.RECORDER_TOKEN) return process.env.RECORDER_TOKEN;
+  try {
+    const r = await fetch("http://169.254.169.254/opc/v2/instance/metadata/recorder_token", { headers: { authorization: "Bearer Oracle" }, signal: AbortSignal.timeout(2e3) });
+    return r.ok ? (await r.text()).trim() : null;
+  } catch {
+    return null;
+  }
+}
+var outboxDir = join(DATA, "outbox");
+var outboxStore = {
+  load: async () => readdirSync(outboxDir).filter((f) => f.endsWith(".json")).map((f) => JSON.parse(readFileSync(join(outboxDir, f), "utf8"))),
+  put: async (it) => {
+    const f = join(outboxDir, `${encodeURIComponent(it.id)}.json`);
+    writeFileSync(`${f}.tmp`, JSON.stringify(it));
+    renameSync(`${f}.tmp`, f);
+  },
+  remove: async (id2) => {
+    try {
+      unlinkSync(join(outboxDir, `${encodeURIComponent(id2)}.json`));
+    } catch {
+    }
+  }
+};
+var recorder = null;
+var signBody = null;
+void recorderKey().then(async (key) => {
+  if (!key) {
+    console.log("league recorder: no key, games are not sent to the league");
+    return;
+  }
+  signBody = tokenSigner(key);
+  recorder = new Recorder(outboxStore, signBody, supabaseSend(process.env.SUPABASE_URL ?? SUPABASE_URL, SUPABASE_KEY), Date.now, (m) => console.log(m));
+  await recorder.start();
+  console.log(`league recorder ready (${recorder.pending} waiting in the outbox)`);
+  void recorder.flush();
+  setInterval(() => {
+    void recorder?.flush();
+  }, 3e4).unref();
+});
+async function backupNow() {
+  if (!signBody) return null;
+  const body = JSON.stringify({ backup: (/* @__PURE__ */ new Date()).toISOString() });
+  const res = await fetch(`${process.env.SUPABASE_URL ?? SUPABASE_URL}/rest/v1/rpc/export_backup`, {
+    method: "POST",
+    headers: { apikey: SUPABASE_KEY, "content-type": "application/json" },
+    body: JSON.stringify({ p_body: body, p_sig: await signBody(body) })
+  });
+  if (!res.ok) throw new Error(`backup failed: ${res.status} ${await res.text()}`);
+  const file2 = join(DATA, "backups", `${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.json.gz`);
+  writeFileSync(file2, gzipSync(Buffer.from(await res.text())), { mode: 384 });
+  chmodSync(file2, 384);
+  const all = readdirSync(join(DATA, "backups")).filter((f) => f.endsWith(".json.gz")).sort();
+  for (const old of all.slice(0, Math.max(0, all.length - 30))) unlinkSync(join(DATA, "backups", old));
+  return file2;
+}
+var lastBackupDay = "";
+setInterval(() => {
+  const ist = new Date(Date.now() + 5.5 * 36e5);
+  const day = ist.toISOString().slice(0, 10);
+  if (ist.getUTCHours() === 3 && day !== lastBackupDay) {
+    lastBackupDay = day;
+    backupNow().then((f) => f && console.log(`backup saved: ${f}`), (e) => console.error(e));
+  }
+}, 6e4).unref();
 var live = /* @__PURE__ */ new Map();
 var identify = cachedTicketChecker();
 var echo = /* @__PURE__ */ new Map();
@@ -18413,8 +18656,13 @@ function getRoom(code) {
       if (p.inputs.length === 0) flush(code, l);
       else l.saveTimer ??= setTimeout(() => flush(code, l), SAVE_EVERY_MS);
     },
-    appendHand: (h) => appendFileSync(join(DATA, "hands", `${code}.jsonl`), JSON.stringify(h) + "\n")
-  }, saved, { identify, ...process.env.HAND_PAUSE_MS ? { handPauseMs: Number(process.env.HAND_PAUSE_MS) } : {} });
+    appendHand: (h) => appendFileSync(join(DATA, "hands", `${code}.jsonl`), JSON.stringify(h) + "\n"),
+    league: (kind, id2, payload) => {
+      const fn = kind === "hand" ? "record_hand" : "record_game_end";
+      if (recorder) void recorder.add(fn, id2, payload);
+      else void outboxStore.put({ id: id2, fn, body: JSON.stringify(payload), tries: 0, nextAt: 0 });
+    }
+  }, saved, { identify, server: "oracle", ...process.env.HAND_PAUSE_MS ? { handPauseMs: Number(process.env.HAND_PAUSE_MS) } : {} });
   l.room.settleAfterRestart();
   live.set(code, l);
   return l;
@@ -18426,7 +18674,7 @@ var server = createServer((req, res) => {
     let connections = 0;
     for (const l of live.values()) connections += l.room.connectionCount;
     res.writeHead(200, { "content-type": "application/json", ...cors });
-    res.end(JSON.stringify({ ok: true, protocol: PROTOCOL_VERSION, colo: SITE, country: req.headers["cf-ipcountry"] ?? null, version: VERSION, rooms: live.size, connections }));
+    res.end(JSON.stringify({ ok: true, protocol: PROTOCOL_VERSION, colo: SITE, country: req.headers["cf-ipcountry"] ?? null, version: VERSION, rooms: live.size, connections, league: recorder ? { waiting: recorder.pending, refused: recorder.refused.length } : null }));
     return;
   }
   if (url2.pathname === "/latency" || url2.pathname === "/tap") {
