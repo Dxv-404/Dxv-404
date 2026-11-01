@@ -96,7 +96,7 @@ export class TableScreen {
 
   setConnection(s: 'good' | 'weak' | 'lost'): void { if (s !== this.net) { this.net = s; this.draw(); this.presence(); } }
 
-  private say(text: string): void {
+  say(text: string): void {
     this.bubble = text;
     if (this.bubbleTimer) clearTimeout(this.bubbleTimer);
     this.bubbleTimer = setTimeout(() => { this.bubble = null; this.draw(); }, 3600);
@@ -128,8 +128,20 @@ export class TableScreen {
     const v = this.view;
     if (!v) { this.stage.innerHTML = '<div class="tp-wait" role="status">Connecting…</div>'; return; }
     const W = this.root.clientWidth || window.innerWidth, H = this.root.clientHeight || window.innerHeight;
-    this.frame = renderTable(v, currentTheme(), W, H, { peek: this.peek, bubble: this.bubble, code: this.o.code, net: this.net });
-    this.stage.innerHTML = this.frame.html;
+    const frame = renderTable(v, currentTheme(), W, H, { peek: this.peek, bubble: this.bubble, code: this.o.code, net: this.net });
+    if (frame.html === this.frame?.html) return; // nothing changed on screen
+    const prev = this.frame;
+    this.frame = frame;
+    if (prev && prev.shell === frame.shell && this.stage.firstElementChild) {
+      // the same table: swap only the parts that changed (the background and the art stay put)
+      for (const [k, html] of Object.entries(frame.parts)) {
+        if (prev.parts[k] === html) continue;
+        const el = this.stage.querySelector(`.tpd[data-k="${k}"]`);
+        if (el) el.innerHTML = html;
+      }
+      return;
+    }
+    this.stage.innerHTML = frame.html;
     const tp = this.stage.firstElementChild as HTMLElement;
     if (reduceMotion()) tp.classList.add('still');
   }

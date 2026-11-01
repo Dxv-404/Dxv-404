@@ -58,3 +58,5 @@
 .tp-intro-in h2{margin:0;font:800 22px system-ui}.tp-intro-in p{margin:0;opacity:.85;line-height:1.45}.tp-intro-in small{opacity:.6}
 .tp-intro-in .act{min-height:52px;border-radius:14px;background:#d9a441;color:#1c1612;font-weight:800;font-size:16px}
 body[data-playing] #info-btn{display:none}
+.tpd{display:contents}
+.tp-fatal{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);width:min(340px,calc(100% - 32px));background:#1c1612;color:#f3ead7;border-radius:16px;padding:18px;display:grid;gap:12px;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.5)}

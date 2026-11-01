@@ -47,7 +47,9 @@ export function avatar(th: Theme, id: string, name: string): string {
 
 const ACTION: Record<string, string> = { fold: 'Fold', check: 'Check', call: 'Call', bet: 'Bet', raise: 'Raise', allin: 'All-in' };
 
-export interface Frame { html: string; mode: Mode; u: number; lw: number; lh: number; compact: boolean; heroCardW: number }
+/** Parts that change during play sit in display:contents wrappers (data-k), so the screen can swap just them. */
+const dyn = (k: string, html: string): string => `<div class="tpd" data-k="${k}">${html}</div>`;
+export interface Frame { html: string; mode: Mode; u: number; lw: number; lh: number; compact: boolean; heroCardW: number; shell: string; parts: Record<string, string> }
 
 /**
  * The whole table as HTML for a W x H screen. `peek`: the player is holding their cards up. `bubble`: what
@@ -133,13 +135,15 @@ export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: num
   const pot = hand ? (hand.collected || (hand.results ? hand.pot : 0)) : 0; // chips already in the middle (bets in front of seats are drawn there)
   const potHtml = pot > 0 ? art.pot.replace('{POT}', fmt(pot)) : '';
   const side = hand?.pots && hand.pots.length > 1 ? `<div class="sidepot">${hand.pots.map((p, i) => `<span>${i ? 'Side' : 'Main'} ${fmt(p.amount)}</span>`).join('')}</div>` : '';
-  const felt = `<div class="felt">${art.felt}<div class="board" style="gap:${gap}px">${boardHtml}</div>${board2}${potHtml}${mode !== 'land' ? side : ''}</div>`;
+  const feltDyn = `<div class="board" style="gap:${gap}px">${boardHtml}</div>${board2}${potHtml}${mode !== 'land' ? side : ''}`;
+  const felt = `<div class="felt">${art.felt}${dyn('felt', feltDyn)}</div>`;
   const table = `<div class="table" style="left:${g.tl}px;top:${g.tt}px;width:${g.tw}px;height:${g.th}px">${art.rail}${felt}</div>`;
   const dealer = !compact && art.dealer ? art.dealer : '';
   // what the dealer says: beside the dealer on phones and big screens (sideways phones have no room for it)
   const bubble = o.bubble && art.dealer && !compact && mode !== 'land'
     ? `<div class="bubble live" style="${mode === 'lap' ? 'left:calc(50% + 66px);top:18px' : 'top:8px;left:calc(50% + 48px)'}">${esc(o.bubble)}</div>` : '';
-  const arena = `<div class="arena">${art.arena}${dealer}${bubble}${table}${betsHtml}${dbtn}${seatsHtml}</div>`;
+  const arenaDyn = `${bubble}${betsHtml}${dbtn}${seatsHtml}`;
+  const arena = `<div class="arena">${art.arena}${dealer}${table}${dyn('arena', arenaDyn)}</div>`;
 
   // top bar
   const title = o.title ?? (v.handNo ? `Hand ${v.handNo}` : 'Table');
@@ -167,16 +171,21 @@ export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: num
 
   let body: string;
   let style = `width:${lw}px;height:${lh}px`;
-  if (mode === 'phone') body = `<div class="fx" aria-hidden="true">${art.fx}</div>${top}${arena}${hero}<nav class="actions" aria-label="Your actions">${actions}</nav>`;
+  const parts: Record<string, string> = { top, arena: arenaDyn, felt: feltDyn, hero, actions, ...(mode === 'lap' ? { side: sidePanel(v) } : {}) };
+  const T = dyn('top', top), He = dyn('hero', hero), A = dyn('actions', actions);
+  if (mode === 'phone') body = `<div class="fx" aria-hidden="true">${art.fx}</div>${T}${arena}${He}<nav class="actions" aria-label="Your actions">${A}</nav>`;
   else if (mode === 'land') {
-    body = `<div class="fx" aria-hidden="true">${art.fx}</div>${top}${arena}<aside class="dock">${hero}<nav class="actions" aria-label="Your actions">${actions}</nav></aside>`;
+    body = `<div class="fx" aria-hidden="true">${art.fx}</div>${T}${arena}<aside class="dock">${He}<nav class="actions" aria-label="Your actions">${A}</nav></aside>`;
     style += `;grid-template-columns:minmax(0,1fr) ${dock}px`;
   } else {
-    body = `<div class="fx" aria-hidden="true">${art.fx}</div>${top}${arena}<div class="dock">${hero}<div class="actions">${actions}</div></div><aside class="side">${sidePanel(v)}</aside>`;
+    body = `<div class="fx" aria-hidden="true">${art.fx}</div>${T}${arena}<div class="dock">${He}<div class="actions">${A}</div></div><aside class="side">${dyn('side', parts.side!)}</aside>`;
   }
   if (u !== 1) style += `;zoom:${u.toFixed(4)}`;
   const dens = mode === 'phone' ? `dense${n > 10 || (compact && n > 6) ? ' xdense' : ''}${compact ? ' compact' : ''}${lw < 380 ? ' narrow' : ''}` : mode === 'land' ? `xdense${lh < 400 ? ' short' : ''}` : '';
-  return { html: `<div class="tp live ${mode} ${dens} th-${themeKey}" style="${style}" data-n="${n}">${body}</div>`, mode, u, lw, lh, compact, heroCardW: heroW };
+  const html = `<div class="tp live ${mode} ${dens} th-${themeKey}" style="${style}" data-n="${n}">${body}</div>`;
+  // what stays the same while the hand goes on: the theme, the screen, the table's shape
+  const shell = [themeKey, mode, dens, style, n, g.tl, g.tt, g.tw, g.th, dealer ? 1 : 0].join('|');
+  return { html, mode, u, lw, lh, compact, heroCardW: heroW, shell, parts };
 }
 
 function handName(v: ScreenView): string | null {

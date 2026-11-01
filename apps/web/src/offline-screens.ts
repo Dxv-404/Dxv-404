@@ -171,7 +171,13 @@ export function playNet(ui: Ui, net: NetTable, o: { offline: boolean; me?: Me; c
     let ended = false;
     const offView = net.subscribe((_events, v) => { if (v.phase === 'ended' && !ended) { ended = true; standings(ui, v, o); } });
     const offErr = net.onError((code, m) => {
-      if (code === 'table_full' || code === 'not_allowed' || code === 'version' || code === 'no_table') toast(m, 6000);
+      // the table will not take this phone: say why and offer the way out (instead of "Connecting…" for ever)
+      if (code === 'table_full' || code === 'not_allowed' || code === 'version' || code === 'replaced') {
+        const box = h('div', { class: 'tp-fatal', role: 'alert' }, h('p', {}, m),
+          h('button', { class: 'btn primary', onclick: () => (o.onLeave ? o.onLeave() : ui.home()) }, code === 'version' ? 'Reload' : 'Back'));
+        if (code === 'version') box.querySelector('button')!.addEventListener('click', () => location.reload());
+        el.querySelector('.tp-over')?.append(box);
+      } else if (code === 'no_table') table.say(m);
       else if (code === 'refused') toast(m);
     });
     const offNotice = net.onNotice((t) => toast(t, 6000));
@@ -210,7 +216,7 @@ function lostHost(ui: Ui, me: Me, closed: () => void): { close(): void } {
   return ui.openSheet(body, { label: 'Lost the host', onClose: closed });
 }
 
-function tableMenu(ui: Ui, net: NetTable, o: { offline: boolean; onLeave?: () => void }): void {
+function tableMenu(ui: Ui, net: NetTable, o: { offline: boolean; code?: string; onLeave?: () => void }): void {
   const v = net.view;
   if (!v) return;
   const meP = v.players.find((p) => p.id === v.me);
@@ -225,6 +231,14 @@ function tableMenu(ui: Ui, net: NetTable, o: { offline: boolean; onLeave?: () =>
     h('section', { class: 'block' }, h('h3', {}, 'Players'), ...v.players.filter((p) => p.id !== v.me).map((p) => h('div', { class: 'p-row' },
       h('div', { class: 'who' }, h('strong', {}, p.name), h('small', {}, `${fmt(p.stack)} chips${p.connected ? '' : ', away'}${p.sittingOut ? ', sitting out' : ''}`)),
       h('div', { class: 'p-btns' }, h('button', { class: 'btn small danger', onclick: () => { if (confirm(`Remove ${p.name}? Their chips leave with them.`)) { net.host('remove', { pid: p.id }); close(); } } }, 'Remove'))))));
+  }
+  if (!o.offline && 'code' in o && o.code) {
+    const link = `${location.origin}${location.pathname}#/t/${o.code}`;
+    body.append(h('section', { class: 'block' }, h('h3', {}, `Table ${o.code}`),
+      h('p', { class: 'invite-link', 'data-testid': 'table-link' }, link),
+      h('div', { class: 'two' },
+        h('button', { class: 'btn ghost small', onclick: () => navigator.clipboard?.writeText(link).then(() => toast('Link copied'), () => toast('Select the link and copy it')) }, 'Copy link'),
+        h('a', { class: 'btn ghost small', href: `https://wa.me/?text=${encodeURIComponent(`Poker table ${o.code}: ${link}`)}`, target: '_blank', rel: 'noopener' }, 'Send on WhatsApp'))));
   }
   const themeRow = h('div', { class: 'theme-grid', role: 'radiogroup', 'aria-label': 'Table theme' }, ...THEME_KEYS.map((k) => h('button', {
     role: 'radio', 'aria-checked': currentTheme() === k ? 'true' : 'false', class: 'theme-pick' + (currentTheme() === k ? ' on' : ''), 'data-theme': k,

@@ -80,7 +80,19 @@ function ellipseSlots(cx: number, cy: number, rx: number, ry: number, n: number,
 type R = [number, number, number, number];
 const hit = (r: R, q: R): boolean => !(r[2] <= q[0] || q[2] <= r[0] || r[3] <= q[1] || q[3] <= r[1]);
 
+/** The same table drawn again (every tap redraws it) costs nothing: placements are remembered. */
+const placedCache = new Map<string, Placed>();
 export function place(g: Geo, states: SeatIn[], dealerAt: number | null): Placed {
+  const key = JSON.stringify([g, states.map((s) => (s.mini ? 1 : 0) + (s.bet ? 2 : 0)), dealerAt]);
+  const hit0 = placedCache.get(key);
+  if (hit0) return { ...hit0, seats: hit0.seats.map((x) => ({ ...x })) };
+  const out = placeNow(g, states, dealerAt);
+  if (placedCache.size > 300) placedCache.clear();
+  placedCache.set(key, out);
+  return { ...out, seats: out.seats.map((x) => ({ ...x })) };
+}
+
+function placeNow(g: Geo, states: SeatIn[], dealerAt: number | null): Placed {
   const cx = g.tl + g.tw / 2, cy = g.tt + g.th / 2;
   const wts = states.map((s) => (s.mini ? 0.5 : 1));
   const fp = { lap: [52, 32, 78], land: [31, 18, 46], phone: [37, 24, 56] }[g.mode] as [number, number, number];

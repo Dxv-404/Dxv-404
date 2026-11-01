@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "e2e": "playwright test",
+    "e2e": "playwright test --grep-invert @perf && playwright test --grep @perf --workers=1",
     "check": "pnpm typecheck && pnpm lint && pnpm test:coverage && pnpm test:db && pnpm build && pnpm e2e",
     "test:db": "bash supabase/tests/run.sh"
   },
