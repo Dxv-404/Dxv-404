@@ -270,15 +270,17 @@ describe('table management', () => {
     expect(e.standings().some((s) => s.id === leaver)).toBe(true);
   });
 
-  it('rebuys only when allowed, not mid-hand, and not above the start stack', () => {
+  it('rebuys only when allowed, not mid-hand, and only at 0 chips', () => {
     const e = Engine.newGame({ startStack: 100 }, ['A', 'B']);
     const a = e.s.players[0]!;
     expect(e.rebuy(a.id)).toEqual([]); // full stack
     a.stack = 30;
-    expect(e.rebuy(a.id)).toEqual([{ t: 'rebuy', pid: a.id, amount: 70 }]);
-    expect(a.buyins).toBe(170);
+    expect(e.rebuy(a.id)).toEqual([]); // no top-ups
+    a.stack = 0;
+    expect(e.rebuy(a.id)).toEqual([{ t: 'rebuy', pid: a.id, amount: 100 }]);
+    expect(a.buyins).toBe(200);
     e.startHand();
-    a.stack = 10;
+    a.stack = 0;
     expect(e.rebuy(a.id)).toEqual([]); // in a live hand
     const noRebuy = Engine.newGame({ rebuys: false }, ['A', 'B']);
     noRebuy.s.players[0]!.stack = 1;
