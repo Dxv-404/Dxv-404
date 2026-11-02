@@ -7,6 +7,8 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
  * database's row-level security and functions allow). */
 import { SUPABASE_KEY, SUPABASE_URL } from './ticket';
 export { SUPABASE_KEY, SUPABASE_URL };
+import type { Badge, CrewCard, CrewGame, CrewLeague, CrewMemberV3, CrewPage, CrewPreview, CrewSettings, Dispute, Hosted, Invitation, JoinRequest, PendingRequest, PlayerCard, SeasonMonths, TableRules, WhoHosts, WrongCode } from './crews';
+export * from './crews';
 
 export interface Profile { id: string; name: string; avatar_url: string | null; settings: Record<string, unknown>; created_at: string; deleted_at: string | null }
 export type Role = 'owner' | 'admin' | 'member';
@@ -136,6 +138,59 @@ export class Account {
   setRole(crewId: string, accountId: string, role: Role): Promise<void> { return this.rpc('set_role', { p_crew: crewId, p_account: accountId, p_role: role }); }
   leaveCrew(crewId: string): Promise<void> { return this.rpc('leave_crew', { p_crew: crewId }); }
   deleteCrew(crewId: string): Promise<void> { return this.rpc('delete_crew', { p_crew: crewId }); }
+
+  // ---------------- v3 crews (the Crews tab and the crew page) ----------------
+  /** Every crew I am in, as the Crews tab shows them (LIVE table, role, season, rank, requests waiting). */
+  myCrews(): Promise<CrewCard[]> { return this.rpc<CrewCard[]>('my_crews'); }
+  /** "New crew": name (up to 24), badge, colour, seasons on or off. Returns the crew and its code. */
+  createCrewV3(name: string, badge: Badge, color: string, seasons: boolean): Promise<{ id: string; name: string; color: string; badge: Badge; code: string; season_months: SeasonMonths; auto_admit: boolean }> {
+    return this.rpc('create_crew_v3', { p_name: name, p_badge: badge, p_color: color, p_seasons: seasons });
+  }
+  /** What a crew code opens (before joining), or how many tries are left when no crew has it. Throws while the boxes rest. */
+  crewPreview(code: string): Promise<CrewPreview | WrongCode> { return this.rpc('crew_preview', { p_code: code }); }
+  /** "Ask to join": in at once when the crew lets people in by themselves ('active'), else 'pending'; 'member' if already in; 'wrong' for a wrong code. */
+  askToJoin(code: string, notify = true, from?: string | null): Promise<'active' | 'pending' | 'member' | 'wrong'> {
+    return this.rpc('ask_to_join', { p_code: code, p_notify: notify, p_from: from ?? null });
+  }
+  cancelJoinRequest(crewId: string): Promise<void> { return this.rpc('cancel_join_request', { p_crew: crewId }); }
+  setRequestNotify(crewId: string, notify: boolean): Promise<void> { return this.rpc('set_request_notify', { p_crew: crewId, p_notify: notify }); }
+  /** My requests waiting, and those answered in the last two days. */
+  myJoinRequests(): Promise<JoinRequest[]> { return this.rpc<JoinRequest[]>('my_join_requests'); }
+  /** Who wants to join (leader and admins). */
+  joinRequests(crewId: string): Promise<PendingRequest[]> { return this.rpc<PendingRequest[]>('crew_join_requests', { p_crew: crewId }); }
+  decideJoinRequest(requestId: string, approve: boolean): Promise<void> { return this.rpc('decide_join_request', { p_request: requestId, p_approve: approve }); }
+  /** A crew link opened by someone not in the crew: remembered as "<sender> invited you". */
+  noteInvitation(code: string, from: string): Promise<void> { return this.rpc('note_invitation', { p_code: code, p_from: from }); }
+  myInvitations(): Promise<Invitation[]> { return this.rpc<Invitation[]>('my_invitations'); }
+  dismissInvitation(crewId: string): Promise<void> { return this.rpc('dismiss_invitation', { p_crew: crewId }); }
+  /** The crew page: header, my season, podium, last game, LIVE table, requests (for the leader and admins). */
+  crewPage(crewId: string): Promise<CrewPage> { return this.rpc<CrewPage>('crew_page', { p_crew: crewId }); }
+  crewLeague(crewId: string, scope: 'season' | 'previous' | 'alltime' = 'season', seasonId?: string | null): Promise<CrewLeague> {
+    return this.rpc<CrewLeague>('crew_league', { p_crew: crewId, p_scope: scope, p_season: seasonId ?? null });
+  }
+  crewGamesV3(crewId: string, filter: 'all' | 'mine' | 'trophies' = 'all', limit = 40, before?: string | null): Promise<CrewGame[]> {
+    return this.rpc<CrewGame[]>('crew_games', { p_crew: crewId, p_filter: filter, p_limit: limit, p_before: before ?? null });
+  }
+  crewMembers(crewId: string): Promise<CrewMemberV3[]> { return this.rpc<CrewMemberV3[]>('crew_members_v3', { p_crew: crewId }); }
+  playerCard(crewId: string, accountId: string): Promise<PlayerCard> { return this.rpc<PlayerCard>('crew_player', { p_crew: crewId, p_account: accountId }); }
+  crewDisputes(crewId: string): Promise<Dispute[]> { return this.rpc<Dispute[]>('crew_disputes', { p_crew: crewId }); }
+  /** The leader's crew settings; anything left out stays as it is. */
+  crewSettings(crewId: string, change: { name?: string; badge?: Badge; color?: string; seasonMonths?: SeasonMonths; whoHosts?: WhoHosts; membersInvite?: boolean; autoAdmit?: boolean; houseRules?: TableRules }): Promise<CrewSettings> {
+    return this.rpc<CrewSettings>('crew_settings', {
+      p_crew: crewId, p_name: change.name ?? null, p_badge: change.badge ?? null, p_color: change.color ?? null, p_season_months: change.seasonMonths ?? null,
+      p_who_hosts: change.whoHosts ?? null, p_members_invite: change.membersInvite ?? null, p_auto_admit: change.autoAdmit ?? null, p_house_rules: change.houseRules ?? null,
+    });
+  }
+  /** "Make a new code": the old one stops working. */
+  newCrewCode(crewId: string): Promise<string> { return this.rpc<string>('new_crew_code', { p_crew: crewId }); }
+  endSeasonNow(crewId: string): Promise<void> { return this.rpc('end_season_now', { p_crew: crewId }); }
+  /** A crew table is open: the crew is told and it shows LIVE on the crew's card. */
+  hostCrewTable(crewId: string, table: string | null, mode: 'online' | 'offline' | 'qr', rules?: TableRules | null): Promise<Hosted> {
+    return this.rpc<Hosted>('host_crew_table', { p_crew: crewId, p_table: table, p_mode: mode, p_rules: rules ?? null });
+  }
+  closeCrewTable(crewId: string, id: number): Promise<void> { return this.rpc('close_crew_table', { p_crew: crewId, p_id: id }); }
+  /** Hand the crew over: they lead, I become an admin. */
+  handOver(crewId: string, accountId: string): Promise<void> { return this.rpc('transfer_ownership', { p_crew: crewId, p_account: accountId }); }
 
   // ---------------- crew rescue ----------------
   /** On a new phone, from a crew link: "I'm already in this crew" and pick your old name. */
