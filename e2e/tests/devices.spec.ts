@@ -10,6 +10,7 @@ import { MODELS, newPhone, type Phone, type PhoneModel } from '../harness';
 import { startFakeSupabase, useFakeSupabase, type FakeSupabase } from '../fake-supabase';
 
 
+test.describe.configure({ timeout: 300_000 }); // several browsers at once on a shared machine
 const root = join(import.meta.dirname, '..', '..');
 const THEMES = ['classic', 'noir', 'ivory', 'velvet', 'cyber', 'ink', 'pixel', 'train', 'edo'];
 const PORT = 18900 + Math.floor(Math.random() * 300);
@@ -70,8 +71,9 @@ async function layoutOk(page: Page, what: string): Promise<void> {
   const r = await page.evaluate(() => {
     const over = document.documentElement.scrollWidth - innerWidth;
     const small = Array.from(document.querySelectorAll('.dv button, .profile-body button, .dv-dlg button, .dv-pad button, .dv-merge button, .ask button'))
-      .filter((b) => { const r = (b as HTMLElement).getBoundingClientRect(); return r.width > 0 && r.height > 0 && r.height < 43.5 && getComputedStyle(b).visibility !== 'hidden'; })
-      .map((b) => `${(b.textContent ?? '').trim().slice(0, 20)} ${Math.round((b as HTMLElement).getBoundingClientRect().height)}px`);
+      // (layout sizes, not on-screen ones: a dialog still popping in is drawn slightly smaller)
+      .filter((b) => { const e = b as HTMLElement; return e.offsetWidth > 0 && e.offsetHeight > 0 && e.offsetHeight < 44 && getComputedStyle(b).visibility !== 'hidden'; })
+      .map((b) => `${(b.textContent ?? '').trim().slice(0, 20)} ${(b as HTMLElement).offsetHeight}px`);
     return { over, small };
   });
   expect(r.over, `${what}: wider than the screen`).toBeLessThanOrEqual(1);
@@ -298,7 +300,7 @@ test('Not me? Log it out: from the notice, and from the device list (⋯), with 
   expect(errorsOf([a, thief, tab])).toEqual([]);
 });
 
-test('one seat per player: a second device asks; Just watch; Move seat here; the other device watches', async ({ browser, baseURL }) => {
+test('one seat per player: a second device asks; Just watch; Move seat here; the other device watches', async ({ browser, baseURL }, info) => {
   const phone = await device(browser, baseURL!, 'Phone', MODELS.pixel7);
   const laptop = await device(browser, baseURL!, 'Laptop', MODELS.laptop);
   const friend = await device(browser, baseURL!, 'Friend', MODELS.iphoneSE);
@@ -325,8 +327,10 @@ test('one seat per player: a second device asks; Just watch; Move seat here; the
   await expect(askBox).toContainText('You’re playing on your phone');
   await expect(askBox).toContainText('Only one device can play it at a time');
   await layoutOk(laptop.page, 'seat ask');
+  await laptop.page.waitForTimeout(600); await laptop.page.screenshot({ path: info.outputPath('seat-ask-laptop.png') });
   await laptop.page.getByTestId('ask-no').click(); // Just watch
   await expect(laptop.page.getByTestId('watching-elsewhere')).toContainText('your seat is on your phone');
+  await expect(laptop.page.locator('[data-act=deal]')).toHaveCount(0); // watching the host's seat is not hosting
   await expect(phone.page.getByTestId('watching-elsewhere')).toHaveCount(0);
   // the phone still plays: deal, and its cards are its own
   await phone.page.locator('[data-act=deal]').click();
@@ -335,6 +339,11 @@ test('one seat per player: a second device asks; Just watch; Move seat here; the
   await laptop.page.getByTestId('move-seat').click();
   await expect(laptop.page.getByTestId('watching-elsewhere')).toHaveCount(0);
   await expect(phone.page.locator('#toast')).toContainText('Your seat moved to your laptop. This device watches now.');
+  await phone.page.screenshot({ path: info.outputPath('seat-moved-phone.png') });
+  await layoutOk(phone.page, 'watching bar');
+  const bar = await phone.page.getByTestId('watching-elsewhere').boundingBox();
+  const head = await phone.page.locator('.tp.live [data-act=menu]').boundingBox();
+  expect(bar!.y, 'the watching bar sits below the top bar').toBeGreaterThanOrEqual(head!.y + head!.height - 1);
   await expect(phone.page.getByTestId('watching-elsewhere')).toContainText('your seat is on your laptop');
   // and back again from the phone
   await phone.page.getByTestId('move-seat').click();
@@ -352,10 +361,43 @@ test('one seat per player: a second device asks; Just watch; Move seat here; the
   expect(errorsOf([phone, laptop, friend])).toEqual([]);
 });
 
+test('motion follows the theme and the settings: full, calm, off, and Reduce motion', async ({ browser, baseURL }) => {
+  const anims = (p: Page, sel: string) => p.locator(sel).first().evaluate((e) => { const s = getComputedStyle(e); return `${s.animationName}|${s.animationDuration}|${s.animationTimingFunction}`; });
+  // full, in Noir (a quarter slower than Classic, its own easing)
+  const full = await device(browser, baseURL!, 'Full', MODELS.pixel7, 'noir');
+  await makeProfile(full.page, 'Dev');
+  await showCode(full.page);
+  expect(await anims(full.page, '.dv-digits span')).toBe('dv-dig|0.625s|cubic-bezier(0.4, 0, 0.2, 1)');
+  await full.page.getByTestId('show-qr').click();
+  expect((await anims(full.page, '.dv-scanl')).split('|')[0]).toBe('dv-scan');
+  // calm: the digits just appear, no scan line sweep
+  const calm = await device(browser, baseURL!, 'Calm', MODELS.pixel7);
+  await calm.page.evaluate(() => localStorage.setItem('tp-prefs', JSON.stringify({ motion: 'calm' })));
+  await calm.page.reload();
+  await makeProfile(calm.page, 'Dev');
+  await showCode(calm.page);
+  expect((await anims(calm.page, '.dv-digits span')).split('|')[0]).toBe('dv-fade');
+  await calm.page.getByTestId('show-qr').click();
+  expect((await anims(calm.page, '.dv-scanl')).split('|')[0]).toBe('none');
+  // off, and the phone's Reduce motion: nothing moves (the ring still counts down: it is the time left, not a flourish)
+  for (const [name, extra, prefs] of [['Off', {}, { motion: 'off' }], ['Reduced', { reducedMotion: 'reduce' as const }, {}]] as const) {
+    const p = await device(browser, baseURL!, name, MODELS.pixel7, 'classic', extra);
+    await p.page.evaluate((v) => localStorage.setItem('tp-prefs', JSON.stringify(v)), prefs);
+    await p.page.reload();
+    await makeProfile(p.page, 'Dev');
+    await showCode(p.page);
+    expect((await anims(p.page, '.dv-digits span')).split('|')[0]).toBe('none');
+    const before = await p.page.locator('.dv-ring').evaluate((e) => getComputedStyle(e).getPropertyValue('--p'));
+    await p.page.waitForTimeout(1500);
+    expect(await p.page.locator('.dv-ring').evaluate((e) => getComputedStyle(e).getPropertyValue('--p'))).not.toBe(before);
+  }
+});
+
 // ---------------------------------------------------------------- every theme, three sizes
 const SIZES = [['phone', { ...MODELS.iphone15, width: 390, height: 844 }], ['small', MODELS.smallAndroid], ['laptop', MODELS.laptop]] as const;
 for (const theme of THEMES) {
   test(`the devices screens in the ${theme} theme at 390×844, 360×740 and 1440×900`, async ({ browser, baseURL }, info) => {
+    test.setTimeout(480_000); // three devices, three sizes, a shared 2-CPU machine
     const shot = async (p: Page, name: string) => { await p.waitForTimeout(700); await p.screenshot({ path: info.outputPath(`${theme}-${name}.png`) }); };
     const owner = await device(browser, baseURL!, 'Owner', SIZES[0][1], theme);
     await makeProfile(owner.page, 'Dev');

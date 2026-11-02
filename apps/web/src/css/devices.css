@@ -43,6 +43,7 @@ button.dv-row{cursor:pointer}
 
 /* the one-time code: six digits inside a ring that drains over 5 minutes */
 .tp .dv-seg{margin:0 30px}
+.tp.app .dv .seg button{min-height:44px}
 .tp .dv-codebox{display:grid;place-items:center;padding:6px 0}
 .tp .dv-ring{--p:1;width:var(--rs,230px);height:var(--rs,230px);border-radius:50%;background:conic-gradient(var(--ring,var(--acc)) calc(var(--p) * 360deg),color-mix(in srgb,var(--tx) 12%,transparent) 0);display:grid;place-items:center;position:relative;flex:none}
 .tp .dv-ring::before{content:"";position:absolute;inset:6px;border-radius:50%;background:var(--bg)}
@@ -62,7 +63,11 @@ button.dv-row{cursor:pointer}
 .tp .dv-stp{display:flex;gap:10px;align-items:center;font:500 13px/1.35 var(--ui);color:var(--tx)}
 .tp .dv-stp i{font-style:normal;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;flex:none;background:var(--acc);color:var(--acctx);font:800 11.5px var(--num)}
 .tp .dv-actions{display:flex;justify-content:center;gap:18px}
-.tp .dv-foot{margin-top:auto}
+.tp.app .dv .dv-foot,.tp .dv-foot{margin-top:auto}
+.tp.app .profile-body{display:flex;flex-direction:column;gap:14px}
+.tp.app .profile-body>div:empty{display:none}
+.tp.app .profile-body>div:has(>section){display:grid;gap:14px}
+.tp.app .block.dv-alert .two .btn{font-size:14px;line-height:1.15}
 
 /* QR with a scan line */
 .tp .dv-qr{position:relative;justify-self:center;align-self:center;padding:10px;border-radius:16px;background:#fff;box-shadow:0 0 0 1px var(--line),0 14px 30px rgba(0,0,0,.3);overflow:hidden;line-height:0}
@@ -114,7 +119,7 @@ button.dv-row{cursor:pointer}
 .tp .dv-dlg.narrow{width:min(560px,100%)}
 @keyframes dv-pop{from{transform:translateY(3%) scale(.96);opacity:0}}
 .tp .dv-dlg .lt{font:var(--dspw,700) 28px var(--dsp);margin:0}
-.tp .dv-dlg .ib{width:44px;height:44px}
+.tp.app .dv-dim .dv-dlg button.ib{width:44px;height:44px;min-width:44px;min-height:44px;box-sizing:border-box}
 .tp .dv-lgrid{display:grid;grid-template-columns:auto 1fr;gap:30px;align-items:center}
 .tp .dv-lside{display:grid;gap:12px;justify-items:start}
 .tp .dv-dlg .dv-kslots{gap:10px}
@@ -169,3 +174,7 @@ button.dv-row{cursor:pointer}
 @media (max-width:700px){
   .tp .dv-lgrid{grid-template-columns:1fr;justify-items:center}
 }
+
+/* one seat per player: the watching bar sits under the table's top bar, never over its title */
+.tp .tp-watching[data-testid=watching-elsewhere]{top:calc(60px + env(safe-area-inset-top));width:max-content;max-width:calc(100% - 24px);font:600 13px/1.3 var(--ui);gap:10px}
+.tp .tp-watching[data-testid=watching-elsewhere] .btn{width:auto;min-height:44px;flex:none;font-size:13px}

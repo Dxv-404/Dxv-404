@@ -59,7 +59,8 @@ export class NetTable {
     const turnTotal = h?.toAct ? (v.cfg.turnTime || 0) * 1000 : 0;
     const left = h?.deadline ? Math.max(0, h.deadline - this.client.serverNow()) : 0;
     const out: ScreenView = {
-      ...v, isHost: hostId === this.me, hostId,
+      // (a device that only watches the host's seat, from another of the host's devices, does not host)
+      ...v, isHost: hostId === this.me && this.client.you === this.me, hostId,
       turnTotal: turnTotal ? Math.max(turnTotal, left) : 0, turnLeft: left,
       nextIn: v.phase === 'between' && !v.paused && v.handNo > 0 ? 1 : 0,
     };
@@ -83,7 +84,7 @@ export class NetTable {
   moveSeat(): void { this.client.moveSeat(); }
 
   // ---------------- buttons ----------------
-  get isHost(): boolean { return this.client.host === this.me; }
+  get isHost(): boolean { return this.client.host === this.me && this.client.you === this.me; }
   act(a: Action): void { this.client.act(a); }
   show(): void { if (this.view) this.client.send({ t: 'show', handNo: this.view.handNo }); }
   rebuy(): void { this.client.send({ t: 'rebuy' }); }

@@ -25,7 +25,7 @@ async function makeProfile(page: Page, name: string) {
   await page.getByTestId('open-profile').click();
   await page.getByTestId('name').fill(name);
   await page.getByTestId('make-profile').click();
-  await expect(page.getByTestId('make-code')).toBeVisible();
+  await expect(page.getByTestId('profile-name')).toHaveText(name);
 }
 
 test.afterAll(async () => {
@@ -50,9 +50,11 @@ test('no sign-up, crews by link, a wiped phone recovers everything, crew rescue'
   const link = (await rahul.page.getByTestId('invite-link').textContent())!;
   expect(link).toMatch(/#\/c\/[A-Z2-9]{10}$/);
   await rahul.page.getByRole('button', { name: 'Back' }).click();
+  await rahul.page.getByTestId('recovery-row').click(); // (v3: the recovery code sits behind its own row)
   await rahul.page.getByTestId('make-code').click();
   const code = (await rahul.page.getByTestId('code').textContent())!;
   expect(code).toMatch(/^\d{4} \d{4} \d{4}$/);
+  await rahul.page.keyboard.press('Escape');
 
   // Riya opens the link on a phone that has never opened the app: names herself and joins
   const riya = await phone(browser, 'Riya', baseURL!, MODELS.smallAndroid);
@@ -73,7 +75,7 @@ test('no sign-up, crews by link, a wiped phone recovers everything, crew rescue'
   await expect(wiped.page.getByTestId('recover-msg')).toHaveText("That code doesn't match an account.");
   await wiped.page.getByTestId('recover-code').fill(code);
   await wiped.page.getByTestId('recover-go').click();
-  await expect(wiped.page.getByTestId('name')).toHaveValue('Rahul');
+  await expect(wiped.page.getByTestId('profile-name')).toHaveText('Rahul');
   await expect(wiped.page.getByTestId('crews')).toContainText('Friday crew');
   await expect(wiped.page.getByTestId('crews')).toContainText('owner');
 
@@ -110,10 +112,11 @@ test('no sign-up, crews by link, a wiped phone recovers everything, crew rescue'
 
   // Rahul sees both his phones (the wiped one came back with the code), and logs the old one out
   await wiped.page.getByRole('button', { name: 'Back' }).click();
-  await expect(wiped.page.getByTestId('phones').locator('li')).toHaveCount(2);
-  await wiped.page.getByTestId('phones').getByRole('button', { name: 'Log out' }).click();
-  await expect(wiped.page.getByTestId('phones').locator('li')).toHaveCount(1);
-  await expect(wiped.page.getByTestId('phones')).toContainText('This phone');
+  await expect(wiped.page.getByTestId('device-other')).toHaveCount(1);
+  await wiped.page.getByTestId('device-more').click();
+  await wiped.page.getByTestId('device-logout').click();
+  await expect(wiped.page.getByTestId('device-other')).toHaveCount(0);
+  await expect(wiped.page.getByTestId('device-this')).toContainText('This phone');
 
   // a stranger claims to be Rahul from the link; Rahul says no; the stranger is told plainly
   const stranger = await phone(browser, 'Stranger', baseURL!, MODELS.smallAndroid);
