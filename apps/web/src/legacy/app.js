@@ -10,7 +10,7 @@ import { accountScreens } from './account-ui.js';
 import { offlineStart, hostPhoneHome, hostPhoneTable } from '../offline-screens.ts';
 import { onHostPhonePage } from '../offline.ts';
 import { onlineStart, routeOnline } from '../online-screens.ts';
-import { settingsScreen, ageNotice, installErrorReporting, noteScreen } from '../more-screens.ts';
+import { settingsScreen, installErrorReporting, noteScreen } from '../more-screens.ts';
 
 const app = $('#app');
 let host = null;
@@ -457,5 +457,5 @@ if (onHostPhonePage()) {
 if (!window.RTCPeerConnection || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
   app.replaceChildren(h('main', { class: 'screen home' }, h('div', { class: 'home-hero' }, h('h1', {}, 'Train Poker'),
     h('p', { class: 'tagline' }, 'This browser can’t connect phones or use the camera. Open train-poker.vercel.app in Chrome (or Safari on iPhone).'))));
-} else ageNotice(ui, () => { if (!routeOnline(ui) && !accounts.route()) home(); });
+} else if (!routeOnline(ui) && !accounts.route()) home();
 installErrorReporting();

@@ -1,5 +1,5 @@
 // Everything around the table (Phase 7): settings, notifications, Report a problem, error reports, the
-// privacy page and the 18+ notice.
+// privacy page.
 import { h, toast } from './legacy/ui.js';
 import { settings, saveSettings } from './legacy/fx.js';
 import { VAPID_PUBLIC_KEY } from '@tp/protocol';
@@ -185,14 +185,14 @@ export function installErrorReporting(): void {
   window.addEventListener('unhandledrejection', (e) => { const r = e.reason as Error | string | undefined; report(typeof r === 'string' ? r : String(r?.message ?? r ?? ''), typeof r === 'object' ? r?.stack : undefined); });
 }
 
-// ---------------------------------------------------------------- privacy and 18+
+// ---------------------------------------------------------------- privacy
 export function privacyScreen(ui: Ui, back: () => void = ui.home): void {
   ui.screen((el) => {
     el.className = 'screen privacy';
     const p = (t: string) => h('p', {}, t);
     el.append(head('Privacy', back), h('section', { class: 'block prose', 'data-testid': 'privacy' },
       h('h2', {}, 'What Train Poker keeps'),
-      p('Play money only: there is no real money, no buying chips and no prizes. It is for friends playing together, aged 18 and over.'),
+      p('Play money only: there is no real money, no buying chips and no prizes. It is for friends playing together.'),
       p('Without an account nothing about you leaves your phone except what a table needs while you play (your table name and your moves). Offline games stay on the phones at the table until the host phone uploads them.'),
       p('With an account (made the first time you open Profile and crews): your name, the crews you are in, your games, hands and results, and the cards you were dealt (only you can see your own; others see only cards shown at showdown). Your phones are kept as logins, without phone numbers or emails.'),
       p('Push notifications: if you turn them on, your browser gives the app an address to push to. It is deleted when you turn notifications off.'),
@@ -203,19 +203,5 @@ export function privacyScreen(ui: Ui, back: () => void = ui.home): void {
       h('h2', {}, 'Leaving'),
       p('Profile and crews → Delete my account removes your name, logins and cards; your results stay in your crews’ history as “Former player”, so the league still adds up.'),
       p('Questions: devkrishna6780@gmail.com')));
-  });
-}
-
-/** Shown once on first open: play money, for adults. */
-export function ageNotice(ui: Ui, then: () => void): void {
-  if (store.get('tp-18')) return then();
-  ui.screen((el) => {
-    el.className = 'screen notice';
-    el.append(h('section', { class: 'block', role: 'dialog', 'aria-label': 'Before you play', 'data-testid': 'age-notice' },
-      h('h1', {}, 'Before you play'),
-      h('p', {}, 'Train Poker is No-Limit Texas Hold’em with play money for friends. There is no real money, no buying chips and no prizes.'),
-      h('p', {}, 'It is for people aged 18 and over.'),
-      h('button', { class: 'btn primary', 'data-testid': 'age-ok', onclick: () => { store.set('tp-18', 1); then(); } }, 'I’m 18 or over'),
-      h('button', { class: 'btn ghost', onclick: () => privacyScreen(ui, () => ageNotice(ui, then)) }, 'Privacy')));
   });
 }

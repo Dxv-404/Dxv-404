@@ -33,16 +33,9 @@ const axe = async (p: Phone, what: string) => {
   expect(r.violations.map((v) => `${what}: ${v.id} (${v.nodes.length}) ${v.help}`)).toEqual([]);
 };
 
-test('first open: the 18+ notice, once; settings, privacy and Report a problem', async ({ browser, baseURL }) => {
+test('first open goes straight to the menu; settings, privacy and Report a problem', async ({ browser, baseURL }) => {
   const p = await newPhone(browser, 'Fresh', MODELS.pixel7, baseURL!);
-  await p.page.evaluate(() => { localStorage.removeItem('tp-18'); sessionStorage.setItem('tp-test-fresh', '1'); });
-  await p.page.reload();
-  await expect(p.page.getByTestId('age-notice')).toBeVisible();
-  await axe(p, 'age notice');
-  await p.page.getByTestId('age-ok').click();
-  await expect(p.page.getByTestId('play-online')).toBeVisible();
-  await p.page.reload();
-  await expect(p.page.getByTestId('play-online')).toBeVisible(); // not asked again
+  await expect(p.page.getByTestId('play-online')).toBeVisible(); // straight to the menu (no age check: a group of friends)
   await axe(p, 'home');
   // settings
   await p.page.getByTestId('open-settings').click();
