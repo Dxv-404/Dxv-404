@@ -4,6 +4,7 @@ import type { Action, GameEvent } from '@tp/engine';
 import type { ScreenView } from '../net-table';
 import { renderTable, sprite, fmt, THEME_KEYS, THEMES, type ThemeKey, type Frame } from './render';
 import { sfx, buzz, settings } from '../legacy/fx.js';
+import { Motion, type MotionLevel } from './motion';
 
 export interface TableLike {
   view: ScreenView | null;
@@ -33,6 +34,7 @@ export function loadDesignCss(): void {
 
 const SAY: Record<string, string> = { fold: 'folds', check: 'checks', call: 'calls', bet: 'bets', raise: 'raises to', allin: 'is all-in' };
 const reduceMotion = (): boolean => settings.motion === 'off' || matchMedia('(prefers-reduced-motion: reduce)').matches;
+const motionLevel = (): MotionLevel => (reduceMotion() ? 'off' : settings.motion === 'calm' ? 'calm' : 'full');
 
 export class TableScreen {
   private root: HTMLElement;
@@ -48,6 +50,7 @@ export class TableScreen {
   private lastTurnFor = '';
   private overlay: HTMLElement;
   private stage: HTMLElement;
+  private motion: Motion;
 
   constructor(root: HTMLElement, private t: TableLike, private o: { code: string; menu(): void; info(): void; offline?: boolean }) {
     this.root = root;
@@ -58,6 +61,7 @@ export class TableScreen {
     this.stage = document.createElement('div'); this.stage.className = 'tp-stage';
     this.overlay = document.createElement('div'); this.overlay.className = 'tp-over';
     root.append(this.stage, this.overlay);
+    this.motion = new Motion(this.stage);
     this.off.push(t.subscribe((ev, v) => this.update(ev, v)));
     if (t.view) this.update([], t.view);
     const onResize = () => this.draw();
@@ -113,6 +117,9 @@ export class TableScreen {
   update(events: GameEvent[], v: ScreenView): void {
     const prev = this.view;
     this.view = v;
+    // the table's micro-animations: whatever is still moving jumps to its end, and what is about to
+    // disappear (bets, folded cards) is noted so it can move away after the redraw
+    const snap = events.length ? this.motion.before(events) : null;
     const name = (pid: string | null | undefined) => v.players.find((p) => p.id === pid)?.name ?? 'Someone';
     for (const e of events) {
       if (e.t === 'handStart') { this.say(`Hand ${e.handNo}. Cards coming.`); sfx.card(); }
@@ -125,10 +132,12 @@ export class TableScreen {
     }
     // my turn: a buzz once per turn
     const turnKey = v.hand?.toAct === v.me && v.me ? `${v.handNo}:${v.hand?.street}:${v.hand?.currentBet}` : '';
-    if (turnKey && turnKey !== this.lastTurnFor) { buzz?.([30, 40, 30]); sfx.turn?.(); this.announce('Your turn.'); }
+    const myTurn = !!turnKey && turnKey !== this.lastTurnFor;
+    if (myTurn) { buzz?.([30, 40, 30]); sfx.turn?.(); this.announce('Your turn.'); }
     this.lastTurnFor = turnKey;
     if (prev?.hand?.toAct === v.me && v.hand?.toAct !== v.me) this.closeRaise();
     this.draw();
+    if (events.length || myTurn) this.motion.play(events, prev, v, snap, motionLevel(), myTurn);
     this.presence();
   }
 
@@ -145,10 +154,16 @@ export class TableScreen {
       for (const [k, html] of Object.entries(frame.parts)) {
         if (prev.parts[k] === html) continue;
         const el = this.stage.querySelector(`.tpd[data-k="${k}"]`);
-        if (el) el.innerHTML = html;
+        if (!el) continue;
+        // board cards already on the table must not play their deal-in again when the felt is redrawn
+        const shown = k === 'felt' ? el.querySelectorAll('.board .cd').length : 0;
+        el.innerHTML = html;
+        if (shown) el.querySelectorAll('.board .cd').forEach((c, i) => { if (i < shown) for (const a of c.getAnimations()) a.finish(); });
       }
+      this.motion.reattach(); // moves on swapped elements carry on, on the new ones
       return;
     }
+    this.motion.reset();
     this.stage.innerHTML = frame.html;
     const tp = this.stage.firstElementChild as HTMLElement;
     if (reduceMotion()) tp.classList.add('still');
@@ -278,6 +293,7 @@ export class TableScreen {
 
   destroy(): void {
     clearInterval(this.tick);
+    this.motion.reset();
     if (this.bubbleTimer) clearTimeout(this.bubbleTimer);
     for (const f of this.off) f();
     this.root.replaceChildren();

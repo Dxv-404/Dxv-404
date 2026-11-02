@@ -124,7 +124,9 @@ export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: num
   const betsHtml = st.map((s, i) => {
     const pos = placed.seats[i]!;
     if (pos.bx === undefined || !s.hp) return '';
-    return `<div class="bet" style="left:${pos.bx.toFixed(0)}px;top:${pos.by!.toFixed(0)}px">${chip(s.hp.allIn ? 'b' : 'a')}<span>${fmt(s.hp.streetBet)}</span></div>`;
+    // a bet or raise has a second chip on top (the design's raise move lands it there)
+    const two = !s.hp.allIn && (s.hp.lastAction === 'bet' || s.hp.lastAction === 'raise') ? `<span class="c2">${chip('a')}</span>` : '';
+    return `<div class="bet" style="left:${pos.bx.toFixed(0)}px;top:${pos.by!.toFixed(0)}px" data-pid="${esc(s.p.id)}">${two}${chip(s.hp.allIn ? 'b' : 'a')}<span>${fmt(s.hp.streetBet)}</span></div>`;
   }).join('');
   const dbtn = placed.dbtn ? `<div class="dbtn" style="left:${placed.dbtn.x.toFixed(0)}px;top:${placed.dbtn.y.toFixed(0)}px">D</div>` : '';
 
@@ -241,4 +243,5 @@ function sidePanel(v: ScreenView): string {
 }
 
 /** The theme's SVG sprite (cards, chips, dealer art) for the page. */
-export const sprite = (k: ThemeKey): string => `<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>${(THEMES[k] ?? THEMES.classic!).sprite}</defs></svg>`;
+// (the design's sprite points at img/ next to its pages; in the app the images are under /tp/img/)
+export const sprite = (k: ThemeKey): string => `<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>${(THEMES[k] ?? THEMES.classic!).sprite.replace(/href="img\//g, 'href="/tp/img/')}</defs></svg>`;
