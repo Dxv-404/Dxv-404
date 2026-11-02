@@ -8,6 +8,7 @@ import { ask } from '../legacy/ui.js';
 import { Motion, type MotionLevel } from './motion';
 import { presenceCss, bannerHtml, pauseHtml, backHtml, tickClock } from './presence';
 import { playTier, winValues, bustValues, tierFor, categoryOf, type Playing } from './tiers';
+import { RaiseSheet } from './raise';
 
 export interface TableLike {
   view: ScreenView | null;
@@ -47,7 +48,7 @@ export class TableScreen {
   private bubbleTimer: ReturnType<typeof setTimeout> | null = null;
   private net: 'good' | 'weak' | 'lost' = 'good';
   private frame: Frame | null = null;
-  private raiseOpen = false;
+  private raise: RaiseSheet | null = null;
   private off: (() => void)[] = [];
   private tick: ReturnType<typeof setInterval>;
   private lastTurnFor = '';
@@ -70,13 +71,15 @@ export class TableScreen {
     this.motion = new Motion(this.stage);
     this.off.push(t.subscribe((ev, v) => this.update(ev, v)));
     if (t.view) this.update([], t.view);
-    const onResize = () => this.draw();
+    const onResize = () => { this.draw(); if (this.raise && this.frame) this.raise.place(this.frame); };
     const onTheme = () => { (root.querySelector('.tp-sprite') as HTMLElement).innerHTML = sprite(currentTheme()); this.draw(); };
     window.addEventListener('resize', onResize);
     window.addEventListener('tp-theme', onTheme);
     this.off.push(() => { window.removeEventListener('resize', onResize); window.removeEventListener('tp-theme', onTheme); });
     // hold to look; buttons
-    const down = (e: Event) => {
+    const down = (e: PointerEvent) => {
+      // key hints are for keyboards: a touch hides them again (phones never see them)
+      if (e.pointerType === 'touch') root.classList.remove('kb');
       const el = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null;
       if (el?.dataset.act === 'peek') { this.peek = true; this.draw(); e.preventDefault(); }
     };
@@ -89,12 +92,15 @@ export class TableScreen {
     window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
     root.addEventListener('click', click);
     const key = (e: KeyboardEvent) => {
-      if (this.raiseOpen || (e.target as HTMLElement).closest('input, select, textarea')) return;
+      if ((e.target as HTMLElement).closest('input, select, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
+      root.classList.add('kb'); // a keyboard is in use: show the key hints
+      if (this.raise?.key(e)) return;
       if (e.code === 'Space') { if (!this.peek) { this.peek = true; this.draw(); } e.preventDefault(); return; }
       const k = e.key.toLowerCase();
       if (k === 'f') this.press('fold');
       else if (k === 'c') this.press(this.view?.legal?.canCheck ? 'check' : 'call');
       else if (k === 'r') this.press('raise');
+      else if (/^\d$/.test(k) && this.myTurnToRaise()) { this.press('raise'); this.raise?.key(e); }
     };
     const keyUp = (e: KeyboardEvent) => { if (e.code === 'Space') up(); };
     window.addEventListener('keydown', key); window.addEventListener('keyup', keyUp);
@@ -192,11 +198,11 @@ export class TableScreen {
     switch (act) {
       case 'menu': return this.o.menu();
       case 'info': return this.o.info();
-      case 'fold': if (L && v?.hand?.toAct === v.me) { if (L.canCheck) { void ask('You can check for free. Fold anyway?', { yes: 'Fold', no: 'Keep my cards', danger: true }).then((ok) => { if (ok) this.t.act({ type: 'fold' }); }); return; } this.t.act({ type: 'fold' }); } return;
-      case 'check': if (L?.canCheck) this.t.act({ type: 'check' }); return;
-      case 'call': if (L?.canCall) this.t.act({ type: 'call' }); return;
+      case 'fold': this.closeRaise(); if (L && v?.hand?.toAct === v.me) { if (L.canCheck) { void ask('You can check for free. Fold anyway?', { yes: 'Fold', no: 'Keep my cards', danger: true }).then((ok) => { if (ok) this.t.act({ type: 'fold' }); }); return; } this.t.act({ type: 'fold' }); } return;
+      case 'check': if (L?.canCheck) { this.closeRaise(); this.t.act({ type: 'check' }); } return;
+      case 'call': if (L?.canCall) { this.closeRaise(); this.t.act({ type: 'call' }); } return;
       case 'allin': this.t.act({ type: 'allin' }); return;
-      case 'raise': if (L?.canRaise) this.openRaise(); return;
+      case 'raise': if (this.raise) this.raise.commit(); else if (this.myTurnToRaise()) this.openRaise(); return;
       case 'show': return this.t.show();
       case 'rebuy': return this.t.rebuy();
       case 'sitin': return this.t.sitOut(false);
@@ -207,37 +213,24 @@ export class TableScreen {
   }
 
   // ---------------- raise ----------------
+  private myTurnToRaise(): boolean { const v = this.view; return !!(v?.legal?.canRaise && v.hand?.toAct === v.me && v.me); }
+  /** The raise sheet (raise.ts): its amounts are the engine's legal limits, so what it sends is accepted as it is. */
   private openRaise(): void {
     const v = this.view!, L = v.legal!;
-    const me = v.players.find((p) => p.id === v.me)!;
-    const pot = (v.hand?.pot ?? 0);
-    const callTo = L.currentBet;
-    const clamp = (x: number) => Math.max(L.minTo, Math.min(L.maxTo, Math.round(x)));
-    const presets: [string, number][] = [['Min', L.minTo], ['½ pot', clamp(callTo + (pot + L.toCall) / 2)], ['¾ pot', clamp(callTo + ((pot + L.toCall) * 3) / 4)], ['Pot', clamp(callTo + pot + L.toCall)], ['All-in', L.maxTo]];
-    let to = L.minTo;
-    this.raiseOpen = true;
-    const sheet = document.createElement('div');
-    sheet.className = 'tp-raise';
-    sheet.setAttribute('role', 'dialog'); sheet.setAttribute('aria-label', L.isBet ? 'Bet' : 'Raise');
-    const draw = () => {
-      sheet.innerHTML = `<div class="tp-raise-in"><div class="amt"><small>${L.isBet ? 'Bet' : 'Raise to'}</small><b>${fmt(to)}</b><small>${to >= L.maxTo ? 'all your chips' : `of ${fmt(me.stack + (v.hand?.ps[me.id]?.streetBet ?? 0))}`}</small></div>`
-        + `<input type="range" min="${L.minTo}" max="${L.maxTo}" step="${Math.max(1, v.level.bb / 2)}" value="${to}" aria-label="Amount">`
-        + `<div class="presets">${presets.map(([t, x]) => `<button data-to="${x}"${x === to ? ' class="on"' : ''}>${t}</button>`).join('')}</div>`
-        + `<div class="row"><button class="act ghost" data-x="cancel">Cancel</button><button class="act raise" data-x="go">${to >= L.maxTo ? 'All-in' : `${L.isBet ? 'Bet' : 'Raise to'} ${fmt(to)}`}</button></div></div>`;
-      (sheet.querySelector('input') as HTMLInputElement).addEventListener('input', (e) => { to = clamp(Number((e.target as HTMLInputElement).value)); draw(); (sheet.querySelector('input') as HTMLInputElement).focus(); });
-    };
-    sheet.addEventListener('click', (e) => {
-      const b = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
-      if (!b) { if (e.target === sheet) this.closeRaise(); return; }
-      if (b.dataset.to) { to = Number(b.dataset.to); draw(); return; }
-      if (b.dataset.x === 'cancel') return this.closeRaise();
-      if (b.dataset.x === 'go') { this.t.act(to >= L.maxTo ? { type: 'allin' } : { type: L.isBet ? 'bet' : 'raise', to }); this.closeRaise(); }
-    });
-    draw();
-    this.overlay.querySelector('.tp-raise')?.remove();
-    this.overlay.append(sheet);
+    if (!this.frame) return;
+    this.closeRaise();
+    this.raise = new RaiseSheet({
+      spot: { minTo: L.minTo, maxTo: L.maxTo, currentBet: L.currentBet, toCall: L.toCall, pot: L.pot, bb: v.level.bb, isBet: L.isBet },
+      theme: currentTheme(), level: motionLevel(), over: this.overlay, stage: this.stage,
+      go: (a) => { this.closeRaise(); this.t.act(a); },
+      close: () => this.closeRaise(),
+    }, this.frame);
   }
-  private closeRaise(): void { this.raiseOpen = false; this.overlay.querySelector('.tp-raise')?.remove(); }
+  private closeRaise(): void {
+    if (!this.raise) return;
+    const r = this.raise; this.raise = null; r.destroy();
+    if (this.root.classList.contains('kb')) (this.stage.querySelector('.tp.live .act.raise') as HTMLElement | null)?.focus({ preventScroll: true });
+  }
 
   // ---------------- wins ----------------
   private win(e: Extract<GameEvent, { t: 'win' }>, v: ScreenView): void {
@@ -353,6 +346,7 @@ export class TableScreen {
   }
 
   destroy(): void {
+    this.closeRaise();
     this.fxGen++; this.playing?.stop();
     if (this.presenceTimer) clearInterval(this.presenceTimer);
     clearInterval(this.tick);
