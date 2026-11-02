@@ -3,6 +3,7 @@
 import themesJson from './themes.json';
 import { arenaSize, fitCard, isCompact, makeGeo, modeFor, place, type Mode } from './layout';
 import type { ScreenView } from '../net-table';
+import { describePartial, parseCard } from '@tp/engine';
 
 interface ThemeArt { fx: string; arena: string; dealer: string; rail: string; felt: string; pot: string }
 export interface Theme { name: string; css: string; sprite: string; phone: ThemeArt; lap: ThemeArt; avatars: string[] }
@@ -188,10 +189,17 @@ export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: num
   return { html, mode, u, lw, lh, compact, heroCardW: heroW, shell, parts };
 }
 
+/** What you hold while you look at your cards: "You have a pair of kings" (the showdown's own words once it is over). */
 function handName(v: ScreenView): string | null {
   const me = v.me;
   const ev = me ? v.hand?.results?.evals?.[me] : null;
-  return ev ? (ev as { desc?: string }).desc ?? null : null;
+  if (ev) return (ev as { desc?: string }).desc ?? null;
+  const hp = me ? v.hand?.ps[me] : null;
+  if (!hp?.cards?.length || hp.folded) return null;
+  try {
+    const d = describePartial([...hp.cards, ...(v.hand?.board ?? [])].map(parseCard));
+    return `You have ${d.charAt(0).toLowerCase()}${d.slice(1)}`;
+  } catch { return null; }
 }
 
 function actionsHtml(v: ScreenView, mode: Mode): string {

@@ -127,6 +127,7 @@ test('settings reach the table: four-colour deck, large text, no motion, cards f
   await host.page.locator('[data-act=deal]').click();
   await expect(host.page.locator('.tp.live.four.bigtext.still')).toBeVisible();
   await expect(host.page.locator('.tp.live .hc.peek')).toBeVisible(); // hold to look is off: cards face up
+  await expect(host.page.locator('.tp.live .hhint')).toContainText(/You have (a |an |one |two |three |four |)?\w/); // what you hold, while you look
   const fs = await host.page.locator('.tp.live .seat .plate b').first().evaluate((e) => e.getBoundingClientRect().height);
   const gs = await guest.page.locator('.tp.live .seat .plate b').first().evaluate((e) => e.getBoundingClientRect().height);
   expect(fs).toBeGreaterThan(gs * 1.1); // the same phone size: names and chips 15% bigger

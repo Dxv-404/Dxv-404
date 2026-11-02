@@ -66,3 +66,4 @@ body[data-playing] #info-btn{display:none}
 .tp.calm *{animation-iteration-count:1!important;animation-duration:.25s!important;transition-duration:.15s!important}
 .tp.bigtext .plate b,.tp.bigtext .plate i,.tp.bigtext .pot,.tp.bigtext .waitline{zoom:1.15}
 .tp.live{touch-action:manipulation}
+.tp.live .hhint{overflow:hidden;text-overflow:ellipsis;max-width:100%}
