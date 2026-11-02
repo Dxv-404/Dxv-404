@@ -284,7 +284,7 @@ export function pickerScreen(root: HTMLElement, back: () => void, a: MenuActions
     const name = S.themes[chosen].name;
     const list = THEME_KEYS.map((key) => { const t = S.themes[key]; return `<button class="${key === chosen ? 'on' : ''}" data-theme="${key}"><i style="background:${t.swatch.felt};box-shadow:0 0 0 2px ${t.swatch.rim}"></i>${esc(t.name)}</button>`; }).join('');
     const big = '<div class="pk-row">' + mini(chosen, 390, 844, players, 170, 340, 'Phone · 390 × 844') + mini(chosen, 820, 1180, players, 240, 340, 'Tablet · 820 × 1180') + mini(chosen, 1440, 900, players, 420, 340, 'Laptop · 1440 × 900') + '</div>'
-      + '<div class="pk-row">' + mini(chosen, 844, 390, players, 380, 220, 'Phone sideways · 844 × 390') + mini(chosen, 360, 740, players, 110, 220, 'Small phone · 360 × 740') + mini(chosen, 1920, 1080, players, 380, 220, 'Desktop · 1920 × 1080') + '</div>';
+      + '<div class="pk-row">' + mini(chosen, 844, 390, players, 360, 210, 'Phone sideways · 844 × 390') + mini(chosen, 360, 740, players, 105, 210, 'Small phone · 360 × 740') + mini(chosen, 1920, 1080, players, 360, 210, 'Desktop · 1920 × 1080') + '</div>';
     const counts: [string, string][] = [['2', '2'], ['6', '6'], ['10', '10'], ['15', '15']];
     root.innerHTML = `<div class="pk-ph">`
       + `<div class="pk-hd"><button class="ib" data-x="back" aria-label="Back">‹</button><b>Theme</b></div>`
@@ -295,8 +295,9 @@ export function pickerScreen(root: HTMLElement, back: () => void, a: MenuActions
       + `<span class="pk-lbl">Players at the table</span>${seg(counts, String(players), 'data-n')}`
       + `<button class="pk-use" data-x="use" data-testid="theme-use">Use ${esc(name)}</button><p class="pk-note">Only your screen changes. Swipe the preview to see every screen size.</p></div>`
       + `<div class="pk-lap"><div class="pk-list"><b>Theme</b>${list}<p class="pk-note" style="text-align:left;margin-top:8px">Each player picks their own. It only changes your screen.</p><button class="btn ghost small" data-x="back" style="margin-top:8px">Back</button></div>`
-      + `<div class="pk-grid"><div class="pk-top"><span class="pk-lbl">Players</span>${seg(counts, String(players), 'data-n')}<span class="sp"></span><button class="pk-use" data-x="use" style="width:200px">Use ${esc(name)}</button></div>${big}</div></div>`;
+      + `<div class="pk-grid"><div class="pk-top"><span class="pk-lbl">Players</span>${seg(counts, String(players), 'data-n')}<span class="sp"></span><button class="pk-use" data-x="use" style="width:200px">Use ${esc(name)}</button></div><div class="pk-fit">${big}</div></div></div>`;
     void a;
+    fitBig();
     const strip2 = root.querySelector('.pk-strip') as HTMLElement;
     const figs = [...strip2.querySelectorAll('.pk-m')] as HTMLElement[];
     figs[shown]?.scrollIntoView({ block: 'nearest', inline: 'start' });
@@ -305,6 +306,17 @@ export function pickerScreen(root: HTMLElement, back: () => void, a: MenuActions
       if (i !== shown) { shown = i; root.querySelectorAll('.pk-dots i').forEach((d, j) => d.classList.toggle('on', j === i)); root.querySelectorAll('[data-size]').forEach((b) => { const on = (b as HTMLElement).dataset.size === String(i); b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); }); }
     }, { passive: true });
   };
+  // the laptop dialog's previews shrink together to fit the window instead of spilling past the dialog
+  const fitBig = (): void => {
+    const box = root.querySelector('.pk-fit') as HTMLElement | null;
+    if (!root.isConnected) { window.removeEventListener('resize', fitBig); return; }
+    if (!box || !box.offsetParent) return;
+    box.style.zoom = '1';
+    const room = (box.parentElement as HTMLElement).clientWidth;
+    const need = Math.max(...[...box.querySelectorAll('.pk-row')].map((r) => [...r.children].reduce((w, c) => w + (c as HTMLElement).offsetWidth, 0) + 22 * (r.children.length - 1)));
+    box.style.zoom = need > room ? String(Math.max(0.5, room / need)) : '1';
+  };
+  window.addEventListener('resize', fitBig);
   root.addEventListener('click', (e) => {
     const b = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
     if (!b || !root.contains(b)) return;
