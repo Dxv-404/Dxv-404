@@ -6,7 +6,9 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 /** The project the app talks to. The publishable key is meant to be public (it only allows what the
  * database's row-level security and functions allow). */
 import { SUPABASE_KEY, SUPABASE_URL } from './ticket';
+import { cleanDeviceCode, type AccountSummary, type Device, type DeviceCode, type DeviceKind, type DeviceNotice, type RedeemResult } from './devices';
 export { SUPABASE_KEY, SUPABASE_URL };
+export * from './devices';
 
 export interface Profile { id: string; name: string; avatar_url: string | null; settings: Record<string, unknown>; created_at: string; deleted_at: string | null }
 export type Role = 'owner' | 'admin' | 'member';
@@ -91,6 +93,53 @@ export class Account {
     this.profile = p;
     return { ok: true, profile: p };
   }
+
+  // ---------------- devices ----------------
+  /** Every device signed in as this account: this one first, then by when each was last used. */
+  myDevices(): Promise<Device[]> { return this.rpc<Device[]>('my_devices'); }
+  /** Tell the cloud what this device is (kind and a short description); call after start(). */
+  setThisDevice(kind: DeviceKind, detail: string): Promise<void> { return this.rpc('set_this_device', { p_kind: kind, p_detail: detail }); }
+  /** Rename a device of this account (empty puts the plain name back). */
+  renameDevice(device: string, name: string): Promise<void> { return this.rpc('rename_device', { p_device: device, p_name: name }); }
+
+  /** "Add a device": a 6-digit code that works once, for 5 minutes. Any older code stops working. */
+  async newDeviceCode(): Promise<DeviceCode> {
+    const r = await this.rpc<{ code: string; expires_at: string }>('new_device_code');
+    return { code: r.code, expiresAt: new Date(r.expires_at).getTime() };
+  }
+  cancelDeviceCode(): Promise<void> { return this.rpc('cancel_device_code'); }
+
+  /**
+   * "Use an account I already have": this device becomes the account the code belongs to. merge: true brings
+   * this device's own crews and games along, false leaves them behind, null asks first when there is anything
+   * (answered with reason 'ask' and what this device has; the code is not used up by asking).
+   */
+  async redeemDeviceCode(code: string, merge: boolean | null, device: { kind: DeviceKind; detail: string }): Promise<RedeemResult> {
+    if (!(await this.hasLogin())) {
+      const { error } = await this.db.auth.signInAnonymously();
+      if (error) return { ok: false, reason: 'error', message: error.message };
+    }
+    const { data, error } = await this.db.rpc('redeem_device_code', { p_code: cleanDeviceCode(code), p_merge: merge, p_kind: device.kind, p_detail: device.detail });
+    if (error) return { ok: false, reason: error.code === '54000' ? 'paused' : 'error', message: error.message };
+    const r = data as { ok: boolean; reason?: string; tries_left?: number; mine?: AccountSummary; account?: Profile; moved?: { crews: number; games: number; trophies: number } };
+    if (r.ok && r.account) {
+      this.profile = r.account;
+      return { ok: true, profile: r.account, moved: r.moved ?? { crews: 0, games: 0, trophies: 0 } };
+    }
+    switch (r.reason) {
+      case 'ask': return { ok: false, reason: 'ask', mine: r.mine! };
+      case 'wrong': return { ok: false, reason: 'wrong', triesLeft: r.tries_left ?? 0 };
+      case 'expired': return { ok: false, reason: 'expired', message: 'This code ran out. Make a new one on your other device; it takes a second.' };
+      case 'cancelled': return { ok: false, reason: 'cancelled', message: 'This code was cancelled (a new one was made, or too many wrong tries). Make a new one on your other device.' };
+      case 'used': return { ok: false, reason: 'used', message: 'This code was already used. Make a new one on your other device.' };
+      case 'self': return { ok: false, reason: 'self', message: 'This device is already your account.' };
+      default: return { ok: false, reason: 'error', message: 'Something went wrong. Please try again.' };
+    }
+  }
+
+  /** Sign-ins on this account's other devices since this one joined, not yet dismissed here. */
+  deviceNotices(): Promise<DeviceNotice[]> { return this.rpc<DeviceNotice[]>('my_device_notices'); }
+  dismissDeviceNotice(id: number): Promise<void> { return this.rpc('dismiss_device_notice', { p_id: id }); }
 
   logoutOtherPhones(): Promise<number> { return this.rpc<number>('logout_other_phones'); }
   /** The phones signed in to this account, most recently used first. */

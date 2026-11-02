@@ -75,10 +75,16 @@ export const ClientMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('ping'), c: z.number() }),
   /** The app went to the background (or came back): a turn push is sent only while it is not on screen. */
   z.object({ t: z.literal('bg'), hidden: z.boolean() }),
+  /** One seat per player: this device (watching, signed in as a player who plays from another device) takes the seat. */
+  z.object({ t: z.literal('moveSeat') }),
 ]);
 export type ClientMessage = z.infer<typeof ClientMessage>;
 
 // ---------- server -> phone ----------
+/** Which device a seat is played from ("You're playing on your laptop"): its kind and the name the player gave it. */
+export const DeviceInfo = z.object({ kind: z.enum(['phone', 'tablet', 'laptop']), name: z.string().max(30).nullable() });
+export type DeviceInfo = z.infer<typeof DeviceInfo>;
+
 // Views and events come from the engine and are passed through as they are.
 const view = z.record(z.string(), z.unknown());
 const events = z.array(z.record(z.string(), z.unknown()));
@@ -92,6 +98,10 @@ export const ServerMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('pong'), c: z.number(), s: z.number(), seq: z.number().int().nonnegative() }),
   /** Offline: the table between hands (no cards), kept by every phone so another phone can carry the night on. */
   z.object({ t: z.literal('checkpoint'), handNo: z.number().int().nonnegative(), hash: z.string().regex(/^[0-9a-f]{64}$/), data: z.string().max(200_000) }),
+  /** This device watches: the player's seat is being played on another device (it may ask for it with moveSeat). */
+  z.object({ t: z.literal('seatElsewhere'), device: DeviceInfo }),
+  /** The seat moved to another device; this one watches now (a welcome as a watcher follows). */
+  z.object({ t: z.literal('seatMoved'), device: DeviceInfo }),
   /** Something everyone at the table should be told (not part of the game itself). */
   z.object({ t: z.literal('notice'), text: z.string().max(300) }),
   z.object({ t: z.literal('error'), code: z.enum(['version', 'bad_message', 'not_allowed', 'table_full', 'no_table', 'rate_limited', 'server', 'replaced', 'need_hello', 'ticket']), message: z.string() }),

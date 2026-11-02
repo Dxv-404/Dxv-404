@@ -5,7 +5,7 @@
 // - the server numbers its updates; a gap (a lost update) or a pong showing a newer seq makes the phone
 //   reconnect and resume, so it never sits on a stale table;
 // - after a drop the phone reconnects with backoff (0.5 s, 1 s, 2 s, ... up to 5 s) and says the last seq it saw.
-import { PROTOCOL_VERSION, encode, parseServer, type ClientMessage, type ServerMessage, type TableSettings, type OfflineClaim } from '@tp/protocol';
+import { PROTOCOL_VERSION, encode, parseServer, type ClientMessage, type DeviceInfo, type ServerMessage, type TableSettings, type OfflineClaim } from '@tp/protocol';
 import { randomSeed, type Action, type GameEvent, type View } from '@tp/engine';
 
 /** The parts of a WebSocket the client uses (browser WebSocket, Node's global WebSocket, or a test fake). */
@@ -59,6 +59,10 @@ export interface ClientOptions {
   onCheckpoint?(handNo: number, hash: string, data: string): void;
   /** Something the table wants everyone to know (not part of the game). */
   onNotice?(text: string): void;
+  /** One seat per player: this device watches because the seat is played on another of the player's devices. */
+  onSeatElsewhere?(device: DeviceInfo): void;
+  /** The seat moved to another of the player's devices; this one watches now. */
+  onSeatMoved?(device: DeviceInfo): void;
 }
 
 type Outgoing = Extract<ClientMessage, { actionId: string }>;
@@ -130,6 +134,11 @@ export class TableClient {
 
   react(reaction: Extract<ClientMessage, { t: 'react' }>['reaction']): void {
     this.raw({ t: 'react', reaction });
+  }
+
+  /** "Move seat here": take this player's seat from their other device (see onSeatElsewhere). */
+  moveSeat(): void {
+    if (this.status === 'live') this.raw({ t: 'moveSeat' });
   }
 
   get pending(): number { return this.outbox.size; }
@@ -246,6 +255,14 @@ export class TableClient {
         return;
       case 'notice':
         this.o.onNotice?.(m.text);
+        return;
+      case 'seatElsewhere':
+        this.o.onSeatElsewhere?.(m.device);
+        return;
+      case 'seatMoved':
+        // taps still waiting would be refused as a watcher's: drop them (they were never played)
+        this.outbox.clear();
+        this.o.onSeatMoved?.(m.device);
         return;
     }
   }
