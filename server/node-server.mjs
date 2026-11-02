@@ -18956,6 +18956,7 @@ var VERSION = (() => {
     return "dev";
   }
 })();
+var STARTED = (/* @__PURE__ */ new Date()).toISOString();
 var HELLO_WITHIN_MS = 15e3;
 var IDLE_EVICT_MS = 30 * 6e4;
 var SAVE_EVERY_MS = 100;
@@ -19108,7 +19109,7 @@ var server = createServer((req, res) => {
     let connections = 0;
     for (const l of live.values()) connections += l.room.connectionCount;
     res.writeHead(200, { "content-type": "application/json", ...cors });
-    res.end(JSON.stringify({ ok: true, protocol: PROTOCOL_VERSION, colo: SITE, country: req.headers["cf-ipcountry"] ?? null, version: VERSION, rooms: live.size, connections, league: recorder ? { waiting: recorder.pending, refused: recorder.refused.length } : null }));
+    res.end(JSON.stringify({ ok: true, protocol: PROTOCOL_VERSION, colo: SITE, country: req.headers["cf-ipcountry"] ?? null, version: VERSION, upSince: STARTED, rooms: live.size, connections, league: recorder ? { waiting: recorder.pending, refused: recorder.refused.length } : null }));
     return;
   }
   if (url2.pathname === "/offline/upload" && req.method === "POST") {
