@@ -42,12 +42,16 @@
 .tp-raise .row{display:flex;gap:8px}.tp-raise .act{min-height:56px;border-radius:14px;flex:1;font-weight:800;font-size:16px}
 .tp-raise .act.ghost{background:rgba(255,255,255,.1);color:inherit}.tp-raise .act.raise{background:#d9a441;color:#1c1612}
 
-/* win tiers */
-.tp-tier{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);display:grid;justify-items:center;gap:4px;padding:16px 26px;border-radius:18px;background:rgba(10,8,6,.82);color:#fff;text-align:center;pointer-events:none;animation:tierIn 2.8s ease both}
-.tp-tier b{font:900 30px system-ui;letter-spacing:.02em}.tp-tier span{font:600 15px system-ui;opacity:.9}
-.tp-tier.t3 b{font-size:38px;color:#ffd36a}.tp-tier.t4 b{font-size:44px;color:#ffd36a;text-shadow:0 0 18px rgba(255,200,80,.8)}
-.tp-tier.t4{box-shadow:0 0 0 2px #ffd36a,0 0 60px rgba(255,200,80,.45)}
-@keyframes tierIn{0%{opacity:0;transform:translate(-50%,-40%) scale(.8)}10%{opacity:1;transform:translate(-50%,-50%) scale(1.04)}16%{transform:translate(-50%,-50%) scale(1)}85%{opacity:1}100%{opacity:0}}
+/* win tiers (table/tiers.ts): the design's 390 x 844 scene, scaled to the screen */
+.tp-over>.tpw-wrap{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.tp-over>.tpw-wrap.tpw-tap{pointer-events:auto;cursor:pointer}
+.tpw{position:absolute;left:0;top:0;width:390px;height:844px;transform-origin:0 0;color:var(--tx);font-family:var(--ui);-webkit-font-smoothing:antialiased;line-height:1.3;box-sizing:border-box;-webkit-user-select:none;user-select:none}
+.tp-over .tpw{background:none;box-shadow:none} /* the theme's root rule paints the page; the scene floats over the table */
+.tpw *,.tpw *::before,.tpw *::after{box-sizing:border-box}
+.tpw p,.tpw h1,.tpw h2,.tpw h3{margin:0}
+.tpw [data-tpw]{pointer-events:auto;cursor:pointer}
+.tpw-measure,.tpw-measure *,.tpw-measure *::before,.tpw-measure *::after{animation:none!important;transition:none!important}
+.tpw-measure [data-fit][data-t]::after{content:attr(data-t)!important} /* text drawn by the animation (cyber decrypt): measured as it ends */
 
 /* you are away / reconnecting */
 .tp-presence{position:absolute;left:50%;top:64px;transform:translateX(-50%);max-width:calc(100% - 32px);padding:10px 16px;border-radius:12px;background:rgba(20,14,10,.92);color:#f6e7c8;font:600 14px system-ui;box-shadow:0 6px 18px rgba(0,0,0,.35);text-align:center}
