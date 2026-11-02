@@ -1,7 +1,7 @@
 // Multi-phone test harness: every "phone" is its own browser context (own storage, screen,
 // touch, permissions), so several friends can sit at one table inside a single test.
 import type { Browser, BrowserContext, CDPSession, Page } from '@playwright/test';
-import { expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 export interface PhoneModel { label: string; width: number; height: number; scale: number; mobile: boolean; ua: string }
 
@@ -40,6 +40,14 @@ export const NET = {
   patchy4g: [80, 4000, 1500] as const,
 };
 
+// every phone a test opens is closed when the test ends, so idle tables (their animations keep running) never pile up
+// in the worker's browser and slow the tests after them
+const openPhones = new Set<BrowserContext>();
+test.afterEach(async () => {
+  for (const c of openPhones) await c.close().catch(() => {});
+  openPhones.clear();
+});
+
 export async function newPhone(browser: Browser, name: string, model: PhoneModel, baseURL: string, extra: Parameters<Browser['newContext']>[0] = {}): Promise<Phone> {
   const ctx = await browser.newContext({
     ...extra,
@@ -57,6 +65,7 @@ export async function newPhone(browser: Browser, name: string, model: PhoneModel
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(`[${name}] page error: ${e.message}`));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(`[${name}] console: ${m.text()}`); });
+  openPhones.add(ctx);
   const cdp = await ctx.newCDPSession(page);
   await cdp.send('Network.enable');
   const phone: Phone = {

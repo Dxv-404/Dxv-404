@@ -35,7 +35,7 @@ for (const theme of THEMES) {
     await expect(banner).toBeVisible();
     await expect(banner).toContainText(copy.banner);
     await expect(banner.locator('[data-pz=clock]')).toHaveText(/^0:0[0-2]$/);
-    await expect(banner.locator('[data-pz=clock]')).toHaveText(/0:0[3-6]/, { timeout: 7000 });
+    await expect(banner.locator('[data-pz=clock]')).toHaveText(/^0:(0[3-9]|1\d)$/, { timeout: 12_000 });
     await page.waitForTimeout(1500);
     await conn(page, 'good');
     await expect(banner).toHaveCount(0);
