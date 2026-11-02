@@ -6,6 +6,7 @@ import { renderTable, sprite, fmt, THEME_KEYS, THEMES, type ThemeKey, type Frame
 import { sfx, buzz, settings } from '../legacy/fx.js';
 import { ask } from '../legacy/ui.js';
 import { Motion, type MotionLevel } from './motion';
+import { playTier, winValues, bustValues, tierFor, categoryOf, type Playing } from './tiers';
 
 export interface TableLike {
   view: ScreenView | null;
@@ -52,6 +53,9 @@ export class TableScreen {
   private overlay: HTMLElement;
   private stage: HTMLElement;
   private motion: Motion;
+  /** the win scene on screen (it gives way when it is my turn), and a counter that cancels a queued bust-out */
+  private playing: Playing | null = null;
+  private fxGen = 0;
 
   constructor(root: HTMLElement, private t: TableLike, private o: { code: string; menu(): void; info(): void; offline?: boolean }) {
     this.root = root;
@@ -134,7 +138,7 @@ export class TableScreen {
     // my turn: a buzz once per turn
     const turnKey = v.hand?.toAct === v.me && v.me ? `${v.handNo}:${v.hand?.street}:${v.hand?.currentBet}` : '';
     const myTurn = !!turnKey && turnKey !== this.lastTurnFor;
-    if (myTurn) { buzz?.([30, 40, 30]); sfx.turn?.(); this.announce('Your turn.'); }
+    if (myTurn) { buzz?.([30, 40, 30]); sfx.turn?.(); this.announce('Your turn.'); this.fxGen++; this.playing?.stop(); }
     this.lastTurnFor = turnKey;
     if (prev?.hand?.toAct === v.me && v.hand?.toAct !== v.me) this.closeRaise();
     this.draw();
@@ -236,24 +240,39 @@ export class TableScreen {
 
   // ---------------- wins ----------------
   private win(e: Extract<GameEvent, { t: 'win' }>, v: ScreenView): void {
-    const total = e.results.pots.reduce((a, p) => a + p.amount, 0);
-    const mine = e.results.pots.flatMap((p) => p.awards).filter((a) => a.pid === v.me).reduce((s, a) => s + a.amount, 0);
-    const names = [...new Set(e.results.pots.flatMap((p) => p.awards.map((a) => v.players.find((x) => x.id === a.pid)?.name ?? 'Someone')))];
-    const best = e.results.pots.find((p) => p.hand)?.hand?.desc ?? null;
-    this.say(`${names.join(' and ')} win${names.length === 1 ? 's' : ''} ${fmt(total)}${best ? ` with ${best.toLowerCase()}` : ''}.`);
+    const pots = e.results.pots;
+    const total = pots.reduce((a, p) => a + p.amount, 0);
+    const mine = pots.flatMap((p) => p.awards).filter((a) => a.pid === v.me).reduce((s, a) => s + a.amount, 0);
+    const ids = [...new Set(pots.flatMap((p) => p.awards.map((a) => a.pid)))];
+    const names = ids.map((id) => v.players.find((x) => x.id === id)?.name ?? 'Someone');
+    // a split pot: everyone who won is named, the best hand shown
+    const best = pots.map((p) => p.hand).filter((h) => !!h).sort((a, b) => b!.score - a!.score)[0] ?? null;
+    this.say(`${names.join(' and ')} win${names.length === 1 ? 's' : ''} ${fmt(total)}${best ? ` with ${best.desc.toLowerCase()}` : ''}.`);
     sfx.win?.();
-    // win tiers: the bigger the pot (in big blinds) or the rarer the hand, the bigger the moment
-    const bbs = total / Math.max(1, v.level.bb);
-    const rare = !!best && /straight flush|royal|four of a kind/i.test(best);
-    const tier = rare || bbs >= 120 ? 4 : bbs >= 60 ? 3 : bbs >= 25 ? 2 : 1;
-    if (tier < 2 || settings.winFx === 'off' || (settings.winFx === 'big' && tier < 3)) return;
-    const banner = document.createElement('div');
-    banner.className = `tp-tier t${tier}`;
-    banner.setAttribute('role', 'status');
-    banner.innerHTML = `<b>${tier === 4 ? (rare ? best! : 'Monster pot') : tier === 3 ? 'Huge pot' : 'Big pot'}</b><span>${mine ? `You win ${fmt(mine)}` : `${names.join(' and ')} win${names.length === 1 ? 's' : ''} ${fmt(total)}`}</span>`;
-    this.overlay.append(banner);
+    // the tier comes from the hand: 4 straight flush and royal, 3 full house and quads, 2 trips to flush, 1 the rest
+    const cat = e.results.showdown && best ? categoryOf(best.name) : -1;
+    const tier = tierFor(cat);
     if (mine && tier >= 3) buzz?.([60, 40, 60, 40, 120]);
-    setTimeout(() => banner.remove(), reduceMotion() ? 2000 : 2800);
+    // anyone left with no chips after this hand goes out (the busted player first if it is me)
+    const out = v.players.filter((p) => p.stack === 0 && !ids.includes(p.id) && !!v.hand?.ps[p.id]).sort((a, b) => Number(b.id === v.me) - Number(a.id === v.me))[0];
+    const fx = settings.winFx as string;
+    const showWin = fx !== 'off' && !(fx === 'big' && tier < 3);
+    const showBust = !!out && fx !== 'off' && (fx === 'all' || out.id === v.me);
+    const gen = ++this.fxGen;
+    this.playing?.stop();
+    const base = () => ({ over: this.overlay, table: this.stage.firstElementChild as HTMLElement | null, theme: currentTheme(), still: reduceMotion(), calm: settings.motion === 'calm' });
+    void (async () => {
+      if (showWin) {
+        const values = winValues({ names, amount: total, cat, cards: best?.best ?? [], handNo: v.handNo, code: this.o.code }, currentTheme());
+        this.playing = await playTier({ ...base(), index: tier - 1, values });
+        await this.playing.done;
+      }
+      if (!showBust || gen !== this.fxGen || !out) return;
+      const at = (out.id === v.me ? this.stage.querySelector('.hero .hc') : this.stage.querySelector(`.seat[data-pid="${CSS.escape(out.id)}"]`))?.getBoundingClientRect();
+      const values = bustValues({ name: out.name, place: v.players.filter((p) => p.stack > 0).length + 1, of: v.players.length, rebuys: !!v.cfg.rebuys, stack: v.cfg.startStack, seatNo: out.seat + 1 });
+      this.playing = await playTier({ ...base(), index: 4, values, anchor: at ? { x: at.left + at.width / 2, y: at.top + at.height / 2 } : null,
+        buttons: out.id === v.me ? { rebuy: v.cfg.rebuys ? () => this.t.rebuy() : null } : null });
+    })().catch(() => { /* a scene that cannot load leaves the table as it is */ });
   }
 
   // ---------------- presence ----------------
@@ -293,6 +312,7 @@ export class TableScreen {
   }
 
   destroy(): void {
+    this.fxGen++; this.playing?.stop();
     clearInterval(this.tick);
     this.motion.reset();
     if (this.bubbleTimer) clearTimeout(this.bubbleTimer);
