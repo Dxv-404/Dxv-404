@@ -43,6 +43,7 @@ function bot(t: Table, i: number): Bot {
   const b: Bot = { pid, c: null as unknown as TableClient, table: t };
   let busy = '';
   const make = () => {
+    busy = ''; // a reloaded page starts fresh (a move lost with the old socket is made again)
     b.c = new TableClient({
       url: `${URL_}/table/${t.code}`, table: t.code, player: pid, token, name: `Bot${i}`,
       ...(i === 0 ? { settings: { turnTime: 20, startStack: 1000, sb: 5, bb: 10, rebuys: true, casual: true, maxPlayers: 15 } } : {}),
@@ -64,10 +65,11 @@ function bot(t: Table, i: number): Bot {
           }
         }
         if (i === 0 && v.handNo > t.lastHand) { handsTotal += v.handNo - t.lastHand; t.lastHand = v.handNo; t.lastProgress = Date.now(); }
-        if (i === 0) {
-          const chips = v.players.reduce((s, p) => s + p.stack, 0) + (v.hand ? Object.values(v.hand.ps).reduce((s, p) => s + (p.total ?? 0), 0) : 0);
-          const bought = v.players.reduce((s, p) => s + ((p as unknown as { buyins?: number }).buyins ?? 0), 0);
-          if (bought && chips !== bought && v.phase !== 'hand') chipErrors++;
+        if (i === 0 && v.phase !== 'hand') {
+          // between hands every chip is in a stack: stacks add up to what was bought in
+          const chips = v.players.reduce((s, p) => s + p.stack, 0);
+          const bought = v.players.reduce((s, p) => s + p.buyins, 0);
+          if (chips !== bought) { chipErrors++; if (chipErrors <= 3) note(`chips ${chips} vs bought ${bought} at ${t.code} hand ${v.handNo}`); }
         }
         if (v.phase !== 'hand' && v.players.find((p) => p.id === pid)?.stack === 0 && busy !== `rb${v.handNo}`) { busy = `rb${v.handNo}`; b.c.send({ t: 'rebuy' }); }
         const h = v.hand;
@@ -113,7 +115,13 @@ async function main(): Promise<void> {
   while (Date.now() < end) {
     await sleep(1000);
     if (CHAOS > 0) for (const t of tables) for (const b of t.bots.slice(1)) if (r0() < CHAOS / 60) (b as Bot & { remake: () => void }).remake();
-    for (const t of tables) if (Date.now() - t.lastProgress > 90_000 && t.stuckReports++ === 0) { note(`stuck table ${t.code} at hand ${t.lastHand}`); }
+    for (const t of tables) if (Date.now() - t.lastProgress > 90_000 && t.stuckReports++ === 0) {
+      const v = t.bots[0]!.view, h = v?.hand;
+      const who = t.bots.find((b) => b.pid === h?.toAct);
+      const detail = `phase ${v?.phase} paused ${v?.paused} toAct ${h?.toAct ?? '-'} (its status ${who?.c.status ?? '?'}, legal ${!!who?.view?.legal}, sees toAct ${who?.view?.hand?.toAct === who?.pid}) vote ${!!h?.vote} players ${v?.players.map((p) => `${p.stack}${p.connected ? '' : '!'}${p.sittingOut ? 's' : ''}`).join(',')}`;
+      note(`stuck table ${t.code} at hand ${t.lastHand}: ${detail}`);
+      console.log(`stuck ${t.code}: ${detail}`);
+    }
     if (Date.now() - lastLog > 30_000) {
       lastLog = Date.now();
       console.log(`${Math.round((Date.now() - started) / 1000)}s: ${handsTotal} hands, ack p50 ${pct(ackMs, 50)} p95 ${pct(ackMs, 95)} p99 ${pct(ackMs, 99)} ms, seen p95 ${pct(seenMs, 95)} ms, errors ${errors}, refused ${refused}, reconnects ${reconnects}`);
