@@ -43,6 +43,24 @@ export function initShell(app: HTMLElement): HTMLElement {
   return view;
 }
 
+/** Shows theme k on screen without making it the player's theme (the picker's preview): its tokens and art
+ *  stylesheet, its card and avatar sprite, its background. setTheme / the 'tp-theme' event puts the real one back. */
+export function showTheme(k: ThemeKey): void {
+  const app = document.getElementById('app');
+  if (!app) return;
+  for (const t of THEME_KEYS) app.classList.toggle(`th-${t}`, t === k);
+  let link = document.getElementById('tp-theme-css') as HTMLLinkElement | null;
+  if (!link) { link = document.createElement('link'); link.id = 'tp-theme-css'; link.rel = 'stylesheet'; document.head.append(link); }
+  const href = `/tp/${THEMES[k]!.css}`;
+  if (link.getAttribute('href') !== href) link.href = href;
+  const fx = app.querySelector(':scope > .fx') as HTMLElement | null;
+  if (fx) fx.innerHTML = S.themes[k].menu.bg;
+  const spr = app.querySelector(':scope > .tp-sprite') as HTMLElement | null;
+  if (spr) spr.innerHTML = sprite(k);
+  themeCss(k);
+  document.documentElement.style.setProperty('--app-bg', S.themes[k].swatch.bg);
+}
+
 /** Each theme's own extra CSS for its menu and loading art (some themes animate their backgrounds). */
 function themeCss(k: ThemeKey): void {
   let tag = document.getElementById('tp-screen-css') as HTMLStyleElement | null;
@@ -277,10 +295,7 @@ export function pickerScreen(root: HTMLElement, back: () => void, a: MenuActions
   root.className = 'screen picker';
   const render = (): void => {
     // preview the chosen theme on this screen only (the app's own theme changes when you press Use)
-    const app = document.getElementById('app')!;
-    for (const t of THEME_KEYS) app.classList.toggle(`th-${t}`, t === chosen);
-    (app.querySelector(':scope > .fx') as HTMLElement).innerHTML = S.themes[chosen].menu.bg;
-    themeCss(chosen);
+    showTheme(chosen);
     const sw = (key: ThemeKey, cls: string): string => { const t = S.themes[key]; return `<button class="${cls}${key === chosen ? ' on' : ''}" data-theme="${key}" role="radio" aria-checked="${key === chosen}" style="background:${t.swatch.bg};color:${t.swatch.tx}"><i style="background:${t.swatch.felt};box-shadow:0 0 0 3px ${t.swatch.rim}"></i>${esc(t.name)}</button>`; };
     const seg = (vals: [string, string][], on: string, attr: string): string => `<div class="pk-seg" role="radiogroup">${vals.map(([v, l]) => `<button class="${v === on ? 'on' : ''}" ${attr}="${v}" role="radio" aria-checked="${v === on}">${l}</button>`).join('')}</div>`;
     const strip = SIZES.map(([l, W, H]) => mini(chosen, W, H, players, W > H ? 300 : 150, 300, l)).join('');
