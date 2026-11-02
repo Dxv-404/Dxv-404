@@ -121,16 +121,19 @@ function fitLogo(w: HTMLElement): void {
 export interface MenuActions {
   joinOnline(code: string): void; joinOffline(): void; host(): void;
   profile(): void; settings(): void; crew(id: string): void; rejoin(code: string): void; resumeHost?: { sub: string; go: () => void };
-  league(): void; replays(): void; theme(): void;
+  crews(): void; replays(): void; theme(): void; play?: () => void;
 }
-type Tab = 'play' | 'league' | 'replays' | 'theme';
+type Tab = 'play' | 'crews' | 'replays' | 'theme';
 
-/** The bottom bar of the menu screens: Play · League · Replays · Theme. */
+/** The bottom bar of the menu screens: Play · Crews · Replays · Theme (v3: Crews replaced League; a league
+ *  belongs to a crew). The Crews tab carries the number of invitations and requests waiting. */
 export function navBar(on: Tab, a: MenuActions): HTMLElement {
   const n = el('nav', 'nav'); n.setAttribute('aria-label', 'Main');
-  const items: [Tab, string, string, () => void][] = [['play', '♠', 'Play', () => undefined], ['league', '▤', 'League', a.league], ['replays', '↺', 'Replays', a.replays], ['theme', '◐', 'Theme', a.theme]];
+  const items: [Tab, string, string, () => void][] = [['play', '♠', 'Play', a.play ?? (() => undefined)], ['crews', '⬢', 'Crews', a.crews], ['replays', '↺', 'Replays', a.replays], ['theme', '◐', 'Theme', a.theme]];
+  const waiting = store.get<number>('tp-crews-badge') ?? 0;
   for (const [k, icon, label, go] of items) {
-    const b = el('button', k === on ? 'on' : '', `<i aria-hidden="true">${icon}</i>${label}`);
+    const badge = k === 'crews' && waiting > 0 ? `<b class="bdg" aria-label="${waiting} waiting">${waiting > 9 ? '9+' : waiting}</b>` : '';
+    const b = el('button', k === on ? 'on' : '', `<i aria-hidden="true">${icon}</i>${label}${badge}`);
     b.dataset.testid = `nav-${k}`;
     if (k === on) b.setAttribute('aria-current', 'page');
     b.addEventListener('click', () => { if (k !== on) go(); });
@@ -224,25 +227,20 @@ export function menuScreen(root: HTMLElement, a: MenuActions & { onPlay?: never 
 /** Leaving the menu (the shell calls this before any other screen). */
 export const leaveMenu = (): void => { document.getElementById('app')?.classList.remove('menu'); };
 
-/** Signed-in phones: the crews with their first members and size, for the menu's crew rows (kept for next time). */
+/** Signed-in phones: the crews with their first members, size, season and LIVE table, for the menu's crew rows
+ *  (kept for next time), and the Crews tab's number. */
 let refreshing = false;
 async function refreshCrews(): Promise<boolean> {
   refreshing = true;
   try {
     const me = store.get<{ account: string; name: string }>('tp-me');
     if (!me?.account || !navigator.onLine) return false;
-    const mod = await import('@tp/account');
-    const acc = new mod.Account();
-    if (!(await acc.hasLogin())) return false;
-    await acc.start(me.name);
-    const crews = (await acc.crews()).filter((c) => c.status === 'active');
-    const rows = await Promise.all(crews.slice(0, 6).map(async (c) => {
-      const ms = (await acc.members(c.id).catch(() => [])).filter((m) => m.status === 'active');
-      return { id: c.id, name: c.name, count: ms.length, members: ms.slice(0, 4).map((m) => ({ id: m.account_id, name: m.name })) };
-    }));
-    const before = localStorage.getItem('tp-crews');
-    store.set('tp-crews', rows);
-    return before !== localStorage.getItem('tp-crews');
+    const data = await import('../crews/data');
+    const acc = await data.existing();
+    if (!acc) return false;
+    const before = localStorage.getItem('tp-crews') + '|' + localStorage.getItem('tp-crews-badge');
+    await data.fetchLists(acc);
+    return before !== localStorage.getItem('tp-crews') + '|' + localStorage.getItem('tp-crews-badge');
   } catch { return false; } finally { setTimeout(() => { refreshing = false; }, 30_000); }
 }
 

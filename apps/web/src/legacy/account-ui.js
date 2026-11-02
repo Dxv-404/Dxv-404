@@ -22,7 +22,7 @@ const inviteLink = (code) => `${location.origin}${location.pathname}#/c/${code}`
 const share = (text) => `https://wa.me/?text=${encodeURIComponent(text)}`;
 const copy = (text, what = 'Copied') => navigator.clipboard?.writeText(text).then(() => toast(what), () => toast('Could not copy. Select it and copy by hand.'));
 
-export function accountScreens({ screen, openSheet, home }) {
+export function accountScreens({ screen, openSheet, home, crews = null }) {
   const lg = leagueScreens({ screen, openSheet, account, back: () => profile() });
   const head = (title, back = home) => h('header', { class: 'page-head' }, h('button', { class: 'icon-btn', 'aria-label': 'Back', onclick: back }, '‹'), h('h1', {}, title));
   const busy = (el, text = 'Loading…') => el.replaceChildren(h('p', { class: 'hint', role: 'status' }, text));
@@ -82,7 +82,7 @@ export function accountScreens({ screen, openSheet, home }) {
       h('section', { class: 'block' }, h('h2', {}, 'Recovery code'), codeBox),
       h('section', { class: 'block' }, h('button', { class: 'btn secondary', 'data-testid': 'my-games', onclick: () => lg.history() }, 'My games', h('small', {}, 'Every game you played, with replays'))),
       h('section', { class: 'block' }, h('h2', {}, 'Crews'), crewsBox,
-        h('button', { class: 'btn secondary', 'data-testid': 'new-crew', onclick: () => newCrew() }, 'New crew')),
+        h('button', { class: 'btn secondary', 'data-testid': 'new-crew', onclick: () => (crews ? crews.create() : newCrew()) }, 'New crew')),
       h('section', { class: 'block' }, h('h2', {}, 'Phones on this account'), phonesBox),
       h('section', { class: 'block' }, h('h2', {}, 'This account'),
         h('button', { class: 'btn ghost', 'data-testid': 'recover-open', onclick: () => recoverSheet() }, 'Recover old account', h('small', {}, 'Make this phone an account you had before')),
@@ -177,7 +177,7 @@ export function accountScreens({ screen, openSheet, home }) {
       } catch { /* see above */ }
       box.replaceChildren(crews.length
         ? h('ul', { class: 'crew-list', 'data-testid': 'crews' }, ...crews.map((c) => h('li', {},
-          h('button', { class: 'crew-row', onclick: () => crewScreen(c.id) },
+          h('button', { class: 'crew-row', onclick: () => (crews && c.status === 'active' ? crews.open(c.id) : crewScreen(c.id)) },
             h('span', { class: 'crew-dot', style: { background: c.color }, 'aria-hidden': 'true' }),
             h('strong', {}, c.name), h('small', {}, c.status === 'pending' ? 'waiting for approval' : c.role)))))
         : h('p', { class: 'hint' }, 'No crews yet. A crew keeps a league and history for a group of friends.'));
@@ -421,5 +421,5 @@ export function accountScreens({ screen, openSheet, home }) {
     return false;
   }
 
-  return { profile, invite, route, crew: crewScreen, league: (c) => lg.league(c, () => profile()), history: () => lg.history() };
+  return { profile, invite, route, crew: crewScreen, league: (c) => lg.league(c, () => profile()), history: () => lg.history(), game: (id, back) => lg.game(id, back) };
 }

@@ -36,7 +36,7 @@ const store = {
 };
 
 /** Which server to open a new table on: Hyderabad if it answers quickly, else Cloudflare. */
-async function pickServer(): Promise<'oracle' | 'cloudflare'> {
+export async function pickServer(): Promise<'oracle' | 'cloudflare'> {
   if (override()) return 'oracle';
   try {
     const r = await fetch(`${httpOf(SERVERS.oracle)}/health`, { signal: AbortSignal.timeout(2500), cache: 'no-store' });
@@ -123,8 +123,12 @@ export function onlineStart(ui: Ui): void {
   });
 }
 
-export function hostOnline(ui: Ui): void {
-  const cfg: TableSettings = withRebuyDefaults({ ...(store.get<TableSettings>('tp-online-settings') ?? { startStack: 1000, sb: 5, bb: 10, turnTime: 20, rebuys: true }) });
+/** "Open a table". From a crew's host sheet ("Change for tonight") it starts from the crew's rules, says when the
+ *  table is open (so the crew is told), and the leader can keep tonight's rules as the crew's. */
+export interface HostOpts { preset: TableSettings; opened(code: string, cfg: TableSettings, save: boolean): void; canSave: boolean; back(): void }
+export function hostOnline(ui: Ui, opts?: HostOpts): void {
+  const cfg: TableSettings = withRebuyDefaults(opts ? { ...opts.preset } : { ...(store.get<TableSettings>('tp-online-settings') ?? { startStack: 1000, sb: 5, bb: 10, turnTime: 20, rebuys: true }) });
+  let save = false;
   ui.screen((el) => {
     el.className = 'screen setup setup3';
     const rb = rebuyBlock(cfg);
@@ -137,19 +141,21 @@ export function hostOnline(ui: Ui): void {
       return h('div', { class: 'field' }, h('span', {}, label), wrap);
     };
     const crews = store.get<{ id: string; name: string }[]>('tp-crews') ?? [];
-    const crewSel = crews.length ? h('label', { class: 'field' }, h('span', {}, 'Crew table'),
+    const crewSel = opts ? (opts.canSave ? h('label', { class: 'switch-row' }, h('span', {}, 'Keep as the crew’s rules', h('small', {}, 'Off: just for tonight')),
+      h('input', { type: 'checkbox', role: 'switch', 'data-testid': 'save-crew-rules', onchange: (e: Event) => { save = (e.target as HTMLInputElement).checked; } })) : null) : crews.length ? h('label', { class: 'field' }, h('span', {}, 'Crew table'),
       h('select', { onchange: (e: Event) => { const v = (e.target as HTMLSelectElement).value; if (v) cfg.crew = v; else delete cfg.crew; } },
         h('option', { value: '' }, 'Anyone with the code'), ...crews.map((c) => h('option', { value: c.id, selected: cfg.crew === c.id ? true : null }, `${c.name} only (counts for its league)`)))) : null;
     const go = h('button', { class: 'btn primary', 'data-testid': 'online-open', onclick: async () => {
       if ((cfg.bb ?? 10) < (cfg.sb ?? 5)) return toast('The big blind must be at least the small blind.');
       if ((cfg.startStack ?? 1000) < (cfg.bb ?? 10) * 2) return toast('Starting chips should be at least two big blinds.');
       rb.finish();
-      store.set('tp-online-settings', cfg);
+      if (!opts) store.set('tp-online-settings', cfg);
       (go as HTMLButtonElement).disabled = true;
       const code = newCode(await pickServer());
+      opts?.opened(code, { ...cfg }, save);
       void playOnline(ui, code, cfg);
     } }, 'Open the table');
-    el.append(setupHead('Open a table', 'Online', 'Online · anyone with the code', () => onlineStart(ui)),
+    el.append(setupHead(opts ? 'Tonight’s crew table' : 'Open a table', 'Online', opts ? 'Crew table · counts for the season' : 'Online · anyone with the code', () => (opts ? opts.back() : onlineStart(ui))),
       h('section', { class: 'block s3-c1' }, h('h2', {}, 'Chips and blinds'), num('startStack', 'Starting chips'), h('div', { class: 'two' }, num('sb', 'Small blind'), num('bb', 'Big blind')),
         blindsSeg(cfg, () => rb.refresh())),
       rb.el,
