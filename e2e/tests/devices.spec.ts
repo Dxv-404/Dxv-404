@@ -244,7 +244,8 @@ test('a device with its own crew: asked once; Bring them over, or Leave them beh
     await p.page.getByTestId('new-crew').click();
     await p.page.getByTestId('crew-name').fill(crew);
     await p.page.getByTestId('crew-create').click();
-    await expect(p.page.getByTestId('crew-title')).toHaveText(crew);
+    // the v3 create flow ends on "Crew made" (the crews stream's screen)
+    await expect(p.page.getByTestId('crew-made')).toBeVisible({ timeout: 15_000 });
     await p.page.goto('/');
   }
   let code = await showCode(a.page);
