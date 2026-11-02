@@ -8,6 +8,7 @@ import { ask } from '../legacy/ui.js';
 import { Motion, type MotionLevel } from './motion';
 import { presenceCss, bannerHtml, pauseHtml, backHtml, tickClock } from './presence';
 import { playTier, winValues, bustValues, tierFor, categoryOf, type Playing } from './tiers';
+import { RebuyUi } from './rebuys';
 
 export interface TableLike {
   view: ScreenView | null;
@@ -58,7 +59,15 @@ export class TableScreen {
   private playing: Playing | null = null;
   private fxGen = 0;
 
-  constructor(root: HTMLElement, private t: TableLike, private o: { code: string; menu(): void; info(): void; offline?: boolean }) {
+  /** rebuys: the bust-out sheets, the chips pouring in after a rebuy (rebuys.ts) */
+  private rb: RebuyUi;
+  /** the bust the sheet was shown for (rebuys used at the time), one waiting for the bust-out scene, and where I went out */
+  private bustKey: string | null = null;
+  private bustWaiting: string | null = null;
+  private bustAt: { handNo: number; place: number; of: number } | null = null;
+  private bustTimer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(root: HTMLElement, private t: TableLike, private o: { code: string; menu(): void; info(): void; offline?: boolean; leave?: (() => void) | null }) {
     this.root = root;
     loadDesignCss();
     root.className = 'screen tp-screen';
@@ -68,6 +77,7 @@ export class TableScreen {
     this.overlay = document.createElement('div'); this.overlay.className = 'tp-over';
     root.append(this.stage, this.overlay);
     this.motion = new Motion(this.stage);
+    this.rb = new RebuyUi({ over: this.overlay, stage: this.stage, theme: currentTheme, level: motionLevel, rebuy: () => this.t.rebuy(), leave: o.leave ?? null, offline: !!o.offline });
     this.off.push(t.subscribe((ev, v) => this.update(ev, v)));
     if (t.view) this.update([], t.view);
     const onResize = () => this.draw();
@@ -127,6 +137,7 @@ export class TableScreen {
     // disappear (bets, folded cards) is noted so it can move away after the redraw
     const snap = events.length ? this.motion.before(events) : null;
     const name = (pid: string | null | undefined) => v.players.find((p) => p.id === pid)?.name ?? 'Someone';
+    this.checkBust(events, v, true);
     for (const e of events) {
       if (e.t === 'handStart') { this.say(`Hand ${e.handNo}. Cards coming.`); sfx.card(); }
       else if (e.t === 'act') { this.say(`${name(e.pid)} ${SAY[e.a] ?? e.a}${e.a === 'raise' || e.a === 'bet' ? ` ${fmt(e.to ?? e.amount ?? 0)}` : e.a === 'call' && e.amount ? ` ${fmt(e.amount)}` : ''}.`); if (e.a !== 'fold' && e.a !== 'check') sfx.chip?.(1); }
@@ -135,6 +146,7 @@ export class TableScreen {
       else if (e.t === 'presence' && e.pid !== v.me) this.say(`${name(e.pid)} ${e.connected ? 'is back' : 'lost connection'}.`);
       else if (e.t === 'paused') this.say(e.paused ? 'Dealing is paused.' : 'Dealing again.');
       else if (e.t === 'level') this.say(`Blinds up: ${fmt(e.level.sb)} / ${fmt(e.level.bb)}.`);
+      else if (e.t === 'rebuy') { if (e.pid === v.me) this.rebought = e.amount; else this.say(`${name(e.pid)} rebuys for ${fmt(e.amount)}.`); sfx.chip?.(3); }
     }
     // my turn: a buzz once per turn
     const turnKey = v.hand?.toAct === v.me && v.me ? `${v.handNo}:${v.hand?.street}:${v.hand?.currentBet}` : '';
@@ -144,8 +156,44 @@ export class TableScreen {
     if (prev?.hand?.toAct === v.me && v.hand?.toAct !== v.me) this.closeRaise();
     this.draw();
     if (events.length || myTurn) this.motion.play(events, prev, v, snap, motionLevel(), myTurn);
+    if (this.rebought !== null) { const a = this.rebought; this.rebought = null; this.rb.rebought(v, a); }
+    this.checkBust(events, v, false);
     this.presence();
   }
+
+  private rebought: number | null = null;
+
+  // ---------------- bust-out ----------------
+  /** Out of chips: the bust-out sheet, once per bust, after the bust-out scene when one plays. */
+  private checkBust(events: GameEvent[], v: ScreenView, before: boolean): void {
+    const me = v.players.find((p) => p.id === v.me);
+    if (!me || me.stack > 0 || !me.busted || v.phase === 'ended') { if (!before) { this.bustWaiting = null; this.rb.update(v); } return; }
+    const key = `${v.gameId}:${me.rebuysUsed}`;
+    if (this.bustKey === key) { if (!before) this.rb.update(v); return; }
+    if (before) {
+      // noted before the events play: the win and bust-out scenes go first, and their end offers the sheet
+      if (this.bustWaiting !== key) this.bustAt = { handNo: v.handNo, place: v.players.filter((p) => p.stack > 0).length + 1, of: v.players.length };
+      if (events.some((e) => e.t === 'win')) {
+        this.bustWaiting = key;
+        if (this.bustTimer) clearTimeout(this.bustTimer);
+        this.bustTimer = setTimeout(() => this.offerBust(), 20_000); // in case a scene never ends
+      }
+      return;
+    }
+    if (this.bustWaiting === key) return;
+    this.offerBust();
+  }
+  private offerBust(): void {
+    if (this.bustTimer) { clearTimeout(this.bustTimer); this.bustTimer = null; }
+    const v = this.view;
+    const me = v?.players.find((p) => p.id === v.me);
+    this.bustWaiting = null;
+    if (!v || !me || me.stack > 0 || v.phase === 'ended') return;
+    this.bustKey = `${v.gameId}:${me.rebuysUsed}`;
+    this.rb.offer(v, this.bustAt ?? { handNo: v.handNo, place: v.players.filter((p) => p.stack > 0).length + 1, of: v.players.length });
+  }
+  /** The bust-out entry point: the scenes are over (or were skipped). */
+  private afterBustScene(): void { if (this.bustWaiting) this.offerBust(); }
 
   private draw(): void {
     const v = this.view;
@@ -199,6 +247,7 @@ export class TableScreen {
       case 'raise': if (L?.canRaise) this.openRaise(); return;
       case 'show': return this.t.show();
       case 'rebuy': return this.t.rebuy();
+      case 'bust': return this.offerBust();
       case 'sitin': return this.t.sitOut(false);
       case 'deal': return this.t.dealNow();
       case 'twice': return this.t.vote(true);
@@ -268,12 +317,19 @@ export class TableScreen {
         this.playing = await playTier({ ...base(), index: tier - 1, values });
         await this.playing.done;
       }
-      if (!showBust || gen !== this.fxGen || !out) return;
-      const at = (out.id === v.me ? this.stage.querySelector('.hero .hc') : this.stage.querySelector(`.seat[data-pid="${CSS.escape(out.id)}"]`))?.getBoundingClientRect();
-      const values = bustValues({ name: out.name, place: v.players.filter((p) => p.stack > 0).length + 1, of: v.players.length, rebuys: !!v.cfg.rebuys, stack: v.cfg.startStack, seatNo: out.seat + 1 });
-      this.playing = await playTier({ ...base(), index: 4, values, anchor: at ? { x: at.left + at.width / 2, y: at.top + at.height / 2 } : null,
-        buttons: out.id === v.me ? { rebuy: v.cfg.rebuys ? () => this.t.rebuy() : null } : null });
-    })().catch(() => { /* a scene that cannot load leaves the table as it is */ });
+      if (!showBust || gen !== this.fxGen || !out) { this.afterBustScene(); return; }
+      await this.bustScene(out, v, base());
+    })().catch(() => { this.afterBustScene(); /* a scene that cannot load leaves the table as it is */ });
+  }
+
+  /** The bust-out scene (tiers.ts); for me, the bust-out sheet follows it (its choices live there, not in the scene). */
+  private async bustScene(out: ScreenView['players'][number], v: ScreenView, base: { over: HTMLElement; table: HTMLElement | null; theme: ThemeKey; still: boolean; calm: boolean }): Promise<void> {
+    const at = (out.id === v.me ? this.stage.querySelector('.hero .hc') : this.stage.querySelector(`.seat[data-pid="${CSS.escape(out.id)}"]`))?.getBoundingClientRect();
+    const r = v.rebuy;
+    const values = bustValues({ name: out.name, place: v.players.filter((p) => p.stack > 0).length + 1, of: v.players.length, rebuys: !!r?.on && !r.closed && (r.left ?? 1) > 0, stack: r?.amount ?? v.cfg.startStack, seatNo: out.seat + 1 });
+    this.playing = await playTier({ ...base, index: 4, values, anchor: at ? { x: at.left + at.width / 2, y: at.top + at.height / 2 } : null, buttons: null });
+    await this.playing.done;
+    this.afterBustScene();
   }
 
   // ---------------- presence ----------------
@@ -354,6 +410,8 @@ export class TableScreen {
 
   destroy(): void {
     this.fxGen++; this.playing?.stop();
+    this.rb.destroy();
+    if (this.bustTimer) clearTimeout(this.bustTimer);
     if (this.presenceTimer) clearInterval(this.presenceTimer);
     clearInterval(this.tick);
     this.motion.reset();

@@ -127,7 +127,7 @@ describe('rebuys at the table', () => {
     // b goes all-in and a calls until someone is out of chips, then they rebuy
     let rebought = 0;
     for (let k = 0; k < 60 && rebought < 2; k++) {
-      if (e.s.phase !== 'hand') { t.send(conns.a!, { t: 'host', cmd: 'deal' }); if (e.s.phase !== 'hand') break; }
+      if (e.s.phase !== 'hand') { t.send(conns.a!, { t: 'host', cmd: 'deal' }); if ((e.s.phase as string) !== 'hand') break; }
       while (e.s.phase === 'hand') {
         const pid = e.s.hand!.toAct!;
         const L = e.legal(pid)!;

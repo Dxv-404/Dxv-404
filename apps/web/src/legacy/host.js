@@ -219,6 +219,7 @@ export class Host {
     v.turnTotal = this.turnLimitFor(this.e.s.hand && this.e.s.hand.toAct);
     v.turnLeft = v.turnTotal ? Math.max(0, v.turnTotal - (Date.now() - this.turnStartedAt)) : 0;
     v.nextIn = this.nextHandAt ? Math.max(0, this.nextHandAt - Date.now()) : 0;
+    v.nextDealAt = this.e.s.phase === 'between' && v.nextIn ? this.nextHandAt : null;
     if (this.e.s.phase === 'ended') v.standings = this.e.standings();
     return v;
   }

@@ -9,6 +9,7 @@ import {
   offlineTable, heldCheckpoint, type Me,
 } from './offline';
 import type { NetTable, ScreenView } from './net-table';
+import { rebuyBlock, withRebuyDefaults, setupHead, setupFoot, blindsSeg, rulesContent, rebuysUsedText } from './rebuys-setup';
 
 type Screen = (build: (el: HTMLElement) => void | (() => void)) => void;
 type Sheet = (content: HTMLElement, o?: { label?: string; onClose?: () => void; tall?: boolean }) => { close(): void };
@@ -49,11 +50,12 @@ function backToLast(last: NonNullable<ReturnType<typeof lastOffline>>): void {
 
 export function hostSetup(ui: Ui): void {
   const saved = (lastOffline()?.settings ?? { startStack: 1000, sb: 5, bb: 10, turnTime: 20, rebuys: true }) as TableSettings;
-  const cfg: TableSettings = { ...saved };
+  const cfg: TableSettings = withRebuyDefaults({ ...saved });
   ui.screen((el) => {
-    el.className = 'screen setup';
+    el.className = 'screen setup setup3';
+    const rb = rebuyBlock(cfg);
     const num = (key: 'startStack' | 'sb' | 'bb', label: string) => h('label', { class: 'field' }, h('span', {}, label),
-      h('input', { type: 'number', inputmode: 'numeric', min: 1, value: cfg[key], 'data-testid': `cfg-${key}`, oninput: (e: Event) => { cfg[key] = Math.max(1, Math.floor(Number((e.target as HTMLInputElement).value) || 0)); } }));
+      h('input', { type: 'number', inputmode: 'numeric', min: 1, value: cfg[key], 'data-testid': `cfg-${key}`, oninput: (e: Event) => { cfg[key] = Math.max(1, Math.floor(Number((e.target as HTMLInputElement).value) || 0)); rb.refresh(); } }));
     const seg = (key: 'turnTime', label: string, opts: [number, string][]) => {
       const wrap = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': label });
       const draw = () => wrap.replaceChildren(...opts.map(([v, t]) => h('button', { role: 'radio', 'aria-checked': cfg[key] === v ? 'true' : 'false', class: cfg[key] === v ? 'on' : '', onclick: () => { cfg[key] = v; draw(); } }, t)));
@@ -68,20 +70,21 @@ export function hostSetup(ui: Ui): void {
       if ((cfg.bb ?? 10) < (cfg.sb ?? 5)) return toast('The big blind must be at least the small blind.');
       if ((cfg.startStack ?? 1000) < (cfg.bb ?? 10) * 2) return toast('Starting chips should be at least two big blinds.');
       cfg.maxPlayers = 10;
+      rb.finish();
       rememberLastOffline({ role: 'host', settings: cfg });
       leaveFor(handOverUrl({ role: 'host', ...myIdentity(), settings: cfg }));
     } }, 'Open the table');
-    el.append(head('Host offline', () => offlineStart(ui)),
+    el.append(setupHead('Host offline', 'Offline', 'Offline · on this phone’s hotspot', () => offlineStart(ui)),
       h('ol', { class: 'steps' },
         h('li', {}, 'Turn on this phone’s hotspot.'),
         h('li', {}, 'Open the Train Poker Host app once, so the table is running.'),
         h('li', {}, 'Come back here and tap Open the table.')),
-      h('section', { class: 'block' }, h('h2', {}, 'Chips and blinds'), num('startStack', 'Starting chips'), h('div', { class: 'two' }, num('sb', 'Small blind'), num('bb', 'Big blind'))),
-      h('section', { class: 'block' }, h('h2', {}, 'Rules'), seg('turnTime', 'Time to act', [[0, 'No limit'], [20, '20 s'], [30, '30 s'], [45, '45 s']]),
-        h('label', { class: 'switch-row' }, h('span', {}, 'Allow rebuys', h('small', {}, 'Busted players can buy back in')),
-          h('input', { type: 'checkbox', role: 'switch', checked: cfg.rebuys ? true : null, onchange: (e: Event) => { cfg.rebuys = (e.target as HTMLInputElement).checked; } })),
+      h('section', { class: 'block s3-c1' }, h('h2', {}, 'Chips and blinds'), num('startStack', 'Starting chips'), h('div', { class: 'two' }, num('sb', 'Small blind'), num('bb', 'Big blind')),
+        blindsSeg(cfg, () => rb.refresh())),
+      rb.el,
+      h('section', { class: 'block s3-c3' }, h('h2', {}, 'Table'), seg('turnTime', 'Time to act', [[0, 'No limit'], [20, '20 s'], [30, '30 s'], [45, '45 s']]),
         crewSel),
-      h('div', { class: 'sticky-go' }, go));
+      setupFoot('Up to 10 players on this phone’s hotspot', go));
   });
 }
 
@@ -166,6 +169,8 @@ export function playNet(ui: Ui, net: NetTable, o: { offline: boolean; me?: Me; c
     const table = new TableScreen(el, net, {
       code: o.code ?? (o.offline ? 'OFFLINE' : ''),
       menu: () => tableMenu(ui, net, o),
+      // the bust-out sheet's Leave table: sit out (seat and chips kept), then go
+      leave: () => { if (net.view?.players.some((p) => p.id === net.view?.me && !p.sittingOut)) net.sitOut(true); setTimeout(() => (o.onLeave ? o.onLeave() : ui.home()), 150); },
       info: () => ui.openSheet(infoContent(), { label: 'Poker hands', tall: true }),
       offline: o.offline,
     });
@@ -235,7 +240,7 @@ function tableMenu(ui: Ui, net: NetTable, o: { offline: boolean; code?: string; 
       h('button', { class: 'btn ghost', onclick: () => { net.host(v.paused ? 'resume' : 'pause'); close(); } }, v.paused ? 'Resume dealing' : 'Pause after this hand'),
       v.canUndo && h('button', { class: 'btn ghost', onclick: () => { net.host('undo'); close(); } }, 'Undo last action'))),
     h('section', { class: 'block' }, h('h3', {}, 'Players'), ...v.players.filter((p) => p.id !== v.me).map((p) => h('div', { class: 'p-row' },
-      h('div', { class: 'who' }, h('strong', {}, p.name), h('small', {}, `${fmt(p.stack)} chips${p.connected ? '' : ', away'}${p.sittingOut ? ', sitting out' : ''}`)),
+      h('div', { class: 'who' }, h('strong', {}, p.name), h('small', { 'data-testid': 'p-row-sub' }, `${fmt(p.stack)} chips${rebuysUsedText(p.rebuysUsed)}${p.connected ? '' : ', away'}${p.sittingOut ? ', sitting out' : ''}`)),
       h('div', { class: 'p-btns' }, h('button', { class: 'btn small danger', onclick: async () => { if (await ask(`Remove ${p.name}? Their chips leave with them.`, { yes: 'Remove', danger: true })) { net.host('remove', { pid: p.id }); close(); } } }, 'Remove'))))));
   }
   if (!o.offline && 'code' in o && o.code) {
@@ -251,7 +256,8 @@ function tableMenu(ui: Ui, net: NetTable, o: { offline: boolean; code?: string; 
   body.append(h('section', { class: 'block' }, h('h3', {}, 'Theme'), themeRow));
   body.append(h('section', { class: 'block' }, h('div', { class: 'menu-actions' },
     meP && h('button', { class: 'btn ghost', onclick: () => { net.sitOut(!meP.sittingOut); close(); } }, meP.sittingOut ? 'Sit back in' : 'Sit out from next hand'),
-    meP && v.cfg.rebuys && meP.stack < v.cfg.startStack && v.phase !== 'hand' && h('button', { class: 'btn ghost', onclick: () => { net.rebuy(); close(); } }, `Top up to ${fmt(v.cfg.startStack)}`))),
+    h('button', { class: 'btn ghost', 'data-testid': 'open-rules', onclick: () => { close(); const r = ui.openSheet(rulesContent(net.view ?? v, () => r.close()), { label: 'Table rules' }); } }, 'Table rules'),
+    meP && v.rebuy?.can && h('button', { class: 'btn ghost', onclick: () => { net.rebuy(); close(); } }, `Rebuy ${fmt(v.rebuy.amount)}`))),
   h('section', { class: 'block' }, h('button', { class: 'btn ghost', 'data-testid': 'leave-table', onclick: async () => {
     if (meP && !(await ask('Leave the table? You sit out; your seat and chips are kept if you come back.', { yes: 'Leave' }))) return;
     if (meP && !meP.sittingOut) net.sitOut(true);

@@ -182,10 +182,10 @@ describe('rebuys: undo, saves and replays', () => {
 
   it('tables saved before v3 load and keep their own rule (top-ups to the starting stack)', () => {
     const e = table(2);
-    const old = e.snapshot() as GameState & { cfg: Partial<GameConfig> };
+    const old = e.snapshot() as unknown as Omit<GameState, 'cfg'> & { cfg: Partial<GameConfig> };
     old.cfg.rebuyBelow = 1000; // what makeConfig used to store
     delete old.cfg.rebuyAmount;
-    const back = Engine.fromSnapshot(old as GameState);
+    const back = Engine.fromSnapshot(old as unknown as GameState);
     back.player('p0')!.stack = 400;
     expect(back.apply({ t: 'rebuy', pid: 'p0', now: T0 }).events).toEqual([{ t: 'rebuy', pid: 'p0', amount: 600 }]);
     expect(back.viewFor('p0').rebuy).toMatchObject({ amount: 1000, atZero: false, max: 0 });

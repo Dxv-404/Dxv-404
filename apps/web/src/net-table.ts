@@ -11,6 +11,8 @@ export type ScreenView = View & {
   turnLeft: number; turnTotal: number;
   /** Non-zero while the next hand will be dealt by itself. */
   nextIn: number;
+  /** When the next hand will be dealt, on this phone's clock (Date.now()); null when nobody knows. */
+  nextDealAt?: number | null;
   standings?: { id: string; name: string; stack: number; buyins: number; net: number; won: number; biggest: number }[];
 };
 type Callbacks = Pick<ClientOptions, 'onView' | 'onStatus' | 'onError' | 'onReact' | 'onNotice' | 'onAck'>;
@@ -58,6 +60,9 @@ export class NetTable {
       turnTotal: turnTotal ? Math.max(turnTotal, left) : 0, turnLeft: left,
       nextIn: v.phase === 'between' && !v.paused && v.handNo > 0 ? 1 : 0,
     };
+    // the server's deal time, on this phone's clock
+    const at = (v as View & { nextDealAt?: number | null }).nextDealAt;
+    out.nextDealAt = typeof at === 'number' ? Date.now() + (at - this.client.serverNow()) : null;
     if (v.phase === 'ended') {
       out.standings = v.players.map((p) => ({ id: p.id, name: p.name, stack: p.stack, buyins: p.buyins, net: p.stack - p.buyins, won: 0, biggest: 0 }))
         .sort((a, b) => b.net - a.net);

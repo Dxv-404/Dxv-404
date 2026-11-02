@@ -6,6 +6,7 @@ import type { TableSettings } from '@tp/protocol';
 import { TableClient, newSeatToken, type SocketLike } from '@tp/table';
 import { NetTable } from './net-table';
 import { playNet, type Ui } from './offline-screens';
+import { rebuyBlock, withRebuyDefaults, setupHead, setupFoot, blindsSeg } from './rebuys-setup';
 
 /** No 0/O or 1/I: codes are read out loud and typed on phones. */
 const LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -123,11 +124,12 @@ export function onlineStart(ui: Ui): void {
 }
 
 export function hostOnline(ui: Ui): void {
-  const cfg: TableSettings = { ...(store.get<TableSettings>('tp-online-settings') ?? { startStack: 1000, sb: 5, bb: 10, turnTime: 20, rebuys: true }) };
+  const cfg: TableSettings = withRebuyDefaults({ ...(store.get<TableSettings>('tp-online-settings') ?? { startStack: 1000, sb: 5, bb: 10, turnTime: 20, rebuys: true }) });
   ui.screen((el) => {
-    el.className = 'screen setup';
+    el.className = 'screen setup setup3';
+    const rb = rebuyBlock(cfg);
     const num = (key: 'startStack' | 'sb' | 'bb', label: string) => h('label', { class: 'field' }, h('span', {}, label),
-      h('input', { type: 'number', inputmode: 'numeric', min: 1, value: cfg[key], oninput: (e: Event) => { cfg[key] = Math.max(1, Math.floor(Number((e.target as HTMLInputElement).value) || 0)); } }));
+      h('input', { type: 'number', inputmode: 'numeric', min: 1, value: cfg[key], 'data-testid': `cfg-${key}`, oninput: (e: Event) => { cfg[key] = Math.max(1, Math.floor(Number((e.target as HTMLInputElement).value) || 0)); rb.refresh(); } }));
     const seg = (key: 'turnTime' | 'maxPlayers', label: string, opts: [number, string][]) => {
       const wrap = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': label });
       const draw = () => wrap.replaceChildren(...opts.map(([v, t]) => h('button', { role: 'radio', 'aria-checked': cfg[key] === v ? 'true' : 'false', class: cfg[key] === v ? 'on' : '', onclick: () => { cfg[key] = v; draw(); } }, t)));
@@ -141,19 +143,21 @@ export function hostOnline(ui: Ui): void {
     const go = h('button', { class: 'btn primary', 'data-testid': 'online-open', onclick: async () => {
       if ((cfg.bb ?? 10) < (cfg.sb ?? 5)) return toast('The big blind must be at least the small blind.');
       if ((cfg.startStack ?? 1000) < (cfg.bb ?? 10) * 2) return toast('Starting chips should be at least two big blinds.');
+      rb.finish();
       store.set('tp-online-settings', cfg);
       (go as HTMLButtonElement).disabled = true;
       const code = newCode(await pickServer());
       void playOnline(ui, code, cfg);
     } }, 'Open the table');
-    el.append(h('header', { class: 'page-head' }, h('button', { class: 'icon-btn', 'aria-label': 'Back', onclick: () => onlineStart(ui) }, '‹'), h('h1', {}, 'Open a table')),
-      h('section', { class: 'block' }, h('h2', {}, 'Chips and blinds'), num('startStack', 'Starting chips'), h('div', { class: 'two' }, num('sb', 'Small blind'), num('bb', 'Big blind'))),
-      h('section', { class: 'block' }, h('h2', {}, 'Rules'), seg('turnTime', 'Time to act', [[20, '20 s'], [30, '30 s'], [45, '45 s'], [0, 'No limit']]),
-        seg('maxPlayers', 'Seats', [[6, '6'], [9, '9'], [12, '12'], [15, '15']]),
-        h('label', { class: 'switch-row' }, h('span', {}, 'Allow rebuys'), h('input', { type: 'checkbox', role: 'switch', checked: cfg.rebuys ? true : null, onchange: (e: Event) => { cfg.rebuys = (e.target as HTMLInputElement).checked; } })),
+    el.append(setupHead('Open a table', 'Online', 'Online · anyone with the code', () => onlineStart(ui)),
+      h('section', { class: 'block s3-c1' }, h('h2', {}, 'Chips and blinds'), num('startStack', 'Starting chips'), h('div', { class: 'two' }, num('sb', 'Small blind'), num('bb', 'Big blind')),
+        blindsSeg(cfg, () => rb.refresh())),
+      rb.el,
+      h('section', { class: 'block s3-c3' }, h('h2', {}, 'Table'), seg('maxPlayers', 'Seats', [[6, '6'], [9, '9'], [12, '12'], [15, '15']]),
+        seg('turnTime', 'Time to act', [[20, '20 s'], [30, '30 s'], [45, '45 s'], [0, 'No limit']]),
         h('label', { class: 'switch-row' }, h('span', {}, 'Casual game', h('small', {}, 'In history, not in the crew league')), h('input', { type: 'checkbox', role: 'switch', checked: cfg.casual ? true : null, onchange: (e: Event) => { cfg.casual = (e.target as HTMLInputElement).checked; } })),
         crewSel),
-      h('div', { class: 'sticky-go' }, go));
+      setupFoot('Friends join with the table’s code or its link', go));
   });
 }
 
