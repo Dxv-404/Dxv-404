@@ -16262,7 +16262,9 @@ var ClientMessage = external_exports.discriminatedUnion("t", [
     bb: external_exports.number().int().positive().optional(),
     ante: external_exports.number().int().nonnegative().optional()
   }),
-  external_exports.object({ t: external_exports.literal("ping"), c: external_exports.number() })
+  external_exports.object({ t: external_exports.literal("ping"), c: external_exports.number() }),
+  /** The app went to the background (or came back): a turn push is sent only while it is not on screen. */
+  external_exports.object({ t: external_exports.literal("bg"), hidden: external_exports.boolean() })
 ]);
 var view = external_exports.record(external_exports.string(), external_exports.unknown());
 var events = external_exports.array(external_exports.record(external_exports.string(), external_exports.unknown()));
@@ -18037,13 +18039,14 @@ var ACKS_KEPT = 64;
 var ACKS_SAVED = 16;
 var REACT_GAP_MS = 800;
 var OFFLINE_MAX_PLAYERS = 10;
+var MAX_WATCHERS = 20;
 var OFFLINE_FULL = "This offline table is full. For more than 10 players, play online.";
 var TableRoom = class {
   constructor(code, clock, store, saved, opt = {}) {
     this.clock = clock;
     this.store = store;
     this.code = code;
-    this.opt = { handPauseMs: 4e3, rateLimit: 40, rateWindowMs: 2e3, keepUpdates: 200, offlineAfterMs: 3e3, seed: randomSeed, identify: async () => null, server: "test", autoEndAfterMs: 20 * 6e4, hostHandoverMs: 6e4, maxConnections: 60, silentCloseMs: 3e4, helloWithinMs: 15e3, offline: false, sharedShuffle: !!opt.offline, shuffleWaitMs: 1500, ...opt };
+    this.opt = { handPauseMs: 4e3, rateLimit: 40, rateWindowMs: 2e3, keepUpdates: 200, offlineAfterMs: 3e3, seed: randomSeed, identify: async () => null, server: "test", turnPushMs: 3e3, autoEndAfterMs: 20 * 6e4, hostHandoverMs: 6e4, maxConnections: 60, silentCloseMs: 3e4, helloWithinMs: 15e3, offline: false, sharedShuffle: !!opt.offline, shuffleWaitMs: 1500, ...opt };
     if (this.opt.offline) this.opt.maxConnections = Math.min(this.opt.maxConnections, OFFLINE_MAX_PLAYERS + 4);
     this.createdAt = clock.now();
     if (saved) this.restore(saved);
@@ -18065,6 +18068,8 @@ var TableRoom = class {
   /** This game in the league (made with the table). */
   game = null;
   minStacks = {};
+  /** The turn whose player is pushed if they have not looked by `at`. */
+  turnPush = null;
   /** Since when no player has been connected (for ending abandoned games). */
   emptySince = null;
   /** When hosting passes on if the host is still gone (see hostHandoverMs). */
@@ -18125,6 +18130,10 @@ var TableRoom = class {
     if (m.t === "hello") return this.hello(conn, st, m);
     if (!st.hello) return this.send(conn, { t: "error", code: "need_hello", message: "Say hello first" });
     if (m.t === "react") return this.react(conn, st, m.reaction);
+    if (m.t === "bg") {
+      st.hidden = m.hidden;
+      return;
+    }
     if (m.t === "seed") return this.onSeed(st, m.handNo, m.seed);
     if (!st.pid || !this.engine) return this.ack(conn, null, m.actionId, "Spectators cannot play");
     const pid = st.pid;
@@ -18213,6 +18222,7 @@ var TableRoom = class {
     if (who && m.player !== who.account) return fail("not_allowed", "That seat belongs to another account");
     const watch = () => {
       if (!this.engine) return fail("no_table", "This table has not started");
+      if ([...this.conns.values()].filter((o) => o.hello && o.spectator).length >= MAX_WATCHERS) return fail("table_full", `${MAX_WATCHERS} people are already watching this table`);
       st.hello = true;
       st.spectator = true;
       st.pid = null;
@@ -18436,8 +18446,36 @@ var TableRoom = class {
   }
   reschedule() {
     this.checkHost(this.clock.now());
-    const times = [this.handDeadline(), this.nextDealAt, this.autoEndAt(), this.hostHandoverAt, this.nextSilentCheck(), this.pendingDeal?.until ?? null, ...this.goingOffline.values()].filter((x) => x !== null);
+    this.watchTurn(this.clock.now());
+    const times = [this.turnPush && !this.turnPush.sent ? this.turnPush.at : null, this.handDeadline(), this.nextDealAt, this.autoEndAt(), this.hostHandoverAt, this.nextSilentCheck(), this.pendingDeal?.until ?? null, ...this.goingOffline.values()].filter((x) => x !== null);
     this.clock.schedule(times.length ? Math.min(...times) : null);
+  }
+  /**
+   * Push notifications: a signed-in player whose turn has waited turnPushMs while their app is not on screen
+   * (closed, locked or in the background) is pushed once for that turn; a crew table that has started tells
+   * the crew's other members once.
+   */
+  watchTurn(now) {
+    const e = this.engine;
+    if (!e || !this.opt.push || this.opt.offline) return;
+    if (this.crew && this.game && !this.game.announced && e.s.handNo >= 1) {
+      this.game.announced = true;
+      const hostName = e.player(this.host ?? "")?.name ?? "Someone";
+      this.opt.push({ kind: "crewTable", crew: this.crew, except: [...this.accountSeats], title: "A crew table just started", body: `${hostName} is playing at table ${this.code}. Tap to join.`, url: `/#/t/${this.code}`, tag: `table-${this.code}` });
+    }
+    const h = e.s.phase === "hand" && !e.s.paused ? e.s.hand : null;
+    const pid = h?.toAct ?? null;
+    if (!pid || !this.accountSeats.has(pid)) {
+      this.turnPush = null;
+      return;
+    }
+    const key = `${e.s.handNo}:${pid}:${h.turnStartedAt ?? 0}`;
+    if (this.turnPush?.key !== key) this.turnPush = { pid, key, at: now + this.opt.turnPushMs, sent: false };
+    const tp = this.turnPush;
+    if (tp.sent || now < tp.at) return;
+    tp.sent = true;
+    const looking = this.connsOf(pid).some((c) => !this.conns.get(c).hidden);
+    if (!looking) this.opt.push({ kind: "turn", accounts: [pid], title: "Your turn", body: `Table ${this.code} is waiting for you.`, url: `/#/t/${this.code}`, tag: `turn-${this.code}` });
   }
   /**
    * A host whose phone died would leave the table with nobody able to deal, pause or end the game. After
@@ -18969,6 +19007,14 @@ void recorderKey().then(async (key) => {
     void recorder?.flush();
   }, 3e4).unref();
 });
+var PUSH_RELAY = process.env.PUSH_RELAY ?? "https://train-poker-tables.apins-subdomain.workers.dev/push/send";
+function handPush(p) {
+  if (!signBody || !PUSH_RELAY) return;
+  const body = JSON.stringify(p);
+  void signBody(body).then((sig) => fetch(PUSH_RELAY, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ body, sig }), signal: AbortSignal.timeout(1e4) })).then((r) => {
+    if (!r.ok) console.log(`push relay: ${r.status}`);
+  }, (e) => console.log(`push relay failed: ${String(e)}`));
+}
 async function backupNow() {
   if (!signBody) return null;
   const body = JSON.stringify({ backup: (/* @__PURE__ */ new Date()).toISOString() });
@@ -19042,7 +19088,7 @@ function getRoom(code) {
       if (recorder) void recorder.add(fn, id2, payload);
       else void outboxStore.put({ id: id2, fn, body: JSON.stringify(payload), tries: 0, nextAt: 0 });
     }
-  }, saved, { identify, server: "oracle", ...process.env.HAND_PAUSE_MS ? { handPauseMs: Number(process.env.HAND_PAUSE_MS) } : {} });
+  }, saved, { identify, server: "oracle", push: handPush, ...process.env.HAND_PAUSE_MS ? { handPauseMs: Number(process.env.HAND_PAUSE_MS) } : {} });
   l.room.settleAfterRestart();
   live.set(code, l);
   return l;
