@@ -12,7 +12,7 @@ import { onlineStart, routeOnline, playOnline, hostOnline } from '../online-scre
 import { initShell, loadingScreen, menuScreen, pickerScreen, leaveMenu } from '../ui/shell.ts';
 import { setTheme, currentTheme, TableScreen } from '../table/screen.ts';
 import { settingsScreen, installErrorReporting, noteScreen } from '../more-screens.ts';
-import { rebuyBlock, withRebuyDefaults, setupHead, setupFoot, BLIND_CHOICES, rulesContent, rebuysUsedText } from '../rebuys-setup.ts';
+import { rebuyBlock, withRebuyDefaults, setupHead, setupFoot, blindsSeg, rulesContent, rebuysUsedText } from '../rebuys-setup.ts';
 
 // every screen sits inside the player's theme (its background, tokens and art); screens go in #view
 const appRoot = $('#app');
@@ -167,7 +167,7 @@ function setup(prefill) {
     el.append(
       setupHead('New table', 'Pair by QR', 'Pair phones by QR · no internet', home),
       h('section', { class: 'block s3-c1' }, h('h2', {}, 'Chips and blinds'), stackField, stackChips, h('div', { class: 'two' }, sbField, bbField),
-        seg('blindUpEvery', 'Blinds go up', BLIND_CHOICES)),
+        blindsSeg(cfg, () => rb.refresh())),
       rb.el,
       h('section', { class: 'block s3-c3' }, h('h2', {}, 'Table'), h('h3', {}, 'Who’s playing'), h('p', { class: 'hint' }, 'Seats go clockwise in this order. Up to nine players.'), list, addBtn,
         seg('turnTime', 'Time to act', [[0, 'No limit'], [20, '20 s'], [30, '30 s'], [45, '45 s']])),

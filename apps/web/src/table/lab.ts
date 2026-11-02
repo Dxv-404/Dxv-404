@@ -10,7 +10,7 @@ export function labTable(root: HTMLElement, names: string[], o: { me?: number; s
   const me = e.s.players[o.me ?? 0]!.id;
   const subs = new Set<(events: GameEvent[], v: ScreenView) => void>();
   let nextDealAt: number | null = null;
-  const shape = (): ScreenView => ({ ...e.viewFor(me), isHost: true, hostId: me, turnLeft: 0, turnTotal: 0, nextIn: 0, nextDealAt: e.s.phase === 'between' ? nextDealAt : null });
+  const shape = (): ScreenView => ({ ...e.viewFor(me), isHost: true, hostId: me, turnLeft: 0, turnTotal: 0, nextIn: 0, nextDealAt: e.s.phase !== 'hand' ? nextDealAt : null });
   const emit = (ev: GameEvent[]): void => { t.view = shape(); for (const fn of subs) fn(ev, t.view); };
   /** Everyone checks or calls until the hand ends. */
   const checkDown = (x: Engine): GameEvent[] => {

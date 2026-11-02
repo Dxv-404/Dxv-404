@@ -156,6 +156,11 @@ export async function playOneAction(phones: Phone[], rnd: () => number): Promise
   // first time at a table: read the three tips, as a player would
   for (const ph of phones) for (let i = 0; i < 3 && (await seen(ph.page.locator('.tp-intro [data-i]'))); i++) await ph.page.locator('.tp-intro [data-i]').click({ timeout: 3000 }).catch(() => {});
   for (const ph of phones) {
+    // out of chips: the bust-out sheet's Rebuy (or, once it is closed, the action bar's)
+    const sheet = ph.page.locator('[data-testid=bust-rebuy]');
+    if (await seen(sheet)) { await sheet.first().click({ timeout: 3000 }).catch(() => {}); continue; }
+    const keep = ph.page.locator('[data-testid=bust-sheet] [data-rb=watch]');
+    if (await seen(keep)) await keep.first().click({ timeout: 3000 }).catch(() => {});
     const rebuy = ph.page.locator('.tp.live [data-act=rebuy]');
     if (await seen(rebuy)) await rebuy.first().click({ timeout: 3000 }).catch(() => {});
   }

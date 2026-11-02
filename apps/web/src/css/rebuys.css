@@ -3,7 +3,7 @@
    Only theme tokens; motion follows the theme's feel (--rb-k speed, --rb-ease) and the motion setting. */
 
 /* ---------- the Rebuys block (outlined, as the design's .rbp) ---------- */
-.tp.app .block.rbp{box-shadow:var(--panelsh,inset 0 0 0 1px var(--line)),inset 0 0 0 1.5px var(--acc)}
+.tp.app .block.rbp{box-shadow:inset 0 0 0 1.5px var(--acc),var(--panelsh,inset 0 0 0 1px var(--line))}
 .tp.app .block.rbp.off{box-shadow:var(--panelsh,inset 0 0 0 1px var(--line))}
 .tp.app .rb-head .rb-t{font:var(--dspw,700) 17px var(--dsp);color:var(--tx)}
 .tp.app .rb-body{display:grid;gap:12px}
@@ -21,6 +21,9 @@
 .tp.app .rb-sum b{font-weight:800}
 .tp.app .rb-sum .ico{display:inline-grid;width:18px;height:18px;flex:none;color:var(--acc);margin-top:1px}.tp.app .rb-sum .ico svg{width:100%;height:100%}
 .tp.app .rbp .seg button{white-space:nowrap}
+/* every choice on Open a table is a 44 px target */
+.tp.app .setup3 .seg button{min-height:44px}
+.tp.app .setup3 .s3-head .icon-btn{width:44px;height:44px}
 
 /* ---------- Open a table: phone header and footer ---------- */
 .tp.app .s3-head .s3-title{flex:1;min-width:0;display:grid;gap:1px}

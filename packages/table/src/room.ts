@@ -700,7 +700,9 @@ export class TableRoom {
     const v = this.engine!.viewFor(pid);
     if (v.hand) v.hand = { ...v.hand, proof: null }; // see apply(): the seed never goes to phones
     // when the next hand will be dealt (server clock): a busted player's rebuy sheet drains a bar to it
-    return { ...v, nextDealAt: this.running && v.phase === 'between' ? this.nextDealAt : null } as unknown as Record<string, unknown>;
+    const e = this.engine!;
+    const dealing = this.running && v.phase === 'between' && !e.s.paused && e.canStartHand();
+    return { ...v, nextDealAt: dealing ? this.nextDealAt : null } as unknown as Record<string, unknown>;
   }
 
   private welcome(conn: Conn, pid: PlayerId | null, lastSeq: number): void {
