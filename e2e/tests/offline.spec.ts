@@ -31,7 +31,6 @@ test('the app hands over to the host phone; three phones play; a closed page com
   // the installed app: Play offline > Join a table > the code leads to the host phone's address
   const app = await newPhone(browser, 'App', MODELS.pixel7, baseURL!);
   await app.page.getByTestId('play-offline').click();
-  await app.page.getByTestId('offline-join').click();
   await app.page.getByTestId('offline-code').fill('48 213');
   await app.page.evaluate(() => { (window as any).__tpNavigate = (u: string) => { (window as any).__went = u; }; });
   await app.page.getByTestId('offline-go').click();

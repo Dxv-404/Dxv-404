@@ -71,8 +71,8 @@ for (const theme of THEMES) {
     }
     // the host ends the night
     await host.page.locator('[data-act=menu]').click();
-    host.page.once('dialog', (d) => d.accept());
     await host.page.getByTestId('end-game').click();
+    await host.page.getByTestId('ask-yes').click(); // the theme's own question box
     for (const p of [host, guest]) await expect(p.page.getByTestId('standings').locator('li')).toHaveCount(2);
     for (const p of [host, guest]) expect(p.errors.filter((e) => !/Failed to load resource|ERR_|net::|WebSocket/.test(e))).toEqual([]);
   });
