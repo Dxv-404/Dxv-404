@@ -74,9 +74,19 @@ async function layoutOk(page: Page, what: string): Promise<void> {
       // (layout sizes, not on-screen ones: a dialog still popping in is drawn slightly smaller)
       .filter((b) => { const e = b as HTMLElement; return e.offsetWidth > 0 && e.offsetHeight > 0 && e.offsetHeight < 44 && getComputedStyle(b).visibility !== 'hidden'; })
       .map((b) => `${(b.textContent ?? '').trim().slice(0, 20)} ${(b as HTMLElement).offsetHeight}px`);
-    return { over, small };
+    // text cut off: an element of these screens whose text is wider or taller than its box while it hides the rest
+    const cut = Array.from(document.querySelectorAll('.dv *, .dv-dlg *, .dv-merge *, .dv-notice *, .ask *'))
+      .filter((e) => {
+        const el = e as HTMLElement; const st = getComputedStyle(el);
+        if (!el.offsetWidth || !(el.textContent ?? '').trim() || el.matches('input, svg, svg *')) return false;
+        const hides = st.overflowX !== 'visible' || st.textOverflow === 'ellipsis';
+        return hides && (el.scrollWidth > el.clientWidth + 1 || (st.overflowY !== 'visible' && el.scrollHeight > el.clientHeight + 2 && st.overflowY !== 'auto'));
+      })
+      .map((e) => (e.textContent ?? '').trim().slice(0, 30));
+    return { over, small, cut };
   });
   expect(r.over, `${what}: wider than the screen`).toBeLessThanOrEqual(1);
+  expect(r.cut, `${what}: text cut off`).toEqual([]);
   expect(r.small, `${what}: small touch targets`).toEqual([]);
 }
 
@@ -97,6 +107,8 @@ test('phone adds a laptop: the code on the phone, typed on the laptop; signed in
   await laptop.page.keyboard.type(code.slice(3));
   await expect(laptop.page.getByTestId('welcome')).toHaveText('Welcome back, Dev');
   await expect(laptop.page.locator('#toast')).toContainText('Your phone got a notice too.');
+  await expect(laptop.page.locator('#toast')).toHaveClass(/top/); // at the top, as designed
+  expect((await laptop.page.locator('#toast').boundingBox())!.y).toBeLessThan(120);
   await expect(laptop.page.getByTestId('moved')).toContainText('0crews');
   // the phone sees the laptop join, and lists it
   await expect(phone.page.locator('#toast')).toContainText('Your laptop is signed in', { timeout: 15_000 });
@@ -176,7 +188,7 @@ test('a scanned link opens the app on the code; pasting fills every box; Tab mov
   expect(errorsOf([a, b, lap])).toEqual([]);
 });
 
-test('expired, used and cancelled codes; 5 wrong tries cancel the code and pause the device', async ({ browser, baseURL }) => {
+test('expired, cancelled and used codes; 5 wrong tries pause that device but never cancel the code', async ({ browser, baseURL }) => {
   const a = await device(browser, baseURL!, 'A', MODELS.pixel7);
   const b = await device(browser, baseURL!, 'B', MODELS.pixel7);
   const c = await device(browser, baseURL!, 'C', MODELS.pixel7);
@@ -201,19 +213,24 @@ test('expired, used and cancelled codes; 5 wrong tries cancel the code and pause
   await expect(b.page.getByTestId('code-msg')).toHaveText('That code doesn’t match. Wait a few minutes before you try again.');
   await pad(b.page, fresh);
   await expect(b.page.getByTestId('code-msg')).toHaveText('Too many wrong codes. Wait a few minutes, then try again.');
+  // B's wrong tries did not touch the code: another device signs in with it
   await openUse(c.page);
   await pad(c.page, fresh);
-  await expect(c.page.getByTestId('code-msg')).toContainText('This code was cancelled');
-  // a code works once
-  await a.page.getByTestId('new-code').click();
-  await expect(a.page.getByTestId('device-code')).not.toHaveAttribute('aria-label', `Code ${[...fresh].join(' ')}`);
-  const once = (await a.page.getByTestId('device-code').getAttribute('aria-label'))!.replace(/\D/g, '');
-  await pad(c.page, once);
   await expect(c.page.getByTestId('welcome')).toHaveText('Welcome back, Meera');
+  // a code works once
   const d = await device(browser, baseURL!, 'D', MODELS.pixel7);
   await openUse(d.page);
-  await pad(d.page, once);
+  await pad(d.page, fresh);
   await expect(d.page.getByTestId('code-msg')).toHaveText('This code was already used. Make a new one on your other device.');
+  // Cancel stops a code at once
+  await expect(a.page.getByTestId('device-this')).toBeVisible({ timeout: 20_000 });
+  const gone = await showCode(a.page);
+  await a.page.getByTestId('cancel-code').click();
+  await expect(a.page.getByTestId('device-this')).toBeVisible();
+  await d.page.locator('.dv-pad [data-k="1"]').click(); // (starts over after the message)
+  await d.page.locator('.dv-pad [data-k=del]').click();
+  await pad(d.page, gone);
+  await expect(d.page.getByTestId('code-msg')).toContainText('This code was cancelled');
   expect(errorsOf([a, b, c, d])).toEqual([]);
 });
 
@@ -392,6 +409,36 @@ test('motion follows the theme and the settings: full, calm, off, and Reduce mot
     expect(await p.page.locator('.dv-ring').evaluate((e) => getComputedStyle(e).getPropertyValue('--p'))).not.toBe(before);
   }
 });
+
+// ---------------------------------------------------------------- every theme on the smallest phones: nothing cut off
+for (const theme of THEMES) {
+  test(`nothing is cut off in the ${theme} theme at 320×568 and 360×740`, async ({ browser, baseURL }) => {
+    test.setTimeout(480_000);
+    for (const model of [{ ...MODELS.iphoneSE, label: 'iPhone SE (1st) 320x568', width: 320, height: 568 }, MODELS.smallAndroid]) {
+      const at = `${model.width}×${model.height}`;
+      const owner = await device(browser, baseURL!, `Owner ${at}`, model, theme);
+      await makeProfile(owner.page, 'Dev Krishnamurthy');
+      await layoutOk(owner.page, `${at} profile`);
+      const code = await showCode(owner.page);
+      await layoutOk(owner.page, `${at} add a device`);
+      await owner.page.getByTestId('show-qr').click();
+      await expect(owner.page.getByTestId('device-qr')).toBeVisible();
+      await layoutOk(owner.page, `${at} QR`);
+      const other = await device(browser, baseURL!, `Other ${at}`, model, theme);
+      await openUse(other.page);
+      await layoutOk(other.page, `${at} use your account`);
+      await pad(other.page, wrongOf(code));
+      await expect(other.page.getByTestId('code-msg')).toContainText('doesn’t match');
+      await layoutOk(other.page, `${at} wrong code`);
+      await pad(other.page, code);
+      await expect(other.page.getByTestId('welcome')).toBeVisible();
+      await layoutOk(other.page, `${at} signed in`);
+      await expect(owner.page.getByTestId('device-other')).toBeVisible({ timeout: 20_000 });
+      await layoutOk(owner.page, `${at} profile with two devices`);
+      await owner.ctx.close(); await other.ctx.close();
+    }
+  });
+}
 
 // ---------------------------------------------------------------- every theme, three sizes
 const SIZES = [['phone', { ...MODELS.iphone15, width: 390, height: 844 }], ['small', MODELS.smallAndroid], ['laptop', MODELS.laptop]] as const;

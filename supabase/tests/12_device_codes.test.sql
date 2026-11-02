@@ -2,7 +2,7 @@
 -- limits), bringing a device's own crews along or not, device names, and notices on the other devices.
 begin;
 set search_path = public, extensions;
-select plan(55);
+select plan(61);
 
 \set LAP '''00000000-0000-0000-0000-00000000d001'''
 \set PHONE '''00000000-0000-0000-0000-00000000d002'''
@@ -63,11 +63,13 @@ select lpad(((:'live'::int + 1) % 1000000)::text, 6, '0') as w1 \gset
 select is(testing.as_phone(:THIEF, format($$select public.redeem_device_code(%L) - 'x' as r$$, :'w1')) -> 0 -> 'r', '{"ok": false, "reason": "wrong", "tries_left": 4}'::jsonb, 'a wrong code: 4 tries left');
 select is(testing.one(:THIEF, format($$select public.redeem_device_code(%L) ->> 'tries_left'$$, :'w1')), '3', 'then 3');
 select is(testing.one(:THIEF, $$select public.redeem_device_code('12') ->> 'tries_left'$$), '3', 'too short is wrong too, but not a try (a slip of the finger)');
-select is((select wrong from private.device_codes where account_id = :'dev' and status = 'open'), 2, 'each wrong try counts against every open code');
+select is((select status from private.device_codes where account_id = :'dev' and status = 'open'), 'open', 'wrong tries do not touch anyone''s code');
 select testing.one(:THIEF, format($$select public.redeem_device_code(%L)$$, :'w1')) from generate_series(1, 2);
 select is(testing.one(:THIEF, format($$select public.redeem_device_code(%L) ->> 'tries_left'$$, :'w1')), '0', 'the fifth wrong code: no tries left');
 select is(testing.one(:THIEF, format($$select public.redeem_device_code(%L)$$, :'live')), 'Too many wrong codes. Wait a few minutes, then try again.', 'then a short pause, even for the right code');
-select is(testing.one(:STRANGER, format($$select public.redeem_device_code(%L) ->> 'reason'$$, :'live')), 'cancelled', '5 wrong tries cancelled the open code');
+select is(testing.one(:STRANGER, format($$select public.redeem_device_code(%L) -> 'account' ->> 'id'$$, :'live')), :'dev', 'a stranger''s 5 wrong tries did not cancel the code: its owner''s other device still signs in with it');
+select testing.one(:STRANGER, format($$select public.logout_phone(%L)$$, :STRANGER));
+select testing.one(:LAP, format($$select public.logout_phone(%L)$$, :STRANGER));
 update private.device_code_attempts set at = at - interval '11 minutes' where auth_user = :THIEF;
 select is(testing.one(:THIEF, format($$select public.redeem_device_code(%L) ->> 'reason'$$, :'w1')), 'wrong', '10 minutes later the pause is over');
 
@@ -106,13 +108,13 @@ select is(testing.as_phone(:LEAVE, $$select name from crews order by name$$), '[
 select is((select count(*)::int from public.accounts where id = :'leave_acc'), 0, 'its account is gone');
 
 -- ---------------------------------------------------------------- notices and names
-select is(testing.one(:LAP, $$select count(*) from public.my_device_notices()$$), '4', 'the laptop is told about each new device');
-select is(testing.one(:PHONE, $$select string_agg(kind, ',' order by at) from public.my_device_notices()$$), 'tablet,phone,phone', 'the phone only about the ones after it (not itself)');
+select is(testing.one(:LAP, $$select count(*) from public.my_device_notices()$$), '5', 'the laptop is told about each new device');
+select is(testing.one(:PHONE, $$select string_agg(kind, ',' order by at) from public.my_device_notices()$$), 'tablet,phone,phone,phone', 'the phone only about the ones after it (not itself)');
 select is(testing.one(:LEAVE, $$select count(*) from public.my_device_notices()$$), '0', 'the newest device about none');
-select is((select count(*)::int from private.push_outbox where account_id = :'dev' and kind = 'devices'), 4, 'a push for each new sign-in');
+select is((select count(*)::int from private.push_outbox where account_id = :'dev' and kind = 'devices'), 5, 'a push for each new sign-in');
 select testing.one(:LAP, $$select public.dismiss_device_notice(id) from public.my_device_notices()$$);
 select is(testing.one(:LAP, $$select count(*) from public.my_device_notices()$$), '0', 'dismissed on the laptop');
-select is(testing.one(:PHONE, $$select count(*) from public.my_device_notices()$$), '3', 'still there on the phone');
+select is(testing.one(:PHONE, $$select count(*) from public.my_device_notices()$$), '4', 'still there on the phone');
 -- "Not me? Log it out"
 select testing.one(:PHONE, format($$select public.logout_phone(%L)$$, :LEAVE));
 select is(testing.one(:PHONE, format($$select still_signed_in from public.my_device_notices() where device = %L$$, :LEAVE)), 'false', 'logged out from the notice');
@@ -127,6 +129,24 @@ select is(testing.one(:LAP, format($$select public.rename_device(%L, 'x')$$, :TH
 select testing.one(:PHONE, $$select public.table_ticket('QK7P')$$) as tk \gset
 select is(testing.one(null, format($$select public.check_ticket(%L, 'QK7P') ->> 'deviceName'$$, :'tk')), 'Dev''s Pixel', 'a table ticket says which device it is');
 select is(testing.one(null, format($$select public.check_ticket(%L, 'QK7P') ->> 'deviceKind'$$, :'tk')), 'phone', 'and what kind');
+
+-- ---------------------------------------------------------------- the brake for the whole system
+delete from private.device_code_attempts;
+select testing.one(:LAP, $$select public.new_device_code() ->> 'code'$$) as bc \gset
+insert into private.device_code_attempts (auth_user, ip, ok, at)
+  select ('00000000-0000-0000-0000-0000000f' || lpad(n::text, 4, '0'))::uuid, '192.0.2.' || (n % 200), false, now() - interval '5 minutes' from generate_series(1, 200) n;
+\set FRESH '''00000000-0000-0000-0000-00000000d0f1'''
+\set FRESH2 '''00000000-0000-0000-0000-00000000d0f2'''
+select is(testing.one(:FRESH, format($$select public.redeem_device_code(%L) ->> 'reason'$$, lpad(((:'bc'::int + 7) % 1000000)::text, 6, '0'))), 'wrong', 'the 201st wrong code in 10 minutes is still answered');
+select is(testing.one(:FRESH2, format($$select public.redeem_device_code(%L)$$, :'bc')), 'Signing in with a code is paused for a minute. Please try again shortly.', 'then redeeming pauses everywhere, even for the right code on a device with no wrong tries');
+select is((select status from private.device_codes where account_id = :'dev' and status = 'open'), 'open', 'the pause cancels nobody''s code');
+update private.settings set value = (now() - interval '1 second')::text where key = 'device_codes_paused_until';
+select is(testing.one(:FRESH2, format($$select public.redeem_device_code(%L) -> 'account' ->> 'id'$$, :'bc')), :'dev', 'a minute later the code works');
+delete from private.device_code_attempts;
+insert into private.device_code_attempts (auth_user, ip, ok, at)
+  select ('00000000-0000-0000-0000-0000000f' || lpad(n::text, 4, '0'))::uuid, null, false, now() - interval '11 minutes' from generate_series(1, 400) n;
+select is(testing.one(:FRESH, $$select public.redeem_device_code('000000') ->> 'reason'$$), 'wrong', 'wrong codes older than 10 minutes do not count for the brake');
+select is((select count(*)::int from private.settings where key = 'device_codes_paused_until' and value::timestamptz > now()), 0, 'so no pause');
 
 select * from finish();
 rollback;

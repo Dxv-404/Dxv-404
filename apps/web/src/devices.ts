@@ -3,7 +3,7 @@
 // on phones, keyboard and paste on laptops, or the camera), bringing a device's own crews along, the
 // "You're in" screen, and the notice the account's other devices get. On laptops the two code screens are
 // dialogs over the screen behind them, as designed.
-import { h, toast, ask } from './legacy/ui.js';
+import { h, toast as kitToast, ask } from './legacy/ui.js';
 import { qrSvg, Scanner } from './legacy/qr.js';
 import { settings } from './legacy/fx.js';
 import { avatar, THEMES } from './table/render';
@@ -24,6 +24,8 @@ export interface DevCtx {
 
 let modP: Promise<Mod> | null = null;
 const mod = (): Promise<Mod> => (modP ??= import('@tp/account'));
+/** The kit's toast, at the top of the screen as the design shows it. */
+export const toast = (msg: string, ms?: number): void => kitToast(msg, ms ?? 2600, { top: true });
 
 // ---------------------------------------------------------------- small pieces
 const SVG = {

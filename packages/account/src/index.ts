@@ -130,7 +130,7 @@ export class Account {
       case 'ask': return { ok: false, reason: 'ask', mine: r.mine! };
       case 'wrong': return { ok: false, reason: 'wrong', triesLeft: r.tries_left ?? 0 };
       case 'expired': return { ok: false, reason: 'expired', message: 'This code ran out. Make a new one on your other device; it takes a second.' };
-      case 'cancelled': return { ok: false, reason: 'cancelled', message: 'This code was cancelled (a new one was made, or too many wrong tries). Make a new one on your other device.' };
+      case 'cancelled': return { ok: false, reason: 'cancelled', message: 'This code was cancelled on your other device (or a newer one was made). Make a new one there.' };
       case 'used': return { ok: false, reason: 'used', message: 'This code was already used. Make a new one on your other device.' };
       case 'self': return { ok: false, reason: 'self', message: 'This device is already your account.' };
       default: return { ok: false, reason: 'error', message: 'Something went wrong. Please try again.' };

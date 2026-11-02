@@ -96,9 +96,11 @@ export function chipStack(amount, bb) {
   return el;
 }
 
-export function toast(msg, ms = 2600) {
+/** @param {string} msg @param {number} [ms] @param {{ top?: boolean }} [o] top: shown at the top of the screen (v3 screens) */
+export function toast(msg, ms = 2600, o = {}) {
   let t = document.getElementById('toast');
   if (!t) { t = h('div', { id: 'toast', role: 'status', 'aria-live': 'polite' }); (document.getElementById('app') ?? document.body).append(t); }
+  t.classList.toggle('top', !!o.top);
   t.textContent = msg;
   t.classList.add('show');
   clearTimeout(t._h);

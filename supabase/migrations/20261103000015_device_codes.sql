@@ -4,9 +4,11 @@
 --
 --   * the code works once, for 5 minutes; only a keyed hash of it is kept;
 --   * making a new code cancels the account's older one;
---   * every wrong code counts against every open code: an open code that has had 5 wrong tries is cancelled
---     (so guessing one of a million codes gets 5 tries, never more);
---   * a device that types 5 wrong codes waits 10 minutes ("a short pause"); a network, 30 an hour;
+--   * wrong codes are counted per device and per network, never against anyone's code (a stranger typing
+--     wrong codes cannot cancel your code): a device that types 5 wrong codes waits 10 minutes ("a short
+--     pause"); a network (an IPv4 address or an IPv6 /64), after 30 in an hour, waits until the hour is up;
+--   * and a brake for the whole system: more than 200 wrong codes anywhere in 10 minutes pauses redeeming
+--     everywhere for a minute (and again at the next wrong code while the 10 minutes still hold 200);
 --   * an account makes at most 10 codes an hour;
 --   * the device that redeems a code can bring along what it had (its crews and games: merge, like
 --     recover_account) or leave it behind; it is asked only when there is something to bring;
@@ -56,7 +58,6 @@ create table private.device_codes (
   code_hash text not null,
   created_at timestamptz not null default now(),
   expires_at timestamptz not null,
-  wrong int not null default 0,
   status text not null default 'open' check (status in ('open', 'used', 'cancelled')),
   used_by uuid,
   used_at timestamptz
@@ -161,6 +162,20 @@ declare
   fails int; digits text := regexp_replace(coalesce(p_code, ''), '\D', '', 'g'); s jsonb; k text;
 begin
   if me is null then raise exception 'Not signed in' using errcode = '28000'; end if;
+  -- How safe guessing is. A code is 1 of 1,000,000 and lives 5 minutes.
+  --   * one device: 5 wrong codes per 10 minutes, so at most 5 guesses in a code's life: 5 in a million;
+  --   * one network (however many anonymous sign-ins it makes): 30 an hour, so at most 30 in a code's life:
+  --     3 in 100,000 that one particular code is found;
+  --   * many networks at once are held by the brake: at most about 200 wrong codes per 10 minutes in the
+  --     whole system (+1 a minute while it holds), so at most ~210 in any code's life: about 2 in 10,000
+  --     per code, even if every guess in the world went at that one code. Kept up all day (~30,000 guesses
+  --     a day against, say, 2 codes open on average) that is roughly one hit in 16 days of a sustained
+  --     many-network attack; the brake's threshold sets that rate (100 would halve it).
+  -- The brake also stops honest sign-ins for that minute: a flood of wrong codes can delay sign-ins, never
+  -- cancel anyone's code.
+  if coalesce((select value::timestamptz from private.settings where key = 'device_codes_paused_until'), '-infinity') > now() then
+    raise exception 'Signing in with a code is paused for a minute. Please try again shortly.' using errcode = '54000';
+  end if;
   fails := (select count(*) from private.device_code_attempts where not ok and auth_user = me and at > now() - interval '10 minutes');
   if fails >= 5 or (v_ip is not null and (select count(*) from private.device_code_attempts where not ok and ip = v_ip and at > now() - interval '1 hour') >= 30) then
     raise exception 'Too many wrong codes. Wait a few minutes, then try again.' using errcode = '54000';
@@ -169,9 +184,11 @@ begin
   select * into c from private.device_codes where code_hash = private.hash_code(digits) order by (status = 'open') desc, created_at desc limit 1 for update;
   if c.id is null then
     insert into private.device_code_attempts (auth_user, ip, ok) values (me, v_ip, false);
-    -- every open code took a wrong try; one that has had 5 is cancelled
-    update private.device_codes set wrong = wrong + 1, status = case when wrong + 1 >= 5 then 'cancelled' else status end
-      where status = 'open' and expires_at > now();
+    -- the brake: too many wrong codes in the whole system, so everyone waits a minute
+    if (select count(*) from private.device_code_attempts where not ok and at > now() - interval '10 minutes') > 200 then
+      insert into private.settings (key, value) values ('device_codes_paused_until', (now() + interval '1 minute')::text)
+        on conflict (key) do update set value = excluded.value;
+    end if;
     return jsonb_build_object('ok', false, 'reason', 'wrong', 'tries_left', greatest(0, 4 - fails));
   end if;
   if c.status = 'used' then return jsonb_build_object('ok', false, 'reason', 'used'); end if;

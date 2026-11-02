@@ -192,7 +192,7 @@ export function playNet(ui: Ui, net: NetTable, o: { offline: boolean; me?: Me; c
       showWatching(d);
       if (what === 'moved') {
         justWatch = true;
-        toast(`Your seat moved to ${where(d)}. This device watches now.`, 5000);
+        toast(`Your seat moved to ${where(d)}. This device watches now.`, 5000, { top: true });
         return;
       }
       if (justWatch) return;
