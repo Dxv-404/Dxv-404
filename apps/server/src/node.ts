@@ -101,7 +101,7 @@ setInterval(() => {
 interface Live { room: TableRoom; timer: NodeJS.Timeout | null; dirty: Persisted | null; saveTimer: NodeJS.Timeout | null; idleSince: number }
 const live = new Map<string, Live>();
 // signed-in phones show a ticket; the accounts database says whose it is (answers cached 5 minutes)
-const identify = cachedTicketChecker();
+const identify = cachedTicketChecker(process.env.SUPABASE_URL ? { url: process.env.SUPABASE_URL } : {});
 const echo = new Map<string, Set<WebSocket>>();
 
 const tableFile = (code: string) => join(DATA, 'tables', `${code}.json`);

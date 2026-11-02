@@ -1,7 +1,7 @@
 // The Cloudflare table server (the backup to the Oracle server in Hyderabad): one Durable Object per table.
 import { DurableObject } from 'cloudflare:workers';
 import { PROTOCOL_VERSION, VAPID_PUBLIC_KEY, PUSH_SUBJECT } from '@tp/protocol';
-import { TableRoom, Recorder, tokenSigner, supabaseSend, supabaseRpc, deliver, drainOutbox, verifySigned, checkOfflineUpload, MAX_UPLOAD_BYTES, type Conn, type Persisted, type OutboxItem, type PushDeps, type PushRequest } from '@tp/table';
+import { TableRoom, Recorder, tokenSigner, supabaseSend, supabaseRpc, deliver, drainOutbox, verifySigned, checkOfflineUpload, MAX_UPLOAD_BYTES, type Conn, type ConnInfo, type Persisted, type OutboxItem, type PushDeps, type PushRequest } from '@tp/table';
 import { cachedTicketChecker, checkTicket, SUPABASE_KEY, SUPABASE_URL } from '@tp/account/ticket';
 
 // signed-in phones show a ticket; the accounts database says whose it is (cached while this isolate lives)
@@ -37,7 +37,7 @@ export function regionFor(country?: string, continent?: string, forced?: string 
   return undefined;
 }
 
-interface Attachment { pid: string | null; hello: boolean }
+type Attachment = ConnInfo;
 
 /**
  * One table. Runs the same TableRoom as the Oracle server. Hibernation lets Cloudflare put an idle table
@@ -94,7 +94,7 @@ export class Table extends DurableObject<Env> {
     for (const ws of this.ctx.getWebSockets()) {
       const a = ws.deserializeAttachment() as Attachment | null;
       const c = this.conn(ws);
-      if (a?.hello) room.adopt(c, a.pid);
+      if (a?.hello) room.adopt(c, a.pid, { ...(a.device ? { device: a.device } : {}), ...(a.account ? { account: a.account } : {}), ...(a.info ? { info: a.info } : {}) });
       else room.connect(c);
     }
     room.settleAfterRestart();
@@ -145,7 +145,7 @@ export class Table extends DurableObject<Env> {
     room.message(c, typeof message === 'string' ? message : new TextDecoder().decode(message));
     const info = room.connInfo(c);
     const had = ws.deserializeAttachment() as Attachment | null;
-    if (info && (info.hello !== had?.hello || info.pid !== had?.pid)) ws.serializeAttachment(info satisfies Attachment);
+    if (info && (info.hello !== had?.hello || info.pid !== had?.pid || info.account !== had?.account)) ws.serializeAttachment(info satisfies Attachment);
   }
 
   override async webSocketClose(ws: WebSocket, code: number): Promise<void> {

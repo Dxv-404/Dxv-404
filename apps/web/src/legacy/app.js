@@ -9,7 +9,7 @@ import { accountScreens } from './account-ui.js';
 import { offlineStart, joinCode, hostPhoneHome, hostPhoneTable } from '../offline-screens.ts';
 import { onHostPhonePage } from '../offline.ts';
 import { onlineStart, routeOnline, playOnline, hostOnline } from '../online-screens.ts';
-import { initShell, loadingScreen, menuScreen, pickerScreen, leaveMenu } from '../ui/shell.ts';
+import { initShell, loadingScreen, menuScreen, pickerScreen, leaveMenu, navBar } from '../ui/shell.ts';
 import { setTheme, currentTheme, TableScreen } from '../table/screen.ts';
 import { settingsScreen, installErrorReporting, noteScreen } from '../more-screens.ts';
 import { rebuyBlock, withRebuyDefaults, setupHead, setupFoot, blindsSeg, rulesContent, rebuysUsedText } from '../rebuys-setup.ts';
@@ -64,7 +64,7 @@ const crews = crewsUi({
   hostQr: () => setup(),
   joinOffline: () => offlineJoin(ui),
 });
-const accounts = accountScreens({ screen, openSheet, home: () => home(), crews });
+const accounts = accountScreens({ screen, openSheet, home: () => home(), nav: () => navBar('play', menuActions()), crews });
 window.addEventListener('hashchange', () => { if (!routeOnline(ui) && !crews.route()) accounts.route(); });
 
 // (the old floating info button: the table and Settings have their own way to the hand rankings)
@@ -107,6 +107,7 @@ function menuActions() {
 function home() {
   delete document.body.dataset.playing;
   screen((el) => menuScreen(el, menuActions()));
+  void accounts.notices(); // a sign-in on another device: "Not me? Log it out"
 }
 
 function themePicker() {

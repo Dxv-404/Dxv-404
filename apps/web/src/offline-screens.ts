@@ -8,8 +8,9 @@ import {
   codeToAddress, formatCode, handOverUrl, myIdentity, rememberLastOffline, lastOffline, hostInfo, takeHandOver, carryOn,
   offlineTable, heldCheckpoint, type Me,
 } from './offline';
-import type { NetTable, ScreenView } from './net-table';
+import type { NetTable, ScreenView, SeatDevice } from './net-table';
 import { rebuyBlock, withRebuyDefaults, setupHead, setupFoot, blindsSeg, rulesContent, rebuysUsedText } from './rebuys-setup';
+import { deviceIcon } from './devices';
 
 type Screen = (build: (el: HTMLElement) => void | (() => void)) => void;
 type Sheet = (content: HTMLElement, o?: { label?: string; onClose?: () => void; tall?: boolean }) => { close(): void };
@@ -179,8 +180,37 @@ export function playNet(ui: Ui, net: NetTable, o: { offline: boolean; me?: Me; c
       el.querySelector('.tp-over')?.append(h('div', { class: 'tp-watching', role: 'status', 'data-testid': 'watching' },
         h('span', {}, 'Watching'), h('button', { class: 'btn small primary', 'data-testid': 'take-seat', onclick: () => o.takeSeat!() }, 'Take a seat')));
     }
+    // one seat per player: the seat is played on another of this player's devices. Ask once (Move seat here /
+    // Just watch); while watching, the bar at the top can still move it here.
+    let watchBar: HTMLElement | null = null;
+    let justWatch = false;
+    const where = (d: SeatDevice): string => (d.name ? d.name : `your ${d.kind}`);
+    const showWatching = (d: SeatDevice): void => {
+      watchBar?.remove();
+      const bar: HTMLElement = h('div', { class: 'tp-watching', role: 'status', 'data-testid': 'watching-elsewhere' },
+        h('span', {}, `Watching · your seat is on ${where(d)}`),
+        h('button', { class: 'btn small primary', 'data-testid': 'move-seat', onclick: () => net.moveSeat() }, 'Move seat here'));
+      watchBar = bar;
+      el.querySelector('.tp-over')?.append(bar);
+    };
+    const offSeat = net.onSeat((what, d) => {
+      showWatching(d);
+      if (what === 'moved') {
+        justWatch = true;
+        toast(`Your seat moved to ${where(d)}. This device watches now.`, 5000, { top: true });
+        return;
+      }
+      if (justWatch) return;
+      void ask(`You’re playing on ${where(d)}`, {
+        detail: 'Same account, same seat. Only one device can play it at a time; the other one watches.',
+        icon: deviceIcon(d.kind), yes: 'Move seat here', no: 'Just watch', testid: 'seat-ask',
+      }).then((yes: boolean) => { if (yes) net.moveSeat(); else justWatch = true; });
+    });
     let ended = false;
-    const offView = net.subscribe((_events, v) => { if (v.phase === 'ended' && !ended) { ended = true; standings(ui, v, o); } });
+    const offView = net.subscribe((_events, v) => {
+      if (watchBar && net.seated) { watchBar.remove(); watchBar = null; }
+      if (v.phase === 'ended' && !ended) { ended = true; standings(ui, v, o); }
+    });
     const offErr = net.onError((code, m) => {
       // the table will not take this phone: say why and offer the way out (instead of "Connecting…" for ever)
       if (code === 'table_full' || code === 'not_allowed' || code === 'version' || code === 'replaced') {
@@ -202,7 +232,7 @@ export function playNet(ui: Ui, net: NetTable, o: { offline: boolean; me?: Me; c
       if (!o.offline || lostSince === null || sheetOpen || Date.now() - lostSince < 15_000) return;
       sheetOpen = lostHost(ui, o.me!, () => { sheetOpen = null; });
     }, 1000);
-    return () => { clearInterval(watch); offView(); offErr(); offNotice(); offStatus(); table.destroy(); net.close(); delete document.body.dataset.playing; };
+    return () => { clearInterval(watch); offSeat(); offView(); offErr(); offNotice(); offStatus(); table.destroy(); net.close(); delete document.body.dataset.playing; };
   });
 }
 

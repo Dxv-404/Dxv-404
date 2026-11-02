@@ -4,6 +4,9 @@
 import { h, toast, ask } from './ui.js';
 import { leagueScreens } from './league-ui.js';
 import { offerPush } from '../more-screens.ts';
+import { devicesBlock, drawDeviceNotices, reportDevice, useAccount, addDevice, routeDevice, checkDeviceNotices } from '../devices.ts';
+import { avatar, THEMES } from '../table/render.ts';
+import { currentTheme } from '../table/screen.ts';
 
 let mod = null;
 let acct = null;
@@ -22,8 +25,10 @@ const inviteLink = (code) => `${location.origin}${location.pathname}#/c/${code}`
 const share = (text) => `https://wa.me/?text=${encodeURIComponent(text)}`;
 const copy = (text, what = 'Copied') => navigator.clipboard?.writeText(text).then(() => toast(what), () => toast('Could not copy. Select it and copy by hand.'));
 
-export function accountScreens({ screen, openSheet, home, crews = null }) {
+export function accountScreens({ screen, openSheet, home, nav, crews = null }) {
   const lg = leagueScreens({ screen, openSheet, account, back: () => profile() });
+  // your account on every device (devices.ts)
+  const dev = { screen, openSheet, home, profile: () => profile(), account, nav };
   const head = (title, back = home) => h('header', { class: 'page-head' }, h('button', { class: 'icon-btn', 'aria-label': 'Back', onclick: back }, '‹'), h('h1', {}, title));
   const busy = (el, text = 'Loading…') => el.replaceChildren(h('p', { class: 'hint', role: 'status' }, text));
   const failed = (el, err, retry) => el.replaceChildren(
@@ -33,9 +38,11 @@ export function accountScreens({ screen, openSheet, home, crews = null }) {
   // ---------------- profile ----------------
   function profile() {
     screen((el) => {
-      el.className = 'screen profile';
-      const body = h('div', {});
+      el.className = 'screen profile' + (nav ? ' with-nav' : '');
+      const body = h('div', { class: 'profile-body' });
       el.append(head('Profile'), body);
+      const bar = nav?.();
+      if (bar) el.append(bar);
       load();
       async function load() {
         busy(body);
@@ -53,7 +60,7 @@ export function accountScreens({ screen, openSheet, home, crews = null }) {
     const name = h('input', { type: 'text', maxlength: 20, placeholder: 'Your name', 'aria-label': 'Your name', autocomplete: 'nickname', 'data-testid': 'name' });
     body.replaceChildren(
       h('section', { class: 'block' }, h('h2', {}, 'Make your profile'),
-        h('p', { class: 'hint' }, 'No sign-up, no email. Your games, crews and league live in the cloud; this phone holds the key.'),
+        h('p', { class: 'hint' }, 'No sign-up, no email. Your games, crews and league live in the cloud; this device holds the key.'),
         h('label', { class: 'field' }, h('span', {}, 'Name'), name),
         h('button', { class: 'btn primary', 'data-testid': 'make-profile', onclick: async (e) => {
           const n = name.value.trim();
@@ -62,42 +69,53 @@ export function accountScreens({ screen, openSheet, home, crews = null }) {
           try { localStorage.setItem('tp-name', n); const a = await account(); await a.start(n); keepStorage(); profile(); }
           catch (err) { e.target.disabled = false; toast(err.message); }
         } }, 'Make my profile')),
-      h('section', { class: 'block' }, h('h2', {}, 'Played before on another phone?'),
-        h('button', { class: 'btn secondary', 'data-testid': 'recover-open', onclick: () => recoverSheet() }, 'Recover old account', h('small', {}, 'With your 12-digit recovery code'))));
+      h('section', { class: 'block' }, h('h2', {}, 'Played before on another device?'),
+        h('button', { class: 'btn secondary', 'data-testid': 'use-account', onclick: () => useAccount(dev) }, 'Use an account I already have', h('small', {}, 'Sign in with a code from your other device')),
+        h('button', { class: 'btn ghost', 'data-testid': 'recover-open', onclick: () => recoverSheet() }, 'Recover old account', h('small', {}, 'Every device lost? Use your 12-digit recovery code'))));
   }
 
   async function render(body, a) {
     const p = a.profile;
     // kept on this phone for nights with no internet (offline tables): who I am
     try { localStorage.setItem('tp-me', JSON.stringify({ account: p.id, name: p.name })); } catch { /* storage full or blocked */ }
-    const nameIn = h('input', { type: 'text', maxlength: 20, value: p.name, 'aria-label': 'Your name', 'data-testid': 'name',
-      onchange: async (e) => { const n = e.target.value.trim(); if (!n) return; try { await a.rename(n); localStorage.setItem('tp-name', n); toast('Name saved'); } catch (err) { toast(err.message); } } });
+    const th = THEMES[currentTheme()] ?? THEMES.classic;
+    const nameEl = h('b', { 'data-testid': 'profile-name' }, p.name);
+    const avEl = h('span', { class: 'av', style: { '--av': '78px' }, html: avatar(th, p.id, p.name) });
+    const rename = async () => {
+      const n = await ask('Your name', { yes: 'Save', input: { value: p.name, max: 20, placeholder: 'Your name' } });
+      const name = String(n ?? '').trim();
+      if (!name) return;
+      try { await a.rename(name); localStorage.setItem('tp-name', name); nameEl.textContent = name; avEl.innerHTML = avatar(th, p.id, name); toast('Name saved'); } catch (err) { toast(err.message); }
+    };
     const codeBox = h('div', { class: 'block-inner' });
     const crewsBox = h('div', {});
-    const phonesBox = h('div', {});
     const alertBox = h('div', {});
+    const noticeBox = h('div', {});
     body.replaceChildren(
-      alertBox,
-      h('section', { class: 'block' }, h('label', { class: 'field' }, h('span', {}, 'Name'), nameIn)),
-      h('section', { class: 'block' }, h('h2', {}, 'Recovery code'), codeBox),
+      noticeBox, alertBox,
+      h('div', { class: 'dv-pcard' }, avEl, nameEl, h('button', { class: 'dv-link', 'data-testid': 'change-name', onclick: rename }, 'Change name or picture')),
+      ...devicesBlock(dev, a),
+      h('button', { class: 'dv-row', 'data-testid': 'recovery-row', onclick: () => {
+        openSheet(h('div', { class: 'menu-actions' }, h('h2', {}, 'Recovery code'), codeBox), { label: 'Recovery code' });
+        drawCode(codeBox, a);
+      } }, h('span', { class: 'txt' }, h('b', {}, 'Recovery code'), h('small', {}, 'For when you lose every device. Keep it somewhere safe.')), h('span', { class: 'go', 'aria-hidden': 'true' }, '›')),
       h('section', { class: 'block' }, h('button', { class: 'btn secondary', 'data-testid': 'my-games', onclick: () => lg.history() }, 'My games', h('small', {}, 'Every game you played, with replays'))),
       h('section', { class: 'block' }, h('h2', {}, 'Crews'), crewsBox,
         h('button', { class: 'btn secondary', 'data-testid': 'new-crew', onclick: () => (crews ? crews.create() : newCrew()) }, 'New crew')),
-      h('section', { class: 'block' }, h('h2', {}, 'Phones on this account'), phonesBox),
       h('section', { class: 'block' }, h('h2', {}, 'This account'),
-        h('button', { class: 'btn ghost', 'data-testid': 'recover-open', onclick: () => recoverSheet() }, 'Recover old account', h('small', {}, 'Make this phone an account you had before')),
+        h('button', { class: 'btn ghost', 'data-testid': 'recover-open', onclick: () => recoverSheet() }, 'Recover old account', h('small', {}, 'Make this device an account you had before')),
         h('button', { class: 'btn ghost', onclick: async () => {
-          if (!(await ask('Log out every other phone on this account?', { yes: 'Log them out' }))) return;
-          try { const n = await a.logoutOtherPhones(); toast(n ? `${n} other phone${n === 1 ? '' : 's'} logged out` : 'No other phones were logged in'); } catch (err) { toast(err.message); }
-        } }, 'Log out my other phones'),
+          if (!(await ask('Log out every other device on this account?', { yes: 'Log them out' }))) return;
+          try { const n = await a.logoutOtherPhones(); toast(n ? `${n} other device${n === 1 ? '' : 's'} logged out` : 'No other devices were signed in'); profile(); } catch (err) { toast(err.message); }
+        } }, 'Log out my other devices'),
         h('button', { class: 'btn danger', onclick: async () => {
           if (!(await ask('Delete your account? Your name and picture go; your past results stay in your crews as "Former player".', { yes: 'Delete', danger: true }))) return;
           try { await a.deleteAccount(); localStorage.removeItem(CODE_KEY); toast('Account deleted'); home(); } catch (err) { toast(err.message); }
         } }, 'Delete my account')));
+    void reportDevice(a);
+    drawDeviceNotices(a, noticeBox, () => profile());
     drawRescueAlerts(alertBox, a);
-    drawCode(codeBox, a);
     drawCrews(crewsBox, a);
-    drawPhones(phonesBox, a);
   }
 
   // Another phone asked a crew to become this account: this phone is told, and can stop it
@@ -105,7 +123,7 @@ export function accountScreens({ screen, openSheet, home, crews = null }) {
     try {
       const [list, nights, notice] = await Promise.all([a.rescuesOfMe(), a.pendingOfflineGames().catch(() => []), a.serviceNotice().catch(() => null)]);
       const chips = (n) => (n > 0 ? `+${n}` : String(n ?? 0));
-      box.replaceChildren(notice && h('section', { class: 'block alert', role: 'status', 'data-testid': 'service-notice' }, h('p', {}, notice)), ...nights.map((g) => h('section', { class: 'block alert', 'data-testid': 'offline-pending' },
+      box.replaceChildren(...(notice ? [h('section', { class: 'block alert', role: 'status', 'data-testid': 'service-notice' }, h('p', {}, notice))] : []), ...nights.map((g) => h('section', { class: 'block alert', 'data-testid': 'offline-pending' },
         h('h2', {}, 'A night played offline'),
         h('p', {}, `${new Date(g.ended_at).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })}${g.crew_name ? `, ${g.crew_name}` : ''}: ${g.players} players, ${g.hands} hands, you ${chips(g.net)} chips. `
           + (g.confirmed ? `You confirmed it. It counts once one more player does (${g.confirmations} so far).` : 'It counts in your history and the league once two of its players confirm it.')),
@@ -126,22 +144,6 @@ export function accountScreens({ screen, openSheet, home, crews = null }) {
           try { await a.decideRescue(r.id, false); toast('Stopped. Your crew can see this in its log.'); drawRescueAlerts(box, a); } catch (err) { toast(err.message); }
         } }, 'That’s not me: stop it'))));
     } catch { box.replaceChildren(); }
-  }
-
-  async function drawPhones(box, a) {
-    busy(box);
-    const when = (t) => { const d = (Date.now() - new Date(t).getTime()) / 864e5; return d < 1 ? 'today' : d < 2 ? 'yesterday' : `${Math.floor(d)} days ago`; };
-    try {
-      const list = await a.phones();
-      box.replaceChildren(
-        h('ul', { class: 'member-list', 'data-testid': 'phones' }, ...list.map((p, i) => h('li', {},
-          h('div', { class: 'who' }, h('strong', {}, p.this_phone ? 'This phone' : `Phone ${i + 1}`), h('small', {}, `added ${when(p.added)}, last used ${when(p.last_seen)}`)),
-          !p.this_phone && h('button', { class: 'btn small ghost', onclick: async () => {
-            if (!(await ask('Log this phone out? It will no longer be your account.', { yes: 'Log out', danger: true }))) return;
-            try { await a.logoutPhone(p.phone); toast('Logged out'); drawPhones(box, a); } catch (err) { toast(err.message); }
-          } }, 'Log out')))),
-        list.length > 1 && h('p', { class: 'hint small' }, 'Don’t recognise a phone? Log it out, then make a new recovery code.'));
-    } catch (err) { failed(box, err, () => drawPhones(box, a)); }
   }
 
   async function drawCode(box, a) {
@@ -416,10 +418,11 @@ export function accountScreens({ screen, openSheet, home, crews = null }) {
 
   /** Called on start: open the screen a link points at (#/c/CODE = crew invite). Returns true if it did. */
   function route() {
+    if (routeDevice(dev)) return true;
     const m = /^#\/c\/([A-Za-z0-9]{6,16})$/.exec(location.hash);
     if (m) { invite(m[1].toUpperCase()); return true; }
     return false;
   }
 
-  return { profile, invite, route, crew: crewScreen, league: (c) => lg.league(c, () => profile()), history: () => lg.history(), game: (id, back) => lg.game(id, back) };
+  return { profile, invite, route, addDevice: () => addDevice(dev), useAccount: () => useAccount(dev), notices: () => checkDeviceNotices(dev), crew: crewScreen, league: (c) => lg.league(c, () => profile()), history: () => lg.history(), game: (id, back) => lg.game(id, back) };
 }

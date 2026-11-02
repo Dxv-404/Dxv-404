@@ -4,6 +4,7 @@ import './css/table-live.css';
 import './css/ui.css';
 import './css/rebuys.css';
 import './css/crews.css';
+import './css/devices.css';
 // for the layout checks (e2e/tests/table-layout.spec.ts): draw any table without a game running
 import { renderTable, sprite } from './table/render';
 import { loadDesignCss, setTheme } from './table/screen';

@@ -29,7 +29,7 @@ function setup() {
     identify: async (t, table) => { if (broken) throw new Error('database down'); return table === 'CREW1' ? tickets.get(t) ?? null : null; },
   });
   let n = 0;
-  const pass = (account: string, device: string, name: string, crews: string[]) => { const t = `ticket-${n++}-${'x'.repeat(16)}`; tickets.set(t, { account, device, name, crews }); return t; };
+  const pass = (account: string, device: string, name: string, crews: string[], more: Partial<Identity> = {}) => { const t = `ticket-${n++}-${'x'.repeat(16)}`; tickets.set(t, { account, device, name, crews, ...more }); return t; };
   const hello = async (player: string, ticket: string | null, extra: Record<string, unknown> = {}) => {
     const c = new FakeConn();
     room.connect(c);
@@ -117,8 +117,9 @@ describe('signed-in phones at the table', () => {
     await t.hello(RIYA, t.pass(RIYA, 'phone-y', 'Riya', []));
     const second = await t.hello(RAHUL, t.pass(RAHUL, 'phone-2', 'Rahul', []));
     expect(second.last('welcome')!.you).toBeNull(); // spectator
+    expect(second.last('seatElsewhere')!.device).toEqual({ kind: 'phone', name: null });
     expect(first.closed).toBeNull(); // the first phone keeps the seat
-    expect(t.room.connInfo(first)).toEqual({ pid: RAHUL, hello: true });
+    expect(t.room.connInfo(first)).toEqual({ pid: RAHUL, hello: true, device: 'phone-1', account: RAHUL, info: { kind: 'phone', name: null } });
     // the same phone reconnecting (same device) takes its seat back as usual
     const again = await t.hello(RAHUL, t.pass(RAHUL, 'phone-1', 'Rahul', []));
     expect(again.last('welcome')!.you).toBe(RAHUL);
@@ -146,5 +147,118 @@ describe('signed-in phones at the table', () => {
     // the crew survives a restart of the table server
     const back = new TableRoom('CREW1', { now: () => t.now, schedule: () => {} }, { save: () => {}, appendHand: () => {} }, t.saves.at(-1)!, {});
     expect(back.crew).toBe(CREW);
+  });
+});
+
+describe('one seat per player: moving the seat between devices', () => {
+  type V = { hand: { toAct: string | null; ps: Record<string, { cards: string[] | null }> } | null };
+  const view = (c: FakeConn) => c.last('welcome')!.view as unknown as V;
+  let n = 0;
+  const send = (t: ReturnType<typeof setup>, c: FakeConn, m: Record<string, unknown>) => t.room.message(c, JSON.stringify({ ...m, ...(m.t === 'moveSeat' ? {} : { actionId: `a${n++}` }) }));
+
+  async function twoDevices() {
+    const t = setup();
+    const phone = await t.hello(RAHUL, t.pass(RAHUL, 'phone-1', 'Rahul', [], { deviceKind: 'phone', deviceName: null }));
+    const riya = await t.hello(RIYA, t.pass(RIYA, 'phone-y', 'Riya', []));
+    send(t, phone, { t: 'host', cmd: 'deal' });
+    const laptop = await t.hello(RAHUL, t.pass(RAHUL, 'laptop-1', 'Rahul', [], { deviceKind: 'laptop', deviceName: 'Work Mac' }));
+    return { t, phone, riya, laptop };
+  }
+
+  it('the second device watches, is told which device has the seat, and sees no cards of it', async () => {
+    const { phone, laptop } = await twoDevices();
+    expect(laptop.last('welcome')!.you).toBeNull();
+    expect(laptop.last('seatElsewhere')!.device).toEqual({ kind: 'phone', name: null });
+    expect(view(laptop).hand!.ps[RAHUL]!.cards).toBeNull();
+    expect(phone.last('seatElsewhere')).toBeUndefined();
+    expect(phone.closed).toBeNull();
+  });
+
+  it('Move seat here: the seat moves, the other device watches with a notice, and its taps are refused', async () => {
+    const { t, phone, laptop, riya } = await twoDevices();
+    const e = t.room.engine!;
+    const stack = e.player(RAHUL)!.stack;
+    const handNo = e.s.handNo;
+    send(t, laptop, { t: 'moveSeat' });
+    expect(laptop.last('welcome')!.you).toBe(RAHUL);
+    expect(view(laptop).hand!.ps[RAHUL]!.cards).toHaveLength(2); // the cards come with the seat
+    expect(phone.last('seatMoved')!.device).toEqual({ kind: 'laptop', name: 'Work Mac' });
+    expect(phone.last('welcome')!.you).toBeNull();
+    expect(view(phone).hand!.ps[RAHUL]!.cards).toBeNull(); // and leave the phone
+    expect(phone.closed).toBeNull(); // the phone stays, watching
+    expect(e.player(RAHUL)!.stack).toBe(stack); // same seat, same chips
+    expect(e.player(RAHUL)!.connected).toBe(true);
+    // whoever is to act: the phone cannot play Rahul's turn any more, the laptop can
+    const toAct = (): string => e.s.hand!.toAct!;
+    if (toAct() !== RAHUL) send(t, riya, { t: 'act', handNo, action: { type: 'call' } });
+    expect(toAct()).toBe(RAHUL);
+    send(t, phone, { t: 'act', handNo, action: { type: 'fold' } });
+    expect(phone.last('ack')).toMatchObject({ ok: false, error: 'Spectators cannot play' });
+    expect(toAct()).toBe(RAHUL);
+    send(t, laptop, { t: 'act', handNo, action: { type: e.legal(RAHUL)!.canCheck ? 'check' : 'call' } });
+    expect(laptop.last('ack')!.ok).toBe(true);
+    expect(riya.closed).toBeNull();
+  });
+
+  it('the seat can move back, and a resent Move does nothing', async () => {
+    const { t, phone, laptop } = await twoDevices();
+    send(t, laptop, { t: 'moveSeat' });
+    const before = laptop.inbox.length;
+    send(t, laptop, { t: 'moveSeat' });
+    expect(laptop.inbox.length).toBe(before);
+    send(t, phone, { t: 'moveSeat' });
+    expect(phone.last('welcome')!.you).toBe(RAHUL);
+    expect(laptop.last('seatMoved')!.device).toEqual({ kind: 'phone', name: null });
+    expect(laptop.last('welcome')!.you).toBeNull();
+    expect(t.room.connInfo(laptop)).toMatchObject({ pid: null, account: RAHUL });
+  });
+
+  it('only the player\'s own devices can move the seat', async () => {
+    const t = setup();
+    await t.hello(RAHUL, t.pass(RAHUL, 'phone-1', 'Rahul', []));
+    const guest = await t.hello('watcher1', null, { spectate: true, name: 'Watcher' });
+    send(t, guest, { t: 'moveSeat' });
+    expect(guest.last('error')!.message).toBe('There is no seat of yours at this table');
+    expect(guest.closed).toBeNull();
+    // a device of an account that has no seat here
+    const riya = await t.hello(RIYA, t.pass(RIYA, 'phone-y', 'Riya', []), { spectate: true });
+    send(t, riya, { t: 'moveSeat' });
+    expect(riya.last('error')!.message).toBe('There is no seat of yours at this table');
+  });
+
+  it('the same device reconnecting takes its seat back at once (no question)', async () => {
+    const { t, phone } = await twoDevices();
+    const again = await t.hello(RAHUL, t.pass(RAHUL, 'phone-1', 'Rahul', []));
+    expect(again.last('welcome')!.you).toBe(RAHUL);
+    expect(again.last('seatElsewhere')).toBeUndefined();
+    expect(phone.closed).toBe('replaced');
+  });
+
+  it('a device whose holder has gone takes the seat without asking', async () => {
+    const { t, phone } = await twoDevices();
+    t.room.disconnect(phone);
+    const tablet = await t.hello(RAHUL, t.pass(RAHUL, 'tablet-1', 'Rahul', [], { deviceKind: 'tablet' }));
+    expect(tablet.last('welcome')!.you).toBe(RAHUL);
+    expect(tablet.last('seatElsewhere')).toBeUndefined();
+  });
+
+  it('a sleeping server (Durable Object) remembers which device holds the seat', async () => {
+    const { t, phone, laptop } = await twoDevices();
+    const woke = new TableRoom('CREW1', { now: () => t.now, schedule: () => {} }, { save: () => {}, appendHand: () => {} }, t.saves.at(-1)!, {
+      identify: async () => ({ account: RAHUL, device: 'tablet-1', name: 'Rahul', crews: [], deviceKind: 'tablet', deviceName: null }),
+    });
+    const a = t.room.connInfo(phone)!, b = t.room.connInfo(laptop)!;
+    woke.adopt(phone, a.pid, a); woke.adopt(laptop, b.pid, b);
+    woke.settleAfterRestart();
+    expect(woke.connInfo(phone)).toEqual(a);
+    const tablet = new FakeConn();
+    woke.connect(tablet);
+    woke.message(tablet, JSON.stringify({ t: 'hello', v: 1, table: 'CREW1', player: RAHUL, lastSeq: 0, ticket: 'some-ticket-xxxxxxxxxx' }));
+    await tick();
+    expect(tablet.last('seatElsewhere')!.device).toEqual({ kind: 'phone', name: null });
+    expect(phone.closed).toBeNull();
+    // and the watching laptop can still take it
+    woke.message(laptop, JSON.stringify({ t: 'moveSeat' }));
+    expect(laptop.last('welcome')!.you).toBe(RAHUL);
   });
 });

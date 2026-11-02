@@ -9,7 +9,7 @@
 // - the table is saved after every change as "the table at the start of the hand + the inputs since",
 //   which is also exactly the hand's replay log.
 import { Engine, TABLE_DEFAULTS, clampRebuyAmount, isSeed, randomSeed, seedCommit, sha256hex, toHex, type GameEvent, type GameState, type HandRecord, type Input, type PlayerId } from '@tp/engine';
-import { PROTOCOL_VERSION, encode, parseClient, versionOk, type ClientMessage, type ServerMessage, type TableSettings } from '@tp/protocol';
+import { PROTOCOL_VERSION, encode, parseClient, versionOk, type ClientMessage, type DeviceInfo, type ServerMessage, type TableSettings } from '@tp/protocol';
 import { handPlayers, publicReplay, slimRecord, type EndPlayerRow, type GameInfo } from './record';
 import { FOLD_PAUSE_MS, resultsPauseMs, runoutStreets } from './pause';
 
@@ -109,10 +109,16 @@ export interface RoomOptions {
   identify?: (ticket: string, table: string) => Promise<Identity | null>;
 }
 
-interface ConnState { pid: PlayerId | null; hello: boolean; spectator: boolean; hidden?: boolean; windowStart: number; count: number; lastReact: number; lastSeen: number; device?: string; checking?: boolean }
+interface ConnState {
+  pid: PlayerId | null; hello: boolean; spectator: boolean; hidden?: boolean; windowStart: number; count: number; lastReact: number; lastSeen: number; checking?: boolean;
+  /** Signed-in devices: which device this is, the account it is signed in as (also while it watches), and what it is called. */
+  device?: string; account?: string; info?: DeviceInfo;
+}
 
 /** Who a ticket belongs to, as the accounts database answers (see check_ticket). */
-export interface Identity { account: string; device: string; name: string; crews: string[] }
+export interface Identity { account: string; device: string; name: string; crews: string[]; deviceKind?: DeviceInfo['kind'] | null; deviceName?: string | null }
+/** What a connection said hello as, kept by servers that may sleep (a Durable Object) and handed back with adopt(). */
+export interface ConnInfo { pid: PlayerId | null; hello: boolean; device?: string; account?: string; info?: DeviceInfo }
 export type Ack = Extract<ServerMessage, { t: 'ack' }>;
 
 const hashToken = (t: string): string => sha256hex(t);
@@ -217,6 +223,7 @@ export class TableRoom {
     if (m.t === 'react') return this.react(conn, st, m.reaction);
     if (m.t === 'bg') { st.hidden = m.hidden; return; }
     if (m.t === 'seed') return this.onSeed(st, m.handNo, m.seed);
+    if (m.t === 'moveSeat') return this.moveSeat(conn, st);
     if (!st.pid || !this.engine) return this.ack(conn, null, m.actionId, 'Spectators cannot play');
     const pid = st.pid;
     const done = this.acks.get(pid)?.get(m.actionId);
@@ -298,6 +305,7 @@ export class TableRoom {
     const crew = this.engine ? this.crew : (m.settings?.crew ?? null);
     if (crew && !who?.crews.includes(crew)) return fail('not_allowed', 'This table is for crew members');
     if (who && m.player !== who.account) return fail('not_allowed', 'That seat belongs to another account');
+    if (who) { st.device = who.device; st.account = who.account; st.info = deviceInfo(who); }
     const watch = (): void => {
       if (!this.engine) return fail('no_table', 'This table has not started');
       if ([...this.conns.values()].filter((o) => o.hello && o.spectator).length >= MAX_WATCHERS) return fail('table_full', `${MAX_WATCHERS} people are already watching this table`);
@@ -311,10 +319,16 @@ export class TableRoom {
       const tokenHash = hashToken(m.token!);
       if (this.tokens[m.player] && this.tokens[m.player] !== tokenHash) return fail('not_allowed', 'That seat belongs to another phone');
     }
-    // the same account on a second phone watches instead of taking the seat (one seat per account)
-    if (who && this.connsOf(m.player).some((c) => { const o = this.conns.get(c)!; return o.device && o.device !== who.device; })) {
-      st.device = who.device;
-      return watch();
+    // one seat per player: while the seat is being played on another of the player's devices, this one watches
+    // and is told where the seat is. The player chooses (moveSeat moves it here); nothing is ever played twice.
+    // (The same device coming back, a reconnect or a second tab, takes its seat back at once: see below.)
+    if (who) {
+      const holder = this.connsOf(m.player).map((c) => this.conns.get(c)!).find((o) => o.device && o.device !== who.device);
+      if (holder) {
+        watch();
+        if (st.hello) this.send(conn, { t: 'seatElsewhere', device: holder.info ?? PLAIN_DEVICE });
+        return;
+      }
     }
     // only the host's hello (it carries the table's settings) creates the table; a friend who connects
     // first must not create it with default settings and become the host
@@ -340,7 +354,7 @@ export class TableRoom {
     this.goingOffline.delete(m.player); // back before anyone noticed
     // mark the player back before this connection counts as listening, so its first message is the welcome
     if (!e.player(m.player)!.connected) this.apply({ t: 'presence', pid: m.player, connected: true, now });
-    st.hello = true; st.pid = m.player; if (who) st.device = who.device;
+    st.hello = true; st.pid = m.player;
     this.trackEmpty();
     this.welcome(conn, m.player, m.lastSeq);
     if (this.opt.offline) this.sendCheckpoint(conn);
@@ -348,7 +362,34 @@ export class TableRoom {
     this.reschedule();
   }
 
-  private handle(pid: PlayerId, m: Exclude<ClientMessage, { t: 'hello' | 'ping' | 'react' | 'seed' | 'bg' }>, now: number): string | null {
+  /**
+   * "Move seat here": a device watching as a player whose seat is played on another of their devices takes the
+   * seat. The other device becomes a watcher at once (it is told, and sent the watcher's view), so the seat is
+   * never played from two devices; anything the other device sends after this is refused as a watcher's.
+   */
+  private moveSeat(conn: Conn, st: ConnState): void {
+    const pid = st.account;
+    const e = this.engine;
+    if (!pid || !e || !e.player(pid) || e.player(pid)!.leaving) return this.send(conn, { t: 'error', code: 'bad_message', message: 'There is no seat of yours at this table' });
+    if (st.pid === pid) return; // already here (a resend)
+    const now = this.clock.now();
+    for (const old of this.connsOf(pid)) {
+      const o = this.conns.get(old)!;
+      o.pid = null; o.spectator = true;
+      this.send(old, { t: 'seatMoved', device: st.info ?? PLAIN_DEVICE });
+      this.welcome(old, null, this.seq);
+    }
+    st.pid = pid; st.spectator = false;
+    this.goingOffline.delete(pid);
+    if (!e.player(pid)!.connected) this.apply({ t: 'presence', pid, connected: true, now });
+    this.trackEmpty();
+    this.welcome(conn, pid, this.seq);
+    if (this.opt.offline) this.sendCheckpoint(conn);
+    this.tryDeal(now);
+    this.reschedule();
+  }
+
+  private handle(pid: PlayerId, m: Exclude<ClientMessage, { t: 'hello' | 'ping' | 'react' | 'seed' | 'bg' | 'moveSeat' }>, now: number): string | null {
     const e = this.engine!;
     const handNo = 'handNo' in m ? m.handNo : null;
     if (handNo !== null && (e.s.phase !== 'hand' || e.s.handNo !== handNo) && m.t !== 'show') return 'That hand is over';
@@ -783,8 +824,11 @@ export class TableRoom {
    * After a restore, connections that survived (a Durable Object waking from hibernation keeps its
    * sockets) are handed back with the seat they had said hello for.
    */
-  adopt(conn: Conn, pid: PlayerId | null): void {
-    this.conns.set(conn, { pid, hello: true, spectator: pid === null, windowStart: this.clock.now(), count: 0, lastReact: 0, lastSeen: this.clock.now() });
+  adopt(conn: Conn, pid: PlayerId | null, more: Omit<ConnInfo, 'pid' | 'hello'> = {}): void {
+    this.conns.set(conn, {
+      pid, hello: true, spectator: pid === null, windowStart: this.clock.now(), count: 0, lastReact: 0, lastSeen: this.clock.now(),
+      ...(more.device ? { device: more.device } : {}), ...(more.account ? { account: more.account } : {}), ...(more.info ? { info: more.info } : {}),
+    });
   }
 
   /** Call once after a restore (and any adopt calls): players with no connection are shown as gone. */
@@ -798,9 +842,10 @@ export class TableRoom {
   }
 
   /** What a connection said hello as (kept by servers that may sleep, like a Durable Object). */
-  connInfo(conn: Conn): { pid: PlayerId | null; hello: boolean } | null {
+  connInfo(conn: Conn): ConnInfo | null {
     const st = this.conns.get(conn);
-    return st ? { pid: st.pid, hello: st.hello } : null;
+    if (!st) return null;
+    return { pid: st.pid, hello: st.hello, ...(st.device ? { device: st.device } : {}), ...(st.account ? { account: st.account } : {}), ...(st.info ? { info: st.info } : {}) };
   }
 
   /** Numbers for /health and tests. */
@@ -813,6 +858,13 @@ export class TableRoom {
   /** Has this connection introduced itself? (Servers close connections that never do.) */
   hasSaidHello(conn: Conn): boolean { return !!this.conns.get(conn)?.hello; }
 }
+
+/** A device we know nothing more about (offline claims, older tickets). */
+const PLAIN_DEVICE: DeviceInfo = { kind: 'phone', name: null };
+const deviceInfo = (who: Identity): DeviceInfo => ({
+  kind: who.deviceKind === 'laptop' || who.deviceKind === 'tablet' ? who.deviceKind : 'phone',
+  name: who.deviceName ? who.deviceName.slice(0, 30) : null,
+});
 
 function newGameId(): string {
   const b = new Uint8Array(16);

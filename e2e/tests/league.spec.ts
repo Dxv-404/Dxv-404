@@ -58,7 +58,7 @@ test('My games, results, replay, league views, and an admin voids a game', async
     const page = ph.page;
     await page.goto('/');
     await page.getByTestId('open-profile').click();
-    await expect(page.getByTestId('name')).toHaveValue('Devika');
+    await expect(page.getByTestId('profile-name')).toHaveText('Devika');
 
     // My games -> the game -> results
     await page.getByTestId('my-games').click();

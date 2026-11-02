@@ -1,0 +1,187 @@
+/* v3 devices: your account on every device (tools/design/gen/v3devices.py, rendered <theme>-devices.dc.html).
+   Built only from the theme's tokens, so it looks native in all nine themes. Motion follows the theme's feel:
+   --dv-k (speed) and --dv-ease are set on each devices screen; [data-motion=calm] drops the flourishes and
+   [data-motion=off] (also the phone's Reduce motion) shows every end state at once. */
+
+/* ---------- kit pieces the design adds ---------- */
+.tp .dv-klbl{font:800 10.5px var(--ui);letter-spacing:.2em;text-transform:uppercase;color:var(--mut)}
+.tp .dv-pnl{border-radius:var(--r-panel,16px);background:linear-gradient(var(--panel,var(--chipbg)),var(--panel,var(--chipbg))),var(--bg);box-shadow:var(--panelsh,inset 0 0 0 1px var(--line));padding:15px;display:grid;gap:11px;position:relative}
+.tp .dv-ttl{font:var(--dspw,700) 17px var(--dsp);margin:0;color:var(--tx)}
+.tp .dv-hrow{display:flex;align-items:center;gap:10px}
+.tp .dv-sp{flex:1}
+.tp .dv-chipt{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 9px;border-radius:99px;font:800 10.5px var(--ui);letter-spacing:.05em;background:var(--chipbg);box-shadow:inset 0 0 0 1px var(--line);color:var(--tx);white-space:nowrap}
+.tp .dv-chipt.o{box-shadow:inset 0 0 0 1.5px var(--acc);color:var(--acc);background:transparent}
+.tp .dv-row{display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:var(--r-btn,12px);background:linear-gradient(var(--chipbg),var(--chipbg)),var(--bg);box-shadow:inset 0 0 0 1px var(--line);min-height:50px;color:var(--tx);border:0;width:100%;text-align:left;font:inherit}
+button.dv-row{cursor:pointer}
+.tp .dv-row.on{box-shadow:inset 0 0 0 1.5px var(--acc)}
+.tp .dv-row .txt{flex:1;display:grid;gap:2px;min-width:0}
+.tp .dv-row .txt b{font:700 14px/1.25 var(--ui);overflow-wrap:anywhere}
+.tp .dv-row .txt small{font-size:11.5px;line-height:1.35;color:var(--mut);overflow-wrap:anywhere}
+.tp .dv-row .go{color:var(--mut);font-size:20px;line-height:1}
+.tp .dv-row .mm{width:44px;height:44px;margin:-8px -8px -8px 0;display:grid;place-items:center;border:0;background:none;color:var(--mut);border-radius:var(--r-btn,12px);cursor:pointer;flex:none}
+.tp .dv-row .mm svg{width:20px;height:20px}
+.tp .dv-ico{display:grid;place-items:center;width:40px;height:40px;border-radius:var(--r-btn,12px);background:var(--chipbg);box-shadow:inset 0 0 0 1px var(--line);color:var(--acc);flex:none}
+.tp .dv-ico svg{width:22px;height:22px}
+.tp .dv-ic{display:inline-grid;width:18px;height:18px;flex:none}.tp .dv-ic svg{width:100%;height:100%}
+.tp.app .btn.dv-hz{flex-direction:row;gap:8px}
+.tp .dv-link{background:none;border:0;padding:10px 4px;min-height:44px;font:700 13px var(--ui);color:var(--acc);cursor:pointer}
+.tp .dv-link.mut{color:var(--mut)}
+.tp .dv-hint{font:500 12px/1.45 var(--ui);color:var(--mut);text-align:center;margin:0}
+.tp .dv-errm{margin:0;font:500 12.5px/1.45 var(--ui);color:var(--red,#e0524a)}
+
+/* ---------- screens ---------- */
+.tp.app .screen.dv{gap:14px}
+.tp.app .dv .page-head .dv-ht{display:grid;gap:1px;min-width:0;flex:1}
+.tp.app .dv .page-head .dv-ht h1{font-size:23px;line-height:1.1;white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+.tp.app.th-pixel .dv .page-head .dv-ht h1{font-size:19px;line-height:1.25}
+.tp.app .dv .page-head .dv-ht small{font:500 12px/1.35 var(--ui);color:var(--mut)}
+.tp .dv-pcard{display:grid;justify-items:center;gap:4px;text-align:center}
+.tp .dv-pcard>b{font:var(--dspw,700) 22px var(--dsp);color:var(--tx)}
+.tp .dv-pcard .av{display:inline-block;width:var(--av);height:var(--av)}
+.tp .dv-pcard .dv-link{padding:4px 8px;min-height:44px;font-size:12.5px}
+.tp.app .dv .icon-btn,.tp.app .screen.profile .icon-btn{width:44px;height:44px}
+.tp .dv-pcard .mut{color:var(--mut);font-size:12.5px}
+
+/* the one-time code: six digits inside a ring that drains over 5 minutes */
+.tp .dv-seg{margin:0 30px}
+.tp.app .dv .seg button{min-height:44px}
+.tp .dv-codebox{display:grid;place-items:center;padding:6px 0}
+.tp .dv-ring{--p:1;width:var(--rs,230px);height:var(--rs,230px);border-radius:50%;background:conic-gradient(var(--ring,var(--acc)) calc(var(--p) * 360deg),color-mix(in srgb,var(--tx) 12%,transparent) 0);display:grid;place-items:center;position:relative;flex:none}
+.tp .dv-ring::before{content:"";position:absolute;inset:6px;border-radius:50%;background:var(--bg)}
+.tp .dv-ring>*{position:relative}
+.tp .dv-ring.late{--ring:var(--red,#e0524a)}
+.tp .dv-ring.small{--rs:44px}.tp .dv-ring.small::before{inset:5px}
+.tp .dv-rin{display:grid;justify-items:center;gap:6px}
+.tp .dv-left{font:600 12.5px var(--ui);color:var(--mut)}
+.tp .dv-left.late{color:var(--red,#e0524a)}
+.tp .dv-digits{display:flex;gap:6px;justify-content:center;perspective:400px}
+.tp .dv-digits span{width:42px;height:58px;border-radius:var(--r-btn,10px);display:grid;place-items:center;font:var(--numw,700) 30px var(--num);color:var(--tx);background:var(--chipbg);box-shadow:inset 0 0 0 1px var(--line);animation:dv-dig calc(.5s * var(--dv-k,1)) var(--dv-ease,cubic-bezier(.2,1.3,.4,1)) both;animation-delay:calc(var(--i,0) * 60ms)}
+.tp .dv-digits i{width:10px}
+.tp .dv-rin .dv-digits span{width:27px;height:40px;font-size:22px}.tp .dv-rin .dv-digits i{width:4px}
+.tp .dv-digits.big2 span{width:52px;height:68px;font-size:36px}
+.tp .dv-digits.gone span{opacity:.35}
+@keyframes dv-dig{from{transform:rotateX(90deg);opacity:0}}
+.tp .dv-stp{display:flex;gap:10px;align-items:center;font:500 13px/1.35 var(--ui);color:var(--tx)}
+.tp .dv-stp i{font-style:normal;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;flex:none;background:var(--acc);color:var(--acctx);font:800 11.5px var(--num)}
+.tp .dv-actions{display:flex;justify-content:center;gap:18px}
+.tp.app .dv .dv-foot,.tp .dv-foot{margin-top:auto}
+.tp.app .profile-body{display:flex;flex-direction:column;gap:14px}
+.tp.app .profile-body>div:empty{display:none}
+.tp.app .profile-body>div:has(>section){display:grid;gap:14px}
+.tp.app .block.dv-alert .two .btn{font-size:14px;line-height:1.15}
+
+/* QR with a scan line */
+.tp .dv-qr{position:relative;justify-self:center;align-self:center;padding:10px;border-radius:16px;background:#fff;box-shadow:0 0 0 1px var(--line),0 14px 30px rgba(0,0,0,.3);overflow:hidden;line-height:0}
+.tp .dv-qr svg{display:block;width:var(--qs,232px);height:var(--qs,232px)}
+.tp .dv-scanl{position:absolute;left:0;right:0;top:8%;height:3px;background:var(--acc);box-shadow:0 0 12px var(--acc);animation:dv-scan calc(2.4s * var(--dv-k,1)) ease-in-out infinite;z-index:2}
+@keyframes dv-scan{0%,100%{top:8%}50%{top:90%}}
+
+/* typing the code: six boxes (the table and crew codes' boxes) and a number pad */
+.tp .dv-kslots{display:flex;gap:7px}
+.tp .dv-kslots input{flex:1;min-width:0;width:100%;height:54px;min-height:0;padding:0;border-radius:var(--r-btn,12px);text-align:center;font:var(--numw,700) 26px var(--num);background:var(--bg);box-shadow:inset 0 0 0 1.5px var(--line);color:var(--tx);caret-color:var(--acc);border:0;outline:none}
+.tp .dv-kslots input.f{box-shadow:inset 0 0 0 1.5px var(--acc)}
+.tp .dv-kslots input:focus{box-shadow:inset 0 0 0 2px var(--acc)}
+.tp .dv-kslots .dash{flex:0 0 10px;display:grid;place-items:center;color:var(--mut);font:600 20px var(--num)}
+.tp .dv-kslots.err input{box-shadow:inset 0 0 0 1.5px var(--red,#e0524a);color:var(--tx)}
+.tp .dv-kslots.shake input{animation:dv-shake calc(.42s * var(--dv-k,1)) both}
+@keyframes dv-shake{20%{transform:translateX(-6px)}40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}
+.tp .dv-pad{margin:auto -18px calc(-24px - env(safe-area-inset-bottom)) ;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:10px 12px calc(26px + env(safe-area-inset-bottom));background:color-mix(in srgb,var(--tx) 6%,var(--bg))}
+.tp .dv-pad button{height:46px;display:grid;place-items:center;border-radius:var(--r-btn,10px);font:var(--numw,600) 22px var(--num);background:var(--chipbg);color:var(--tx);border:0;cursor:pointer;touch-action:manipulation}
+.tp .dv-pad button:active{transform:scale(.96)}
+.tp .dv-pad span{height:46px}
+.tp .dv-pad svg{width:24px;height:24px}
+/* pixel: the keys are its blocky buttons (its chip colour is close to the pad's, so they need the edge) */
+.tp.th-pixel .dv-pad button{border-radius:0;box-shadow:inset 0 0 0 2px var(--line),inset -3px -3px 0 rgba(0,0,0,.35)}
+.tp.th-pixel .dv-pad button:active{box-shadow:inset 0 0 0 2px var(--acc),inset 3px 3px 0 rgba(0,0,0,.35);transform:none}
+/* the kit's toast at the top (toast(..., { top: true })): where the design puts it */
+#toast.top{top:calc(18px + env(safe-area-inset-top));bottom:auto;transform:translate(-50%,-16px)}
+#toast.top.show{transform:translate(-50%,0)}
+
+/* the device that joins: two devices and travelling dots */
+.tp .dv-linkart{display:flex;align-items:center;justify-content:center;gap:10px;padding:8px 0}
+.tp .dv-linkart>span:not(.dv-wire){width:58px;height:58px;display:grid;place-items:center;border-radius:16px;background:var(--chipbg);box-shadow:inset 0 0 0 1px var(--line);color:var(--acc)}
+.tp .dv-linkart svg{width:32px;height:32px}
+.tp .dv-wire{display:flex;gap:7px}
+.tp .dv-wire i{width:9px;height:9px;border-radius:50%;background:var(--acc);animation:dv-wire calc(1.2s * var(--dv-k,1)) ease-in-out infinite}
+.tp .dv-wire i:nth-child(2){animation-delay:.2s}.tp .dv-wire i:nth-child(3){animation-delay:.4s}
+@keyframes dv-wire{0%,100%{opacity:.2;transform:scale(.7)}50%{opacity:1;transform:none}}
+.tp .dv-linkart .d2{animation:dv-land calc(.8s * var(--dv-k,1)) var(--dv-ease,cubic-bezier(.2,1.3,.4,1)) both}
+@keyframes dv-land{from{transform:translateX(-40px);opacity:0}}
+.tp .dv-three{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tp .dv-stat{display:grid;gap:2px;padding:10px 8px;border-radius:var(--r-btn,12px);background:linear-gradient(var(--chipbg),var(--chipbg)),var(--bg);box-shadow:inset 0 0 0 1px var(--line);text-align:center}
+.tp .dv-stat b{font:var(--numw,700) 19px var(--num);color:var(--tx)}.tp .dv-stat small{font-size:10.5px;color:var(--mut)}
+
+/* a crew this device has of its own (Bring them over / Leave them behind) */
+.tp .dv-emb{position:relative;width:36px;height:36px;display:inline-grid;place-items:center;flex:none;filter:drop-shadow(0 3px 6px rgba(0,0,0,.3))}
+.tp .dv-emb svg{position:absolute;inset:0;width:100%;height:100%}
+.tp .dv-emb b{position:relative;font:var(--dspw,800) 12px var(--dsp);color:#fff}
+.tp .dv-merge{display:grid;gap:12px}
+.tp .dv-merge h2{font:var(--dspw,700) 20px var(--dsp)}
+.tp .dv-merge p{margin:0;font-size:13px;line-height:1.5;color:var(--mut)}
+
+/* ---------- laptops: a dialog over the theme's background ---------- */
+.tp .dv-dim{position:fixed;inset:0;z-index:900;background:rgba(0,0,0,.5);backdrop-filter:blur(2px);display:grid;place-items:center;padding:20px;animation:dv-fade .3s both}
+@keyframes dv-fade{from{opacity:0}}
+.tp .dv-dlg{width:min(760px,100%);max-height:calc(100dvh - 40px);overflow:auto;padding:30px;border-radius:var(--r-panel,20px);background:var(--bg);color:var(--tx);box-shadow:var(--panelsh,inset 0 0 0 1px var(--line)),0 30px 80px rgba(0,0,0,.6);display:grid;gap:18px;animation:dv-pop calc(.4s * var(--dv-k,1)) var(--dv-ease,cubic-bezier(.2,.9,.3,1.1)) both}
+.tp .dv-dlg.narrow{width:min(560px,100%)}
+@keyframes dv-pop{from{transform:translateY(3%) scale(.96);opacity:0}}
+.tp .dv-dlg .lt{font:var(--dspw,700) 28px var(--dsp);margin:0}
+.tp.app .dv-dim .dv-dlg button.ib{width:44px;height:44px;min-width:44px;min-height:44px;box-sizing:border-box}
+.tp .dv-lgrid{display:grid;grid-template-columns:auto 1fr;gap:30px;align-items:center}
+.tp .dv-lside{display:grid;gap:12px;justify-items:start}
+.tp .dv-dlg .dv-kslots{gap:10px}
+.tp .dv-dlg .dv-kslots input{height:64px;font-size:30px}
+.tp .dv-dlg p.mut{margin:0;font:500 14px/1.45 var(--ui);color:var(--mut)}
+.tp .dv-dlg .dv-hint{text-align:left}
+.tp .dv-two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+/* the camera, for scanning a QR */
+.tp .dv-cam{position:relative;border-radius:var(--r-panel,16px);overflow:hidden;background:#000;aspect-ratio:4/3;box-shadow:inset 0 0 0 1px var(--line)}
+.tp .dv-cam video{width:100%;height:100%;object-fit:cover;display:block}
+.tp .dv-cam::after{content:"";position:absolute;inset:18%;border-radius:12px;box-shadow:0 0 0 2px var(--acc),0 0 0 999px rgba(0,0,0,.35)}
+
+/* ---------- a sign-in on another device (shown on this one) ---------- */
+.tp .dv-notice{position:fixed;left:50%;top:calc(12px + env(safe-area-inset-top));transform:translateX(-50%);z-index:930;width:min(420px,calc(100% - 24px));display:grid;gap:10px;padding:14px;border-radius:var(--r-panel,16px);background:linear-gradient(var(--panel,var(--chipbg)),var(--panel,var(--chipbg))),var(--bg);color:var(--tx);box-shadow:var(--panelsh,inset 0 0 0 1px var(--line)),inset 0 0 0 1.5px var(--acc),0 18px 40px rgba(0,0,0,.45);animation:dv-drop calc(.45s * var(--dv-k,1)) var(--dv-ease,ease) both}
+@keyframes dv-drop{from{transform:translate(-50%,-30px);opacity:0}}
+.tp .dv-notice p{margin:0;font:500 13px/1.45 var(--ui);color:var(--mut)}
+.tp .dv-notice b{font:var(--dspw,700) 16px var(--dsp);color:var(--tx)}
+.tp .dv-notice .dv-two .btn{min-height:44px;font-size:14px}
+.tp.app .block.dv-alert{box-shadow:inset 0 0 0 1.5px var(--acc)}
+
+/* ---------- a question with a title and an icon (the kit's ask(): "You're playing on your laptop") ---------- */
+.tp .ask-head{display:flex;align-items:center;gap:10px}
+.tp .ask-ic{display:grid;place-items:center;width:40px;height:40px;border-radius:var(--r-btn,12px);background:var(--chipbg);box-shadow:inset 0 0 0 1px var(--line);color:var(--acc);flex:none}
+.tp .ask-ic svg{width:22px;height:22px}
+.tp .ask-t .ask-q{font:var(--dspw,700) 18px/1.2 var(--dsp)}
+.tp .ask-d{display:block;color:var(--mut);font:500 12.5px/1.45 var(--ui)}
+
+/* ---------- motion settings ---------- */
+.tp [data-motion=calm] .dv-digits span,.tp[data-motion=calm] .dv-digits span{animation-name:dv-fade}
+.tp [data-motion=calm] .dv-wire i,.tp [data-motion=calm] .dv-linkart .d2,.tp [data-motion=calm] .dv-scanl{animation:none}
+.tp [data-motion=calm] .dv-wire i{opacity:.7}
+.tp [data-motion=calm] .dv-scanl{top:50%}
+.tp [data-motion=off] *,.tp [data-motion=off]{animation:none!important;transition:none!important}
+.tp [data-motion=off] .dv-scanl{top:50%}
+@media (prefers-reduced-motion:reduce){.tp .dv-digits span,.tp .dv-wire i,.tp .dv-linkart .d2,.tp .dv-scanl,.tp .dv-kslots.shake input,.tp .dv-dlg,.tp .dv-dim,.tp .dv-notice{animation:none!important}}
+
+/* ---------- small and short screens ---------- */
+@media (max-width:370px){
+  .tp .dv-ring{--rs:206px}
+  .tp .dv-rin .dv-digits span{width:24px;height:36px;font-size:20px}
+  .tp .dv-kslots{gap:5px}
+  .tp .dv-kslots input{height:48px;font-size:22px}
+  .tp .dv-seg{margin:0 12px}
+}
+@media (max-height:700px){
+  .tp .dv-ring{--rs:190px}
+  .tp .dv-pad button,.tp .dv-pad span{height:44px}
+  .tp .dv-pad{gap:5px;padding-top:8px}
+  .tp .dv-qr svg{--qs:190px}
+}
+@media (max-width:700px){
+  .tp .dv-lgrid{grid-template-columns:1fr;justify-items:center}
+}
+
+/* one seat per player: the watching bar sits under the table's top bar, never over its title */
+.tp .tp-watching[data-testid=watching-elsewhere]{top:calc(60px + env(safe-area-inset-top));width:max-content;max-width:calc(100% - 24px);font:600 13px/1.3 var(--ui);gap:10px}
+.tp .tp-watching[data-testid=watching-elsewhere] .btn{width:auto;min-height:44px;flex:none;font-size:13px}

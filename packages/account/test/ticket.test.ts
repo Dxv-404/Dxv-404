@@ -14,6 +14,12 @@ describe('table tickets', () => {
     expect(await checkTicket('tok', 'QK7P', { fetch: f })).toEqual(info);
     expect(calls[0]).toEqual(['https://yghyartpurzwogtldzii.supabase.co/rest/v1/rpc/check_ticket', { p_token: 'tok', p_table: 'QK7P' }]);
   });
+  it('a table server can point the checker at another accounts database (local tests)', async () => {
+    const { f, calls } = fakeFetch({ ...info, deviceKind: 'laptop', deviceName: 'Work Mac' });
+    const check = cachedTicketChecker({ fetch: f, url: 'http://127.0.0.1:5999' });
+    expect(await check('tok', 'QK7P')).toMatchObject({ deviceKind: 'laptop', deviceName: 'Work Mac' });
+    expect(calls[0]).toEqual(['http://127.0.0.1:5999/rest/v1/rpc/check_ticket', { p_token: 'tok', p_table: 'QK7P' }]);
+  });
   it('a failed request throws', async () => {
     await expect(checkTicket('tok', 'QK7P', { fetch: fakeFetch(null, 500).f })).rejects.toThrow('500');
   });

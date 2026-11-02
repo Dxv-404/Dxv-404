@@ -26,7 +26,10 @@ export class Scanner {
     this.detector = null;
   }
 
-  async start(onCode) {
+  // accept: which scanned texts are ours (device codes pass their own test here; otherwise the constructor's)
+  /** @param {(code: string) => void} onCode @param {((t: string) => boolean) | null} [accept] */
+  async start(onCode, accept = null) {
+    if (accept) this.accept = accept;
     this.onCode = onCode;
     window.__tpScanner = this; // lets automated tests feed a code (even while the camera is still starting)
     this.stream = await navigator.mediaDevices.getUserMedia({
