@@ -33,7 +33,21 @@ const axe = async (p: Phone, what: string) => {
   expect(r.violations.map((v) => `${what}: ${v.id} (${v.nodes.length}) ${v.help}`)).toEqual([]);
 };
 
-test('first open goes straight to the menu; settings, privacy and Report a problem', async ({ browser, baseURL }) => {
+test('the first open shows the theme\'s loading screen once (tap skips it), then the menu', async ({ browser, baseURL }) => {
+  const ctx = await browser.newContext({ baseURL: baseURL!, storageState: { cookies: [], origins: [] } });
+  const page = await ctx.newPage();
+  await page.goto('/');
+  await expect(page.locator('.ldwrap')).toBeVisible();
+  await expect(page.locator('.ldwrap .logo')).toBeVisible();
+  await page.locator('.ldwrap').click();
+  await expect(page.getByTestId('play-online')).toBeVisible();
+  await page.reload();
+  await expect(page.getByTestId('play-online')).toBeVisible();
+  await expect(page.locator('.ldwrap')).toHaveCount(0);
+  await ctx.close();
+});
+
+test('the menu goes straight in after the first open; settings, privacy and Report a problem', async ({ browser, baseURL }) => {
   const p = await newPhone(browser, 'Fresh', MODELS.pixel7, baseURL!);
   await expect(p.page.getByTestId('play-online')).toBeVisible(); // straight to the menu (no age check: a group of friends)
   await axe(p, 'home');
@@ -44,7 +58,7 @@ test('first open goes straight to the menu; settings, privacy and Report a probl
   await p.page.getByTestId('set-largeText').check();
   const prefs = await p.page.evaluate(() => JSON.parse(localStorage.getItem('tp-prefs') ?? '{}') as Record<string, unknown>);
   expect(prefs).toMatchObject({ motion: 'off', largeText: true });
-  await p.page.locator('.theme-pick[data-theme=noir]').click();
+  await p.page.locator('.pk-themes [data-theme=noir]').first().click();
   expect(await p.page.evaluate(() => localStorage.getItem('tp-theme'))).toBe('noir');
   // privacy
   await p.page.getByTestId('open-privacy').click();

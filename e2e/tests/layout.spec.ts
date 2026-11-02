@@ -18,6 +18,7 @@ for (const m of SIZES) {
       await p.getByRole('button', { name: 'Open the table' }).click();
       // stand-in guests: mark seats connected so the host can deal without pairing phones
       await p.evaluate(() => { const h = (window as any).__tp.host; h.e.s.players.forEach((x: any) => (x.connected = true)); h.push([{ t: 'seat' }]); });
+      await p.evaluate(() => localStorage.setItem('tp-intro-done', '1'));
       await p.getByRole('button', { name: 'Start the game' }).click();
       await p.waitForTimeout(3000);
       // the QR mode plays on the same designed table as online and offline tables

@@ -52,7 +52,7 @@ export async function newPhone(browser: Browser, name: string, model: PhoneModel
     permissions: ['camera'],
   });
   // the first-open 18+ notice is tested on its own (more.spec.ts); every other phone has seen it
-  await ctx.addInitScript(() => { try { if (!sessionStorage.getItem('tp-test-fresh') && !localStorage.getItem('tp-18')) localStorage.setItem('tp-18', '1'); } catch { /* blocked */ } });
+  await ctx.addInitScript(() => { try { if (!sessionStorage.getItem('tp-test-fresh') && !localStorage.getItem('tp-loaded')) localStorage.setItem('tp-loaded', '1'); } catch { /* blocked */ } });
   const page = await ctx.newPage();
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(`[${name}] page error: ${e.message}`));
@@ -144,6 +144,8 @@ export async function chipTotal(host: Phone): Promise<number> {
  *  Busted players rebuy and the host deals the next hand, as real players would. */
 export async function playOneAction(phones: Phone[], rnd: () => number): Promise<boolean> {
   const seen = async (l: ReturnType<Page['locator']>) => (await l.count()) > 0 && (await l.first().isVisible().catch(() => false));
+  // first time at a table: read the three tips, as a player would
+  for (const ph of phones) for (let i = 0; i < 3 && (await seen(ph.page.locator('.tp-intro [data-i]'))); i++) await ph.page.locator('.tp-intro [data-i]').click({ timeout: 3000 }).catch(() => {});
   for (const ph of phones) {
     const rebuy = ph.page.locator('.tp.live [data-act=rebuy]');
     if (await seen(rebuy)) await rebuy.first().click({ timeout: 3000 }).catch(() => {});

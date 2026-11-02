@@ -6,6 +6,7 @@ import { renderTable, sprite, fmt, THEME_KEYS, THEMES, type ThemeKey, type Frame
 import { sfx, buzz, settings } from '../legacy/fx.js';
 import { ask } from '../legacy/ui.js';
 import { Motion, type MotionLevel } from './motion';
+import { presenceCss, bannerHtml, pauseHtml, backHtml, tickClock } from './presence';
 import { playTier, winValues, bustValues, tierFor, categoryOf, type Playing } from './tiers';
 
 export interface TableLike {
@@ -276,15 +277,55 @@ export class TableScreen {
   }
 
   // ---------------- presence ----------------
+  // the signed-off states (presence.ts): reconnecting banner, the host phone gone, and welcome back
+  private lostAt: number | null = null;
+  private lostHand = 0;
+  private presenceTimer: ReturnType<typeof setInterval> | null = null;
   private presence(): void {
     const v = this.view;
-    let msg: string | null = null;
-    if (this.net === 'lost') msg = 'Reconnecting… Your seat and chips are held.';
-    else if (v?.me && v.players.find((p) => p.id === v.me)?.sittingOut && v.phase !== 'ended') msg = 'You are sitting out. Tap Sit back in when you are ready.';
-    let el = this.overlay.querySelector('.tp-presence') as HTMLElement | null;
-    if (!msg) { el?.remove(); return; }
-    if (!el) { el = document.createElement('div'); el.className = 'tp-presence'; el.setAttribute('role', 'status'); this.overlay.append(el); }
-    el.textContent = msg;
+    const k = currentTheme();
+    presenceCss(k);
+    const old = this.overlay.querySelectorAll('.tp-presence');
+    const lost = this.net === 'lost';
+    if (lost && this.lostAt === null) { this.lostAt = Date.now(); this.lostHand = v?.handNo ?? 0; this.overlay.querySelector('.pz-toast')?.remove(); this.overlay.querySelector('.pz-dim')?.remove(); }
+    if (!lost && this.lostAt !== null) {
+      const gone = Date.now() - this.lostAt;
+      const me = v?.players.find((p) => p.id === v.me);
+      this.lostAt = null;
+      if (gone > 4000 && me && v && v.phase !== 'ended') this.welcomeBack(k, { name: me.name, missed: Math.max(0, v.handNo - this.lostHand), stack: me.stack, sittingOut: !!me.sittingOut });
+    }
+    if (this.lostAt !== null) {
+      const since = this.lostAt;
+      // an offline table whose host phone is gone pauses; anything else shows the reconnecting banner
+      const html = this.o.offline && Date.now() - since > 5000 ? pauseHtml(k, since) : bannerHtml(k, since);
+      const kind = html.includes('pz-pause') ? 'pause' : 'banner';
+      if (!old.length || (old[0] as HTMLElement).dataset.kind !== kind) {
+        old.forEach((e) => e.remove());
+        this.overlay.insertAdjacentHTML('beforeend', html);
+        (this.overlay.lastElementChild as HTMLElement).dataset.kind = kind;
+      }
+      if (!this.presenceTimer) this.presenceTimer = setInterval(() => { if (this.lostAt === null) return; tickClock(this.overlay, this.lostAt); if (this.o.offline && Date.now() - this.lostAt > 5000 && !this.overlay.querySelector('.pz-pause')) this.presence(); }, 1000);
+      return;
+    }
+    if (this.presenceTimer) { clearInterval(this.presenceTimer); this.presenceTimer = null; }
+    old.forEach((e) => e.remove());
+    if (v?.me && v.players.find((p) => p.id === v.me)?.sittingOut && v.phase !== 'ended' && !this.overlay.querySelector('.pz-toast')) {
+      this.overlay.insertAdjacentHTML('beforeend', '<div class="tp-presence sit pz-pnl" role="status">You are sitting out. Tap Sit back in when you are ready.</div>');
+    }
+  }
+  private welcomeBack(k: ThemeKey, o: { name: string; missed: number; stack: number; sittingOut: boolean }): void {
+    this.overlay.querySelector('.pz-toast')?.remove(); this.overlay.querySelector('.pz-dim')?.remove();
+    this.overlay.insertAdjacentHTML('beforeend', backHtml(k, o));
+    const close = (): void => { this.overlay.querySelector('.pz-toast')?.remove(); this.overlay.querySelector('.pz-dim')?.remove(); this.presence(); };
+    for (const b of this.overlay.querySelectorAll('[data-pz=in],[data-pz=out],[data-pz=close]')) {
+      b.addEventListener('click', () => {
+        const what = (b as HTMLElement).dataset.pz;
+        if (what === 'in' && o.sittingOut) this.t.sitOut(false);
+        if (what === 'out') this.t.sitOut(true);
+        close();
+      });
+    }
+    (this.overlay.querySelector('[data-pz=in]') as HTMLElement | null)?.focus();
   }
 
   // ---------------- first time ----------------
@@ -313,6 +354,7 @@ export class TableScreen {
 
   destroy(): void {
     this.fxGen++; this.playing?.stop();
+    if (this.presenceTimer) clearInterval(this.presenceTimer);
     clearInterval(this.tick);
     this.motion.reset();
     if (this.bubbleTimer) clearTimeout(this.bubbleTimer);
