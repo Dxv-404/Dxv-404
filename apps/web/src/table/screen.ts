@@ -2,10 +2,12 @@
 // into actions. Used for online tables and offline (host app) tables alike.
 import type { Action, GameEvent } from '@tp/engine';
 import type { ScreenView } from '../net-table';
-import { renderTable, sprite, fmt, THEME_KEYS, THEMES, type ThemeKey, type Frame } from './render';
+import { renderTable, sprite, fmt, winnerCardHtml, THEME_KEYS, THEMES, type ThemeKey, type Frame } from './render';
 import { sfx, buzz, settings } from '../legacy/fx.js';
 import { ask } from '../legacy/ui.js';
-import { Motion, type MotionLevel } from './motion';
+import { FEEL, Motion, type MotionLevel } from './motion';
+import { chances, summarize, type ResStage, type Summary } from './results';
+import { RUNOUT_FIRST_MS, RUNOUT_STREET_MS, resultsPauseMs, runoutStreets } from '@tp/table';
 import { presenceCss, bannerHtml, pauseHtml, backHtml, tickClock } from './presence';
 import { playTier, winValues, bustValues, tierFor, categoryOf, type Playing } from './tiers';
 
@@ -57,6 +59,11 @@ export class TableScreen {
   /** the win scene on screen (it gives way when it is my turn), and a counter that cancels a queued bust-out */
   private playing: Playing | null = null;
   private fxGen = 0;
+  /** the step after a hand that is on screen (results.ts), a counter that cancels it, and what a tap does now */
+  private res: ResStage | null = null;
+  private resGen = 0;
+  private resSkip: (() => void) | null = null;
+  private barSec: number | null = null;
 
   constructor(root: HTMLElement, private t: TableLike, private o: { code: string; menu(): void; info(): void; offline?: boolean }) {
     this.root = root;
@@ -77,6 +84,9 @@ export class TableScreen {
     this.off.push(() => { window.removeEventListener('resize', onResize); window.removeEventListener('tp-theme', onTheme); });
     // hold to look; buttons
     const down = (e: Event) => {
+      // tap anywhere after a hand: on to the next step (the scene and the winner card handle their own taps)
+      const t = e.target as HTMLElement;
+      if (this.res?.skip && !t.closest('[data-act], .tpw-wrap, .tp-wcard, .tp-raise, .tp-intro, .pz-toast')) { this.skipStep(); return; }
       const el = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null;
       if (el?.dataset.act === 'peek') { this.peek = true; this.draw(); e.preventDefault(); }
     };
@@ -90,6 +100,7 @@ export class TableScreen {
     root.addEventListener('click', click);
     const key = (e: KeyboardEvent) => {
       if (this.raiseOpen || (e.target as HTMLElement).closest('input, select, textarea')) return;
+      if (e.code === 'Space' && this.res?.skip) { this.skipStep(); e.preventDefault(); return; }
       if (e.code === 'Space') { if (!this.peek) { this.peek = true; this.draw(); } e.preventDefault(); return; }
       const k = e.key.toLowerCase();
       if (k === 'f') this.press('fold');
@@ -100,7 +111,13 @@ export class TableScreen {
     window.addEventListener('keydown', key); window.addEventListener('keyup', keyUp);
     this.off.push(() => { window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); window.removeEventListener('keydown', key); window.removeEventListener('keyup', keyUp); });
     // the turn timer counts down without a message from the server
-    this.tick = setInterval(() => { if (this.view?.hand?.toAct && this.view.turnTotal) { this.view.turnLeft = Math.max(0, this.view.turnLeft - 250); this.drawTimer(); } }, 250);
+    this.tick = setInterval(() => {
+      if (this.view?.hand?.toAct && this.view.turnTotal) { this.view.turnLeft = Math.max(0, this.view.turnLeft - 250); this.drawTimer(); }
+      // the next-hand bar counts down: the table is drawn again only when its number changes
+      const n = this.res?.next;
+      const sec = n ? Math.ceil((n.at - performance.now()) / 1000) : null;
+      if (n && sec !== this.barSec) { this.barSec = sec; this.draw(); }
+    }, 250);
     this.maybeIntro();
   }
 
@@ -128,10 +145,10 @@ export class TableScreen {
     const snap = events.length ? this.motion.before(events) : null;
     const name = (pid: string | null | undefined) => v.players.find((p) => p.id === pid)?.name ?? 'Someone';
     for (const e of events) {
-      if (e.t === 'handStart') { this.say(`Hand ${e.handNo}. Cards coming.`); sfx.card(); }
+      if (e.t === 'handStart') { this.endResults(); this.say(`Hand ${e.handNo}. Cards coming.`); sfx.card(); }
       else if (e.t === 'act') { this.say(`${name(e.pid)} ${SAY[e.a] ?? e.a}${e.a === 'raise' || e.a === 'bet' ? ` ${fmt(e.to ?? e.amount ?? 0)}` : e.a === 'call' && e.amount ? ` ${fmt(e.amount)}` : ''}.`); if (e.a !== 'fold' && e.a !== 'check') sfx.chip?.(1); }
       else if (e.t === 'street') { this.say(e.street === 'flop' ? 'The flop.' : e.street === 'turn' ? 'The turn.' : 'The river.'); sfx.card(); }
-      else if (e.t === 'win') { this.win(e, v); }
+      else if (e.t === 'win') { this.win(e, v, events); }
       else if (e.t === 'presence' && e.pid !== v.me) this.say(`${name(e.pid)} ${e.connected ? 'is back' : 'lost connection'}.`);
       else if (e.t === 'paused') this.say(e.paused ? 'Dealing is paused.' : 'Dealing again.');
       else if (e.t === 'level') this.say(`Blinds up: ${fmt(e.level.sb)} / ${fmt(e.level.bb)}.`);
@@ -139,20 +156,46 @@ export class TableScreen {
     // my turn: a buzz once per turn
     const turnKey = v.hand?.toAct === v.me && v.me ? `${v.handNo}:${v.hand?.street}:${v.hand?.currentBet}` : '';
     const myTurn = !!turnKey && turnKey !== this.lastTurnFor;
-    if (myTurn) { buzz?.([30, 40, 30]); sfx.turn?.(); this.announce('Your turn.'); this.fxGen++; this.playing?.stop(); }
+    if (myTurn) { buzz?.([30, 40, 30]); sfx.turn?.(); this.announce('Your turn.'); this.fxGen++; this.playing?.stop(); this.endResults(); }
     this.lastTurnFor = turnKey;
     if (prev?.hand?.toAct === v.me && v.hand?.toAct !== v.me) this.closeRaise();
     this.draw();
-    if (events.length || myTurn) this.motion.play(events, prev, v, snap, motionLevel(), myTurn);
+    // after a showdown the pot goes to the winner when the winner is shown (results steps), not before
+    const moves = events.filter((x) => !(x.t === 'win' && x.results.showdown));
+    if (moves.length || myTurn) this.motion.play(moves, prev, v, snap, motionLevel(), myTurn);
     this.presence();
   }
 
   private draw(): void {
     const v = this.view;
     if (!v) { this.stage.innerHTML = '<div class="tp-wait" role="status">Connecting…</div>'; return; }
+    this.stage.dataset.res = v.hand?.results ? (this.res?.step ?? 'end') : ''; // the step after a hand (for the checks)
     const W = this.root.clientWidth || window.innerWidth, H = this.root.clientHeight || window.innerHeight;
-    const frame = renderTable(v, currentTheme(), W, H, { peek: this.peek || !settings.holdToPeek, bubble: this.bubble, code: this.o.code, net: this.net });
+    const frame = renderTable(v, currentTheme(), W, H, { peek: this.peek || !settings.holdToPeek, bubble: this.bubble, code: this.o.code, net: this.net, res: v.hand?.results ? this.res : null });
     if (frame.html === this.frame?.html) return; // nothing changed on screen
+    try { this.drawParts(frame); } finally { this.drainBar(); }
+  }
+
+  /** The next-hand bar drains from where it is now to the deal (a still bar when motion is off). */
+  private drainBar(): void {
+    const i = this.stage.querySelector('.act.nxt i') as HTMLElement | null;
+    const n = this.res?.next;
+    if (!i || !n || i.dataset.on) return;
+    i.dataset.on = '1';
+    const left = Math.max(0, n.at - performance.now());
+    i.style.transform = `scaleX(${(left / n.total).toFixed(4)})`;
+    if (!reduceMotion()) i.animate([{ transform: `scaleX(${(left / n.total).toFixed(4)})` }, { transform: 'scaleX(0)' }], { duration: left, easing: 'linear', fill: 'forwards' });
+  }
+
+  /** The steps after a hand are over (a new hand, or my turn cuts in). */
+  private endResults(): void {
+    this.resGen++;
+    this.resSkip = null;
+    this.overlay.querySelector('.tp-wcard')?.remove();
+    if (this.res) { this.res = null; }
+  }
+
+  private drawParts(frame: Frame): void {
     const prev = this.frame;
     this.frame = frame;
     if (prev && prev.shell === frame.shell && this.stage.firstElementChild) {
@@ -162,9 +205,10 @@ export class TableScreen {
         const el = this.stage.querySelector(`.tpd[data-k="${k}"]`);
         if (!el) continue;
         // board cards already on the table must not play their deal-in again when the felt is redrawn
+        // (the best five's lift after a hand does play)
         const shown = k === 'felt' ? el.querySelectorAll('.board .cd').length : 0;
         el.innerHTML = html;
-        if (shown) el.querySelectorAll('.board .cd').forEach((c, i) => { if (i < shown) for (const a of c.getAnimations()) a.finish(); });
+        if (shown) el.querySelectorAll('.board .cd').forEach((c, i) => { if (i < shown) for (const a of c.getAnimations()) if ((a as CSSAnimation).animationName === 'dealIn') a.finish(); });
       }
       this.motion.reattach(); // moves on swapped elements carry on, on the new ones
       return;
@@ -203,6 +247,7 @@ export class TableScreen {
       case 'deal': return this.t.dealNow();
       case 'twice': return this.t.vote(true);
       case 'once': return this.t.vote(false);
+      case 'skip': this.skipStep(); return;
     }
   }
 
@@ -240,7 +285,58 @@ export class TableScreen {
   private closeRaise(): void { this.raiseOpen = false; this.overlay.querySelector('.tp-raise')?.remove(); }
 
   // ---------------- wins ----------------
-  private win(e: Extract<GameEvent, { t: 'win' }>, v: ScreenView): void {
+  /** The winner card sits above your hand and the buttons (phone), or low over the table (sideways, laptop). */
+  private placeWinnerCard(card: HTMLElement): void {
+    const r = this.root.getBoundingClientRect();
+    const hero = this.stage.querySelector('.tp.live .hero')?.getBoundingClientRect();
+    const arena = this.stage.querySelector('.tp.live .arena')?.getBoundingClientRect();
+    const mode = this.frame?.mode ?? 'phone';
+    const W = r.width, H = r.height;
+    const w = Math.min(mode === 'phone' ? 370 : 420, W - 20);
+    let left = (W - w) / 2, bottom: number;
+    if (mode === 'phone') bottom = hero ? Math.max(10, r.bottom - hero.top + 8) : 84;
+    else {
+      const a = arena ?? r;
+      left = Math.max(10, a.left - r.left + (a.width - w) / 2);
+      bottom = Math.max(10, r.bottom - a.bottom + 10);
+    }
+    Object.assign(card.style, { left: `${left.toFixed(0)}px`, width: `${w.toFixed(0)}px`, bottom: `${bottom.toFixed(0)}px` });
+    // never taller than the screen: a short screen (a phone held sideways) shrinks the card to fit
+    const h = card.getBoundingClientRect().height;
+    const room = H - bottom - 10;
+    if (h > room && h > 0) { card.style.transformOrigin = '50% 100%'; card.style.scale = String(Math.max(0.5, room / h).toFixed(3)); }
+  }
+
+  /** The winner card over the win scene: it rises in at 1 s and goes with the scene (a tap on it skips both). */
+  private async winnerCard(playing: Playing, v: ScreenView, sum: Summary, tier: number): Promise<void> {
+    this.playing = playing;
+    this.overlay.querySelector('.tp-wcard')?.remove();
+    this.overlay.insertAdjacentHTML('beforeend', winnerCardHtml(v, currentTheme(), sum, tier, this.frame?.mode ?? 'phone'));
+    const card = this.overlay.lastElementChild as HTMLElement;
+    const feel = FEEL[currentTheme()] ?? FEEL.classic!;
+    card.style.setProperty('--rk', String(feel.k));
+    card.style.setProperty('--re', feel.ease);
+    if (settings.motion === 'calm') card.classList.add('calm');
+    this.placeWinnerCard(card);
+    card.addEventListener('pointerdown', (ev) => { ev.preventDefault(); playing.stop(); });
+    const skip = () => playing.stop();
+    this.resSkip = skip;
+    await playing.done;
+    card.remove();
+    if (this.resSkip === skip) this.resSkip = null;
+  }
+
+  /** Tap anywhere (or Space) during the steps after a hand: on to the next step. */
+  private skipStep(): boolean {
+    if (!this.res?.skip) return false;
+    const f = this.resSkip;
+    if (!f) return false;
+    this.resSkip = null;
+    f();
+    return true;
+  }
+
+  private win(e: Extract<GameEvent, { t: 'win' }>, v: ScreenView, events: GameEvent[]): void {
     const pots = e.results.pots;
     const total = pots.reduce((a, p) => a + p.amount, 0);
     const mine = pots.flatMap((p) => p.awards).filter((a) => a.pid === v.me).reduce((s, a) => s + a.amount, 0);
@@ -248,8 +344,11 @@ export class TableScreen {
     const names = ids.map((id) => v.players.find((x) => x.id === id)?.name ?? 'Someone');
     // a split pot: everyone who won is named, the best hand shown
     const best = pots.map((p) => p.hand).filter((h) => !!h).sort((a, b) => b!.score - a!.score)[0] ?? null;
-    this.say(`${names.join(' and ')} win${names.length === 1 ? 's' : ''} ${fmt(total)}${best ? ` with ${best.desc.toLowerCase()}` : ''}.`);
-    sfx.win?.();
+    const line = `${names.join(' and ')} win${names.length === 1 ? 's' : ''} ${fmt(total)}${best ? ` with ${best.desc.toLowerCase()}` : ''}.`;
+    // everyone folded: said at once; a showdown: when the winner is shown (not while the board still runs out)
+    let said = false;
+    const announce = () => { if (said) return; said = true; this.say(line); sfx.win?.(); };
+    if (!e.results.showdown) announce();
     // the tier comes from the hand: 4 straight flush and royal, 3 full house and quads, 2 trips to flush, 1 the rest
     const cat = e.results.showdown && best ? categoryOf(best.name) : -1;
     const tier = tierFor(cat);
@@ -257,16 +356,62 @@ export class TableScreen {
     // anyone left with no chips after this hand goes out (the busted player first if it is me)
     const out = v.players.filter((p) => p.stack === 0 && !ids.includes(p.id) && !!v.hand?.ps[p.id]).sort((a, b) => Number(b.id === v.me) - Number(a.id === v.me))[0];
     const fx = settings.winFx as string;
-    const showWin = fx !== 'off' && !(fx === 'big' && tier < 3);
+    // motion off (or the phone's Reduce motion): no scene; the reveal still happens, without movement
+    const showWin = e.results.showdown && fx !== 'off' && !(fx === 'big' && tier < 3) && !reduceMotion();
     const showBust = !!out && fx !== 'off' && (fx === 'all' || out.id === v.me);
     const gen = ++this.fxGen;
     this.playing?.stop();
     const base = () => ({ over: this.overlay, table: this.stage.firstElementChild as HTMLElement | null, theme: currentTheme(), still: reduceMotion(), calm: settings.motion === 'calm' });
+    // the steps after the hand (results.ts), timed to end when the server deals the next hand
+    const R = e.results;
+    const streetEv = events.filter((x): x is Extract<GameEvent, { t: 'street' }> => x.t === 'street' && x.board !== 2);
+    const streets = runoutStreets(events, !!v.hand?.runout);
+    const pause = resultsPauseMs(R, streets);
+    const next = { at: performance.now() + pause, total: pause };
+    const rgen = ++this.resGen;
+    const alive = () => rgen === this.resGen && gen === this.fxGen;
+    const set = (st: ResStage): boolean => { if (!alive()) return false; this.res = { ...st, next }; this.draw(); return true; };
+    const wait = (ms: number) => new Promise<void>((resolve) => {
+      const done = () => { clearTimeout(t); if (this.resSkip === done) this.resSkip = null; resolve(); };
+      const t = setTimeout(done, ms);
+      this.resSkip = done;
+    });
+    const nameOf = (pid: string) => v.players.find((x) => x.id === pid)?.name ?? 'Someone';
+    const sum = summarize(R, nameOf);
     void (async () => {
-      if (showWin) {
-        const values = winValues({ names, amount: total, cat, cards: best?.best ?? [], handNo: v.handNo, code: this.o.code }, currentTheme());
-        this.playing = await playTier({ ...base(), index: tier - 1, values });
-        await this.playing.done;
+      if (!R.showdown) set({ step: 'fold' });
+      else {
+        if (streets && v.hand) {
+          // all-in before the river: the hands stay up with their chances, then the rest of the board comes slowly
+          const dealt = streetEv.flatMap((x) => x.cards);
+          let board = v.hand.board.slice(0, Math.max(0, v.hand.board.length - dealt.length));
+          const hands = Object.fromEntries(Object.keys(R.evals).map((pid) => [pid, v.hand!.ps[pid]?.cards ?? []]));
+          if (!set({ step: 'runout', board, chances: chances(hands, board), skip: true })) return;
+          await wait(RUNOUT_FIRST_MS);
+          for (const st of streetEv) {
+            board = board.concat(st.cards);
+            if (!set({ step: 'runout', board, chances: chances(hands, board), skip: true })) return;
+            await wait(RUNOUT_STREET_MS);
+          }
+        }
+        if (showWin && alive()) {
+          set({ step: 'scene', skip: true });
+          announce();
+          const values = winValues({ names, amount: total, cat, cards: best?.best ?? [], handNo: v.handNo, code: this.o.code }, currentTheme());
+          let playing: Playing | null = null;
+          try { playing = await playTier({ ...base(), index: tier - 1, values }); } catch { /* a scene that cannot load: straight to the table */ }
+          if (playing && !alive()) { playing.stop(); return; }
+          if (playing) await this.winnerCard(playing, v, sum, tier);
+        }
+        if (!set({ step: 'winner', skip: true })) return;
+        announce();
+        // the pot goes to the winners now: chips stream to their seats and their stacks roll up
+        const before = { ...v, players: v.players.map((x) => ({ ...x, stack: x.stack - (sum.winners.find((w) => w.pid === x.id)?.amount ?? 0) })) };
+        this.motion.play([e], before, v, null, motionLevel(), false);
+        await wait(600);
+        if (!set({ step: 'all', skip: true })) return;
+        await wait(1700);
+        if (!set({ step: 'hold' })) return;
       }
       if (!showBust || gen !== this.fxGen || !out) return;
       const at = (out.id === v.me ? this.stage.querySelector('.hero .hc') : this.stage.querySelector(`.seat[data-pid="${CSS.escape(out.id)}"]`))?.getBoundingClientRect();
@@ -353,7 +498,7 @@ export class TableScreen {
   }
 
   destroy(): void {
-    this.fxGen++; this.playing?.stop();
+    this.fxGen++; this.playing?.stop(); this.endResults();
     if (this.presenceTimer) clearInterval(this.presenceTimer);
     clearInterval(this.tick);
     this.motion.reset();

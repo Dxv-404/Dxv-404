@@ -109,3 +109,49 @@ body[data-playing] #info-btn{display:none}
 .tp-intro-in h2{font:var(--dspw,700) 22px var(--dsp,system-ui);color:var(--tx)}.tp-intro-in p{color:var(--mut);opacity:1}.tp-intro-in small{color:var(--acc);opacity:1;font:700 11px var(--ui);letter-spacing:.12em;text-transform:uppercase}
 .tp-intro-in .act{border:0;border-radius:var(--r-btn,14px);background:var(--b-call);color:var(--b-calltx);box-shadow:var(--b-callsh,none);font:800 16px var(--ui)}
 .tp-watching{background:linear-gradient(var(--panel,var(--chipbg)),var(--panel,var(--chipbg))),var(--bg,#14100c);color:var(--tx,#f3ead7);box-shadow:var(--panelsh,inset 0 0 0 1px var(--line))}
+
+/* who won, and with what (table/results.ts; design tools/design/gen/v3results.py, v3motion.py). Moves use the
+   theme's easing (--re) and speed (--rk), set on the table; motion off shows every end state at once. */
+.tp.live .wpill{position:absolute;left:50%;top:calc(50% + 34px);transform:translateX(-50%);display:grid;justify-items:center;gap:1px;padding:7px 14px;border-radius:12px;background:color-mix(in srgb,var(--bg) 82%,transparent);box-shadow:0 0 0 1.5px var(--acc),0 8px 20px rgba(0,0,0,.35);z-index:3;width:max-content;max-width:calc(100% - 10px);text-align:center;box-sizing:border-box}
+.tp.live .wpill b{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tp.live .wpill span{line-height:1.25}
+.tp.live .wpill b{font:var(--dspw,700) 15px var(--dsp);color:var(--acc)}.tp.live .wpill span{font:600 11px var(--ui);color:var(--tx)}
+.tp.live .wpill.fold{box-shadow:0 0 0 1px var(--line),0 8px 20px rgba(0,0,0,.35)}
+.tp.live .wpill.in{animation:rvpill calc(.5s * var(--rk,1)) cubic-bezier(.2,1.3,.4,1) both}
+@keyframes rvpill{from{transform:translateX(-50%) scale(.8);opacity:0}}
+.tp.lap.live .wpill{top:calc(50% + 60px)}.tp.lap.live .wpill b{font-size:20px}.tp.lap.live .wpill span{font-size:13px}
+.tp.land.live .wpill{top:auto;bottom:10%}
+.tp.live .seat .tag.win{background:var(--acc);color:var(--acctx)}
+.tp.live .seat.lose{opacity:.78}.tp.live .seat.lose .shown .cd{filter:brightness(.82)}
+.tp.live .seat.win .shown{top:-24px}
+.tp.live .shown.rv{perspective:300px}
+.tp.live .shown.rv .cd{animation:rvflip calc(.45s * var(--rk,1)) var(--re,cubic-bezier(.2,.8,.3,1)) var(--rd,0ms) both}
+.tp.live .shown.rv .cd+.cd{animation-delay:calc(var(--rd,0ms) + 80ms)}
+@keyframes rvflip{from{transform:rotateY(90deg) scale(.8);opacity:.4}}
+.tp.live .board .cd.lift{animation:rvlift calc(.5s * var(--rk,1)) var(--re,cubic-bezier(.2,1.2,.4,1)) .2s both}
+@keyframes rvlift{from{transform:none;box-shadow:var(--cardsh)}}
+.tp.live .board .cd.lose{filter:brightness(.55) saturate(.6)}
+.tp.live .hc.open{display:flex;gap:4px;position:relative;flex:none;width:auto!important;height:auto!important;margin-top:-12px;cursor:default}
+.tp.live .hc.open .cd{transform:rotate(-4deg)}.tp.live .hc.open .cd+.cd{transform:rotate(4deg)}
+.tp.live .hc.open.rv .cd{animation:rvflip calc(.45s * var(--rk,1)) var(--re,ease-out) both}.tp.live .hc.open.rv .cd+.cd{animation-delay:80ms}
+.tp.land.live .hc.open{margin-top:0}
+.tp.live .act.nxt{position:relative;overflow:hidden;flex:1;font-size:15px;font-weight:600}
+.tp.live .act.nxt i{position:absolute;left:0;bottom:0;height:3px;width:100%;background:var(--acc);transform-origin:left;pointer-events:none}
+.tp.calm .shown.rv .cd,.tp.calm .hc.open.rv .cd{animation-name:rvfade!important}
+.tp.calm .board .cd.lift,.tp.calm .wpill.in{animation-name:rvfade!important}
+@keyframes rvfade{from{opacity:.3}}
+/* the winner card over the win scene */
+.tp-over>.tp-wcard{position:absolute;z-index:60;padding:12px;border-radius:var(--r-panel,16px);background:color-mix(in srgb,var(--bg) 90%,transparent);color:var(--tx);font-family:var(--ui);box-shadow:var(--panelsh,inset 0 0 0 1px var(--line)),0 0 0 1.5px var(--acc),0 18px 40px rgba(0,0,0,.5);display:grid;gap:9px;box-sizing:border-box;line-height:1.25;cursor:pointer;
+  animation:rvcard calc(.6s * var(--rk,1)) var(--re,cubic-bezier(.2,1.1,.3,1)) 1s both}
+.tp-over>.tp-wcard.calm{animation:rvfade .25s ease-out 1s both}
+@keyframes rvcard{from{transform:translateY(30px);opacity:0}}
+.tp-wcard .hrow{display:flex;align-items:center;gap:10px;min-width:0}
+.tp-wcard .av{position:relative;width:var(--av);height:var(--av);flex:none;display:block}.tp-wcard .av>:first-child{width:100%;height:100%;display:block}
+.tp-wcard .txt{flex:1;display:grid;gap:2px;min-width:0}
+.tp-wcard .klbl{font:800 10.5px var(--ui);letter-spacing:.2em;text-transform:uppercase;color:var(--mut)}
+.tp-wcard .txt b{font:var(--dspw,700) 20px/1.15 var(--dsp);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tp-wcard .txt span{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tp-wcard .wcards{display:flex;gap:4px;flex:none;padding-top:5px}
+.tp-wcard .best{display:flex;align-items:center;gap:4px;padding-top:5px}.tp-wcard .best small{margin-left:6px;font-size:11px;color:var(--mut)}
+@media (prefers-reduced-motion:reduce){.tp-over>.tp-wcard{animation:none}}
+.tp.live .seat .tag.hn{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;box-sizing:border-box}
+.tp.live .seat .shown.shl{left:auto;right:calc(50% + 6px)}

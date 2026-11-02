@@ -1,5 +1,6 @@
 // Host controller: owns the Engine, the links to every guest phone, timers and persistence.
 import { Engine } from '@tp/engine';
+import { resultsPauseMs, runoutStreets } from '@tp/table';
 import { Link, keepAlive } from './net.js';
 
 const SAVE_KEY = 'tp-host-v1';
@@ -251,12 +252,9 @@ export class Host {
     }
     // schedule next hand
     if (events.some((x) => x.t === 'win')) {
-      const streets = events.filter((x) => x.t === 'street').length;
-      const runout = s.hand && s.hand.runout;
-      const showdown = s.hand && s.hand.results && s.hand.results.showdown;
-      let d = 4200 + (showdown ? 2600 : 0) + (runout ? streets * 1700 + 1200 : streets * 600);
-      d += (s.hand.results.pots.length - 1) * 1400;
-      this.scheduleNext(d);
+      // the same pause as the table servers (8 s after a showdown, 3 s when everyone folded, plus a slow
+      // board after an all-in): the phones' "Next hand in N" bar drains to this moment
+      this.scheduleNext(resultsPauseMs(s.hand.results, runoutStreets(events, !!s.hand.runout)));
     }
   }
 

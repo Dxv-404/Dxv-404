@@ -4,3 +4,4 @@ export * from './record';
 export * from './offline-upload';
 export * from './webpush';
 export * from './push';
+export * from './pause';

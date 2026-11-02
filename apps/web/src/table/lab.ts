@@ -1,6 +1,6 @@
 // A table without a server, for the motion checks (e2e/tests/motion.spec.ts) and screenshots: a real
 // engine deals and plays here, and the table screen gets exactly the events and views a phone would.
-import { Engine, type Action, type GameEvent } from '@tp/engine';
+import { Engine, parseCard, type Action, type GameEvent } from '@tp/engine';
 import type { ScreenView } from '../net-table';
 import { TableScreen, type TableLike } from './screen';
 
@@ -9,7 +9,7 @@ export function labTable(root: HTMLElement, names: string[], o: { me?: number; s
   for (const p of e.s.players) p.connected = true; // everyone is at the table
   const me = e.s.players[o.me ?? 0]!.id;
   const subs = new Set<(events: GameEvent[], v: ScreenView) => void>();
-  const shape = (): ScreenView => ({ ...e.viewFor(me), isHost: true, hostId: me, turnLeft: 0, turnTotal: 0, nextIn: 0 });
+  const shape = (): ScreenView => ({ ...e.viewFor(me), isHost: true, hostId: me, turnLeft: 0, turnTotal: 0, nextIn: e.s.phase === 'between' && e.s.handNo > 0 ? 1 : 0 });
   const emit = (ev: GameEvent[]): void => { t.view = shape(); for (const fn of subs) fn(ev, t.view); };
   const lab = {
     engine: e, me,
@@ -25,6 +25,21 @@ export function labTable(root: HTMLElement, names: string[], o: { me?: number; s
     },
     toAct: (): string | null => e.s.hand?.toAct ?? null,
     legal: () => { const pid = e.s.hand?.toAct; return pid ? e.legal(pid) : null; },
+    /**
+     * Set this hand's cards (after start()): each player's two cards in seat order and the five board cards to
+     * come (for the results checks: a known showdown, a split pot, an all-in).
+     */
+    rig(holes: string[][], board: string[]): void {
+      const h = e.s.hand!;
+      e.s.players.forEach((p, i) => { const c = holes[i]; if (c && h.ps[p.id]) h.ps[p.id]!.cards = c.map(parseCard); });
+      const used = new Set([...holes.flat(), ...board]);
+      const rest = [...'23456789TJQKA'].flatMap((r) => [...'shdc'].map((s) => r + s)).filter((c) => !used.has(c));
+      const [f1, f2, f3, tn, rv] = board.map(parseCard) as [number, number, number, number, number];
+      const b = rest.map(parseCard);
+      const burn = () => b.pop()!;
+      h.deck = [...b.slice(0, -3), rv, burn(), tn, burn(), f3, f2, f1, burn()];
+      emit([]);
+    },
     /** Draw again with the same view (as when the dealer's bubble runs out). */
     redraw(): void { emit([]); },
     screen: null as TableScreen | null,

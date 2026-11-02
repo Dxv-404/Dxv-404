@@ -4,6 +4,8 @@ import themesJson from './themes.json';
 import { arenaSize, fitCard, isCompact, makeGeo, modeFor, place, type Mode } from './layout';
 import type { ScreenView } from '../net-table';
 import { describePartial, parseCard } from '@tp/engine';
+import { FEEL } from './motion';
+import { TIER_LABEL, bestOnBoard, chancesLine, handShort, handWords, nextLabel, runoutTitle, summarize, type ResStage, type Summary } from './results';
 
 interface ThemeArt { fx: string; arena: string; dealer: string; rail: string; felt: string; pot: string }
 export interface Theme { name: string; css: string; sprite: string; phone: ThemeArt; lap: ThemeArt; avatars: string[] }
@@ -11,6 +13,7 @@ export const THEMES = themesJson as unknown as Record<string, Theme>;
 export const THEME_KEYS = ['classic', 'noir', 'ivory', 'velvet', 'cyber', 'ink', 'pixel', 'train', 'edo'] as const;
 export type ThemeKey = (typeof THEME_KEYS)[number];
 
+const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 const esc = (s: string): string => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 export const fmt = (n: number): string => Math.round(n).toLocaleString('en-IN');
 const use = (id: string, cls: string): string => `<svg class="${cls}" aria-hidden="true"><use href="#${id}"/></svg>`;
@@ -56,7 +59,7 @@ export interface Frame { html: string; mode: Mode; u: number; lw: number; lh: nu
  * The whole table as HTML for a W x H screen. `peek`: the player is holding their cards up. `bubble`: what
  * the dealer last said. `code`: the table's code (shown in the top bar).
  */
-export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: number, o: { peek: boolean; bubble: string | null; code: string; net: 'good' | 'weak' | 'lost'; title?: string }): Frame {
+export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: number, o: { peek: boolean; bubble: string | null; code: string; net: 'good' | 'weak' | 'lost'; title?: string; res?: ResStage | null }): Frame {
   const th = THEMES[themeKey] ?? THEMES.classic!;
   const me = v.me;
   const players = v.players;
@@ -93,6 +96,20 @@ export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: num
   const cw = fitCard(g, placed, st.map((s) => ({ mini: s.mini, bet: s.bet })), Math.max(n, 2));
   const winners = new Set<string>();
   for (const pot of hand?.results?.pots ?? []) for (const a of pot.awards) winners.add(a.pid);
+  // after the hand (results.ts): which step of the reveal is on screen; without one, its end state
+  const R = hand?.results ?? null;
+  const rs: ResStage | null = R ? (o.res ?? { step: R.showdown ? 'hold' : 'fold' }) : null;
+  const step = rs?.step ?? null;
+  const nameOf = (pid: string) => players.find((p) => p.id === pid)?.name ?? 'Someone';
+  const sum = R ? summarize(R, nameOf) : null;
+  // before the winner is shown (the board still running out, the scene) the stacks are as they were before the pot
+  const early = step === 'runout' || step === 'scene';
+  const stackOf = (p: { id: string; stack: number }): number => p.stack - (early ? sum?.winners.find((w) => w.pid === p.id)?.amount ?? 0 : 0);
+  const evals = R?.evals ?? {};
+  // seats that show their cards now, and how: the winners from 'winner' on, everyone else at the showdown from 'all'
+  const showNow = (pid: string): boolean => !!evals[pid] && (step === 'runout' || ((step === 'winner') && winners.has(pid)) || step === 'all' || step === 'hold');
+  const losers = R ? others.filter((p) => evals[p.id] && !winners.has(p.id)).map((p) => p.id) : [];
+  const big = mode === 'lap' ? 4 : 0;
 
   // seats
   const seatsHtml = st.map((s, i) => {
@@ -103,15 +120,30 @@ export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: num
     else if (hp?.folded) cls.push('fold');
     if (p.away || p.sittingOut || (!hp && hand && v.phase === 'hand')) cls.push('away');
     if (hand?.toAct === p.id) cls.push('turn');
-    if (winners.has(p.id) && hand?.results) cls.push('win');
+    const reveal = !!R && !!evals[p.id];
+    if (winners.has(p.id) && R && step !== 'scene' && step !== 'runout') cls.push('win');
+    else if (reveal && !winners.has(p.id) && (step === 'all' || step === 'hold')) cls.push('lose');
     let inner = '';
-    if (hp?.cards && hp.cards.length && !s.mini) inner += `<div class="shown">${hp.cards.map((c) => card(c, 22, winners.has(p.id) ? 'win' : '')).join('')}</div>`;
+    if (reveal && hp?.cards?.length && !s.mini) {
+      if (showNow(p.id)) {
+        // the reveal flip: the winner when the table comes back, the others 0.6 s later, 80 ms apart
+        const j = losers.indexOf(p.id);
+        const flip = (step === 'winner' && winners.has(p.id)) || (step === 'all' && j >= 0) || step === 'runout';
+        const w = (winners.has(p.id) || step === 'runout' ? 26 : 24) + big;
+        const shl = pos.x + 8 + w * 2 + 4 > aw ? ' shl' : ''; // no room on the right of the seat: the cards sit on its left
+        inner += `<div class="shown${flip ? ' rv' : ''}${shl}" style="--rd:${Math.max(0, j) * 80}ms">${hp.cards.map((c) => card(c, w)).join('')}</div>`;
+      } else inner += `<div class="backs">${back(17)}${back(17)}</div>`;
+    } else if (hp?.cards && hp.cards.length && !s.mini) inner += `<div class="shown">${hp.cards.map((c) => card(c, 22, winners.has(p.id) ? 'win' : '')).join('')}</div>`;
     else if (hp && !hp.folded) inner += `<div class="backs">${back(17)}${back(17)}</div>`;
     const status = !p.connected ? '<span class="status off" title="Connection lost">⏻</span>' : '';
     inner += `<div class="av">${avatar(th, p.id, p.name)}${status}</div>`;
-    inner += `<div class="plate"><b>${esc(p.name)}</b><i>${fmt(p.stack)}</i></div>`;
+    inner += `<div class="plate"><b>${esc(p.name)}</b><i>${fmt(stackOf(p))}</i></div>`;
     let tag: [string, string] | null = null;
-    if (hand?.toAct === p.id) tag = ['', 'Thinking'];
+    const ev = evals[p.id];
+    if (R && step === 'runout' && ev && rs?.chances?.[p.id] !== undefined) tag = ['allin', `${rs.chances[p.id]}%`];
+    else if (R && step === 'fold' && winners.has(p.id)) tag = ['win', `+${fmt(sum!.winners.find((w) => w.pid === p.id)?.amount ?? 0)}`];
+    else if (R && ev && showNow(p.id) && step !== 'runout') tag = [winners.has(p.id) ? 'win hn' : 'hn', handShort(ev)];
+    else if (hand?.toAct === p.id) tag = ['', 'Thinking'];
     else if (hp?.allIn) tag = ['allin', 'All-in'];
     else if (hp?.folded) tag = ['fold', 'Fold'];
     else if (hp?.lastAction) tag = [hp.lastAction === 'raise' || hp.lastAction === 'bet' ? 'raise' : '', `${ACTION[hp.lastAction] ?? hp.lastAction}${hp.streetBet && hp.lastAction !== 'check' && hp.lastAction !== 'fold' ? ` ${fmt(hp.streetBet)}` : ''}`];
@@ -132,11 +164,18 @@ export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: num
 
   // felt: board, pot, side pots
   const gap = mode === 'lap' ? 10 : 5;
-  const board = hand?.board ?? [];
-  const boardHtml = board.map((c) => card(c, cw)).join('') + Array.from({ length: Math.max(0, 5 - board.length) }, () => slot(cw)).join('');
+  const board = (step === 'runout' && rs?.board) || hand?.board || [];
+  // the best five: the board cards that made the winning hand lift with the theme's glow, the others dim
+  const lift = R?.showdown && (step === 'winner' || step === 'all' || step === 'hold') ? bestOnBoard(board, sum!.winners.map((w) => w.ev?.best ?? [])) : null;
+  const boardCls = (c: string) => (!lift ? '' : lift.has(c) ? `win${step === 'winner' ? ' lift' : ''}` : 'lose');
+  const boardHtml = board.map((c) => card(c, cw, boardCls(c))).join('') + Array.from({ length: Math.max(0, 5 - board.length) }, () => slot(cw)).join('');
   const board2 = hand?.board2 ? `<div class="board b2" style="gap:${gap}px">${hand.board2.map((c) => card(c, Math.round(cw * 0.8))).join('')}</div>` : '';
   const pot = hand ? (hand.collected || (hand.results ? hand.pot : 0)) : 0; // chips already in the middle (bets in front of seats are drawn there)
-  const potHtml = pot > 0 ? art.pot.replace('{POT}', fmt(pot)) : '';
+  // after the hand the pot line becomes the winner pill (the scene step still shows the pot)
+  const pill = !R || !sum || step === 'scene' ? ''
+    : step === 'runout' ? `<div class="wpill"><b>${runoutTitle(board.length)}</b><span>${esc(chancesLine(rs?.chances ?? {}, nameOf))}</span></div>`
+    : `<div class="wpill${step === 'fold' ? ' fold' : ''}${step === 'winner' || step === 'fold' ? ' in' : ''}"><b>${esc(sum.title)}</b><span>${esc(sum.line)}</span></div>`;
+  const potHtml = pill || (pot > 0 ? art.pot.replace('{POT}', fmt(pot)) : '');
   const side = hand?.pots && hand.pots.length > 1 ? `<div class="sidepot">${hand.pots.map((p, i) => `<span>${i ? 'Side' : 'Main'} ${fmt(p.amount)}</span>`).join('')}</div>` : '';
   const feltDyn = `<div class="board" style="gap:${gap}px">${boardHtml}</div>${board2}${potHtml}${mode !== 'land' ? side : ''}`;
   const felt = `<div class="felt">${art.felt}${dyn('felt', feltDyn)}</div>`;
@@ -163,18 +202,22 @@ export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: num
   const heroW = mode === 'lap' ? 84 : mode === 'land' ? 52 : 66;
   const myCards = myHp?.cards ?? null;
   const flip = (c: string | undefined) => (c ? `<div class="flip">${card(c, heroW)}${back(heroW)}</div>` : `<div class="flip">${back(heroW)}${back(heroW)}</div>`);
-  const hc = `<div class="hc${o.peek ? ' peek' : ''}${myCards ? '' : ' none'}" role="button" tabindex="0" data-act="peek" aria-label="${myCards ? (o.peek ? `Your cards: ${myCards.map(cardName).join(' and ')}` : 'Your two cards, press and hold to look') : 'No cards this hand'}">${myCards ? flip(myCards[0]) + flip(myCards[1]) : ''}<span class="thumb"></span></div>`;
+  // after a showdown your own cards are face up in the hand area, with the hand in words (also when you lost)
+  const myEv = me && R ? evals[me] : undefined;
+  const openW = mode === 'lap' ? 70 : mode === 'land' ? 44 : 50;
+  const hc = myEv && myCards ? `<div class="hc open${(step === 'winner' && !hand?.runout) || step === 'runout' ? ' rv' : ''}" role="img" aria-label="Your cards: ${myCards.map(cardName).join(' and ')}">${myCards.map((c) => card(c, openW)).join('')}</div>` : `<div class="hc${o.peek ? ' peek' : ''}${myCards ? '' : ' none'}" role="button" tabindex="0" data-act="peek" aria-label="${myCards ? (o.peek ? `Your cards: ${myCards.map(cardName).join(' and ')}` : 'Your two cards, press and hold to look') : 'No cards this hand'}">${myCards ? flip(myCards[0]) + flip(myCards[1]) : ''}<span class="thumb"></span></div>`;
   const myTurn = !!(me && hand?.toAct === me);
-  const status = !mine ? 'watching' : myTurn ? 'your turn' : mine.sittingOut ? 'sitting out' : myHp?.folded ? 'folded' : v.phase === 'hand' && myHp ? 'in the hand' : '';
-  const hint = myCards ? (o.peek ? (handName(v) ?? 'Your cards') : (mode === 'lap' ? 'Hold cards or Space to look' : 'Hold your cards to look')) : '';
+  const status = !mine ? 'watching' : myEv ? 'showed' : myTurn ? 'your turn' : mine.sittingOut ? 'sitting out' : myHp?.folded ? 'folded' : v.phase === 'hand' && myHp ? 'in the hand' : '';
+  const partial = (cards: string[]) => { try { return cap(describePartial(cards.map(parseCard)).toLowerCase()); } catch { return ''; } };
+  const hint = myEv && step === 'runout' && myCards ? partial([...myCards, ...(rs?.board ?? [])]) : myEv ? handWords(myEv) : R && myHp?.folded ? 'You folded this hand' : myCards ? (o.peek ? (handName(v) ?? 'Your cards') : (mode === 'lap' ? 'Hold cards or Space to look' : 'Hold your cards to look')) : '';
   const timer = myTurn && v.turnTotal ? `<div class="tbank"><span class="rg" style="background:conic-gradient(var(--acc) ${Math.round((100 * v.turnLeft) / v.turnTotal)}%,var(--line) 0)"><span>${Math.ceil(v.turnLeft / 1000)}</span></span>sec</div>` : '';
-  const heroMeta = `<div class="hmeta"><span class="hname">${esc(mine?.name ?? 'Watching')}${status ? ` · ${status}` : ''}</span><span class="hstack">${mine ? fmt(mine.stack) : ''}</span><span class="hhint"><span class="s1">${esc(hint)}</span></span></div>`;
+  const heroMeta = `<div class="hmeta"><span class="hname">${esc(mine?.name ?? 'Watching')}${status ? ` · ${status}` : ''}</span><span class="hstack">${mine ? fmt(stackOf(mine)) : ''}</span><span class="hhint"><span class="s1">${esc(hint)}</span></span></div>`;
   const hero = `<section class="hero" aria-label="Your seat">${hc}${heroMeta}${timer}</section>`;
-  const actions = actionsHtml(v, mode);
+  const actions = actionsHtml(v, mode, rs);
 
   let body: string;
   let style = `width:${lw}px;height:${lh}px`;
-  const parts: Record<string, string> = { top, arena: arenaDyn, felt: feltDyn, hero, actions, ...(mode === 'lap' ? { side: sidePanel(v) } : {}) };
+  const parts: Record<string, string> = { top, arena: arenaDyn, felt: feltDyn, hero, actions, ...(mode === 'lap' ? { side: sidePanel(v, step === 'all' || step === 'hold' ? R : null) } : {}) };
   const T = dyn('top', top), He = dyn('hero', hero), A = dyn('actions', actions);
   if (mode === 'phone') body = `<div class="fx" aria-hidden="true">${art.fx}</div>${T}${arena}${He}<nav class="actions" aria-label="Your actions">${A}</nav>`;
   else if (mode === 'land') {
@@ -184,11 +227,39 @@ export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: num
     body = `<div class="fx" aria-hidden="true">${art.fx}</div>${T}${arena}<div class="dock">${He}<div class="actions">${A}</div></div><aside class="side">${dyn('side', parts.side!)}</aside>`;
   }
   if (u !== 1) style += `;zoom:${u.toFixed(4)}`;
+  const feel = FEEL[themeKey] ?? FEEL.classic!;
+  style += `;--rk:${feel.k};--re:${feel.ease}`;
   const dens = mode === 'phone' ? `dense${n > 10 || (compact && n > 6) ? ' xdense' : ''}${compact ? ' compact' : ''}${lw < 380 ? ' narrow' : ''}` : mode === 'land' ? `xdense${lh < 400 ? ' short' : ''}` : '';
   const html = `<div class="tp live ${mode} ${dens} th-${themeKey}" style="${style}" data-n="${n}">${body}</div>`;
   // what stays the same while the hand goes on: the theme, the screen, the table's shape
   const shell = [themeKey, mode, dens, style, n, g.tl, g.tt, g.tw, g.th, dealer ? 1 : 0].join('|');
   return { html, mode, u, lw, lh, compact, heroCardW: heroW, shell, parts };
+}
+
+/**
+ * The winner card over the win scene (design v3results.py strip()): each winner's avatar, "<name> wins <amount>",
+ * the hand in words and their two cards, the tier label, and the best five. A split pot names both winners.
+ */
+export function winnerCardHtml(v: ScreenView, themeKey: ThemeKey, s: Summary, tier: number, mode: Mode): string {
+  const th = THEMES[themeKey] ?? THEMES.classic!;
+  const rows = s.winners.map((w, i) => {
+    const cards = v.hand?.ps[w.pid]?.cards ?? [];
+    return `<div class="hrow"><span class="av" style="--av:${s.winners.length > 1 ? 40 : 46}px">${avatar(th, w.pid, w.name)}</span>`
+      + `<div class="txt">${i === 0 ? `<small class="klbl">${TIER_LABEL[tier] ?? ''}</small>` : ''}<b>${esc(w.name)} wins ${fmt(w.amount)}</b>`
+      + `<span>${esc(w.ev ? handWords(w.ev) : s.line)}</span></div><div class="wcards">${cards.map((c) => card(c, 40, 'win')).join('')}</div></div>`;
+  }).join('');
+  const five = s.best ? `<div class="best">${orderFive(s.best.best).map((c) => card(c, 30, 'win')).join('')}<small>best five</small></div>` : '';
+  return `<div class="tp-wcard th-${themeKey} m-${mode}" role="status" aria-label="${esc(`${s.title}. ${s.line}`)}">${rows}${five}</div>`;
+}
+
+/** The best five as the design shows them: by group (the made part first), then rank; straights high to low. */
+export function orderFive(cards: string[]): string[] {
+  const R = '23456789TJQKA';
+  const n: Record<string, number> = {};
+  for (const c of cards) n[c[0]!] = (n[c[0]!] ?? 0) + 1;
+  const wheel = cards.some((c) => c[0] === 'A') && cards.some((c) => c[0] === '5') && cards.some((c) => c[0] === '2') && !cards.some((c) => c[0] === 'K') && Object.keys(n).length === 5;
+  const v = (c: string) => (wheel && c[0] === 'A' ? -1 : R.indexOf(c[0]!));
+  return cards.slice().sort((a, b) => n[b[0]!]! - n[a[0]!]! || v(b) - v(a));
 }
 
 /** "Pair of Fours" -> "a pair of fours", "Full House, Kings full of Sevens" -> "a full house, kings full of sevens". */
@@ -209,7 +280,7 @@ function handName(v: ScreenView): string | null {
   } catch { return null; }
 }
 
-function actionsHtml(v: ScreenView, mode: Mode): string {
+function actionsHtml(v: ScreenView, mode: Mode, rs: ResStage | null): string {
   const me = v.players.find((p) => p.id === v.me);
   const L = v.legal;
   const hand = v.hand;
@@ -225,10 +296,20 @@ function actionsHtml(v: ScreenView, mode: Mode): string {
   if (hand?.vote && v.me && hand.vote.pids.includes(v.me) && !hand.vote.voted.includes(v.me)) {
     return '<button class="act ghost" data-act="once">Run it once</button><button class="act call" data-act="twice">Run it twice</button>';
   }
-  if (hand?.results && v.me && hand.ps[v.me] && !hand.ps[v.me]!.revealed && hand.ps[v.me]!.cards) out.push('<button class="act ghost" data-act="show">Show my cards</button>');
-  if (me?.busted && v.cfg.rebuys && v.phase !== 'hand') out.push(`<button class="act raise" data-act="rebuy">Rebuy<small>${fmt(v.cfg.startStack)}</small></button>`);
+  // everyone folded: the winner may still show their cards (folded hands are never shown)
+  const R = hand?.results;
+  const wonIt = !!R && !R.showdown && R.pots.some((p) => p.awards.some((a) => a.pid === v.me));
+  if (wonIt && v.me && hand?.ps[v.me] && !hand.ps[v.me]!.revealed && hand.ps[v.me]!.cards) out.push(`<button class="act ghost" data-act="show"${rs?.next ? ' style="flex:0 0 auto;padding:0 18px"' : ''}>Show my cards</button>`);
+  // (no rebuy before the winner is shown: it would give the result away)
+  const early = rs?.step === 'runout' || rs?.step === 'scene';
+  if (!early && me?.busted && v.cfg.rebuys && v.phase !== 'hand') out.push(`<button class="act raise" data-act="rebuy">Rebuy<small>${fmt(v.cfg.startStack)}</small></button>`);
   if (me?.sittingOut && !me.busted) out.push('<button class="act call" data-act="sitin">Sit back in</button>');
   if (v.isHost && (v.phase === 'lobby' || (v.phase === 'between' && (v.paused || !v.nextIn)))) out.push(`<button class="act call" data-act="deal">${v.paused ? 'Resume dealing' : v.handNo ? 'Deal next hand' : 'Deal the first hand'}</button>`);
+  // after the hand: the bar that drains to the next deal (tap or Space skips to the next step)
+  if (!out.some((b) => b.includes('data-act="deal"')) && rs?.next && v.phase === 'between' && !v.paused) {
+    const left = rs.next.at - performance.now();
+    out.push(`<button class="act ghost nxt" data-act="skip" aria-label="${esc(nextLabel(left, false, false))}">${nextLabel(left, !!rs.skip, mode === 'lap')}<i aria-hidden="true"></i></button>`);
+  }
   if (!out.length) {
     const why = !me ? 'You are watching' : v.phase === 'lobby' ? (v.isHost ? 'Waiting for players' : 'Waiting for the host to deal') : v.phase === 'between' ? (v.paused ? 'The host paused dealing' : 'Next hand in a moment') : hand?.ps[v.me!]?.folded ? 'You folded' : `Waiting for ${v.players.find((p) => p.id === hand?.toAct)?.name ?? 'the others'}`;
     out.push(`<div class="waitline" role="status">${esc(why)}</div>`);
@@ -236,9 +317,11 @@ function actionsHtml(v: ScreenView, mode: Mode): string {
   return out.join('');
 }
 
-function sidePanel(v: ScreenView): string {
+function sidePanel(v: ScreenView, R: import('@tp/engine').HandResults | null): string {
   const rows = v.players.map((p) => `<div class="prow${p.id === v.me ? ' me' : ''}"><b>${esc(p.name)}</b><i>${fmt(p.stack)}</i><small>${p.id === v.me ? 'You' : !p.connected ? 'Connection lost' : p.sittingOut ? 'Sitting out' : 'Playing'}</small></div>`).join('');
-  const log = v.log.slice(-12).map((l) => `<span>${esc(typeof l === 'string' ? l : (l as { text: string }).text)}</span>`).join('');
+  // after a showdown the log writes out each hand that was shown
+  const shown = R ? Object.entries(R.evals).map(([pid, ev]) => `${v.players.find((p) => p.id === pid)?.name ?? 'Someone'} showed ${(v.hand?.ps[pid]?.cards ?? []).map(cardName).join(', ')}: ${handWords(ev).toLowerCase()}`) : [];
+  const log = [...v.log.slice(-12).map((l) => (typeof l === 'string' ? l : (l as { text: string }).text)), ...shown].slice(-14).map((l) => `<span>${esc(l)}</span>`).join('');
   return `<span class="sh">At the table · ${v.players.length}</span><div class="plist">${rows}</div><span class="sh">Table log</span><div class="log">${log}</div>`;
 }
 

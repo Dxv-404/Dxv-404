@@ -11,6 +11,7 @@
 import { Engine, isSeed, randomSeed, seedCommit, sha256hex, toHex, type GameEvent, type GameState, type HandRecord, type Input, type PlayerId } from '@tp/engine';
 import { PROTOCOL_VERSION, encode, parseClient, versionOk, type ClientMessage, type ServerMessage, type TableSettings } from '@tp/protocol';
 import { handPlayers, publicReplay, slimRecord, type EndPlayerRow, type GameInfo } from './record';
+import { FOLD_PAUSE_MS, resultsPauseMs, runoutStreets } from './pause';
 
 export interface Conn {
   send(text: string): void;
@@ -67,7 +68,10 @@ export interface RoomOptions {
   push?: (p: PushRequest) => void;
   /** How long a player's turn waits before their phone is pushed (if the app is not on screen). */
   turnPushMs?: number;
-  /** Pause between hands so everyone sees the result. */
+  /**
+   * Pause between hands, the same after every hand (tests and HAND_PAUSE_MS). Left out, the pause follows the
+   * result (pause.ts): about 8 s after a showdown, 3 s when everyone folded, longer when the board ran out.
+   */
   handPauseMs?: number;
   /** Most messages one connection may send in `rateWindowMs`. */
   rateLimit?: number;
@@ -162,11 +166,11 @@ export class TableRoom {
   /** Inside one incoming message or wake-up, saves are collected into one at the end. */
   private batchDepth = 0;
   private needSave = false;
-  private readonly opt: Required<Omit<RoomOptions, 'push'>> & Pick<RoomOptions, 'push'>;
+  private readonly opt: Required<Omit<RoomOptions, 'push' | 'handPauseMs'>> & Pick<RoomOptions, 'push' | 'handPauseMs'>;
 
   constructor(code: string, private clock: RoomClock, private store: RoomStore, saved?: Persisted | null, opt: RoomOptions = {}) {
     this.code = code;
-    this.opt = { handPauseMs: 4000, rateLimit: 40, rateWindowMs: 2000, keepUpdates: 200, offlineAfterMs: 3000, seed: randomSeed, identify: async () => null, server: 'test', turnPushMs: 3000, autoEndAfterMs: 20 * 60_000, hostHandoverMs: 60_000, maxConnections: 60, silentCloseMs: 30_000, helloWithinMs: 15_000, offline: false, sharedShuffle: !!opt.offline, shuffleWaitMs: 1500, ...opt };
+    this.opt = { rateLimit: 40, rateWindowMs: 2000, keepUpdates: 200, offlineAfterMs: 3000, seed: randomSeed, identify: async () => null, server: 'test', turnPushMs: 3000, autoEndAfterMs: 20 * 60_000, hostHandoverMs: 60_000, maxConnections: 60, silentCloseMs: 30_000, helloWithinMs: 15_000, offline: false, sharedShuffle: !!opt.offline, shuffleWaitMs: 1500, ...opt };
     if (this.opt.offline) this.opt.maxConnections = Math.min(this.opt.maxConnections, OFFLINE_MAX_PLAYERS + 4);
     this.createdAt = clock.now();
     if (saved) this.restore(saved);
@@ -429,7 +433,10 @@ export class TableRoom {
       this.lastRecord = rec;
       this.store.appendHand(rec);
       this.toLeague(rec);
-      if (this.running && e.s.phase !== 'ended') this.nextDealAt = input.now + this.opt.handPauseMs;
+      if (this.running && e.s.phase !== 'ended') {
+        const res = e.s.hand?.results;
+        this.nextDealAt = input.now + (this.opt.handPauseMs ?? (res ? resultsPauseMs(res, runoutStreets(r.events, !!e.s.hand?.runout)) : FOLD_PAUSE_MS));
+      }
       if (this.opt.offline) this.checkpointLater = true;
     }
     for (const [c, st] of this.conns) if (st.hello) this.send(c, { t: 'update', seq: this.seq, events: events as unknown as Record<string, unknown>[], view: this.view(st.pid), host: this.host, at: input.now });
@@ -488,7 +495,7 @@ export class TableRoom {
     const p = this.pendingDeal!;
     this.pendingDeal = null;
     const r = this.apply({ t: 'start', seed: p.seed, contributions: [...p.got.values()], now });
-    if (r && this.running) this.nextDealAt = now + this.opt.handPauseMs; // someone left meanwhile: try again shortly
+    if (r && this.running) this.nextDealAt = now + (this.opt.handPauseMs ?? FOLD_PAUSE_MS); // someone left meanwhile: try again shortly
     this.reschedule();
     return r;
   }
