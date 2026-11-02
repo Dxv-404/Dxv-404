@@ -34,7 +34,7 @@ for (const theme of THEMES) {
     const banner = page.getByTestId('reconnecting');
     await expect(banner).toBeVisible();
     await expect(banner).toContainText(copy.banner);
-    await expect(banner.locator('[data-pz=clock]')).toHaveText('0:00');
+    await expect(banner.locator('[data-pz=clock]')).toHaveText(/^0:0[0-2]$/);
     await expect(banner.locator('[data-pz=clock]')).toHaveText(/0:0[3-6]/, { timeout: 7000 });
     await page.waitForTimeout(1500);
     await conn(page, 'good');

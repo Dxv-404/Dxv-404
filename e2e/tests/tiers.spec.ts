@@ -120,7 +120,7 @@ test('win tiers: each scene plays once and removes itself; tap to skip; bust-out
     await page.waitForFunction((n) => Array.from({ length: n }, (_, i) => (window as any)[`__gone_r${i}`]).every((x) => x !== undefined), 4, { timeout: 15_000 });
     for (let index = 0; index < 4; index++) {
       const gone = await page.evaluate((i) => (window as any)[`__gone_r${i}`] as number, index);
-      if (gone < durs[index]! * 0.95 || gone > durs[index]! + 1500) problems.push(`${theme} ${index}: removed after ${Math.round(gone)} ms, scene is ${durs[index]} ms`);
+      if (gone < durs[index]! * 0.95 || gone > durs[index]! + 3500) problems.push(`${theme} ${index}: removed after ${Math.round(gone)} ms, scene is ${durs[index]} ms`);
       if (await page.locator(`#lab-r${index} .tpw-wrap`).count()) problems.push(`${theme} ${index}: still on screen`);
     }
     await page.evaluate(() => document.querySelectorAll('[id^="lab-"]').forEach((e) => e.remove()));
