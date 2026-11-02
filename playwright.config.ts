@@ -1,6 +1,6 @@
 import { defineConfig } from '@playwright/test';
 
-const PORT = 4173;
+const PORT = Number(process.env.PW_PORT ?? 4173);
 
 export default defineConfig({
   testDir: 'e2e/tests',
@@ -20,7 +20,7 @@ export default defineConfig({
     },
   },
   webServer: {
-    command: 'pnpm --filter @tp/web build && pnpm --filter @tp/web preview',
+    command: `pnpm --filter @tp/web build && pnpm --filter @tp/web exec vite preview --port ${PORT} --strictPort`,
     url: `http://localhost:${PORT}`,
     reuseExistingServer: true,
     timeout: 120_000,

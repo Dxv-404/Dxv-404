@@ -67,3 +67,20 @@ body[data-playing] #info-btn{display:none}
 .tp.bigtext .plate b,.tp.bigtext .plate i,.tp.bigtext .pot,.tp.bigtext .waitline{zoom:1.15}
 .tp.live{touch-action:manipulation}
 .tp.live .hhint{overflow:hidden;text-overflow:ellipsis;max-width:100%}
+
+/* table micro-animations (src/table/motion.ts; design: tools/design/gen/motion.py). The moves themselves
+   are Web Animations started when the game says something happened; this is only what they move. */
+.tp.live .mv-layer{position:absolute;inset:0;pointer-events:none;z-index:7}
+.tp.live .mv-ghost{pointer-events:none}
+.tp.live .mv-deck{position:absolute;width:0;height:0}
+.tp.live .mv-deck .mvh{position:absolute;left:-12px;top:-17px}
+.tp.live .mv-deck .mvc{position:absolute;left:0;top:calc(var(--k) * -1.5px)}
+.tp.live .mv-fly{position:absolute;z-index:8;width:20px;height:20px;margin:-10px 0 0 -10px}
+.tp.live .mv-fly .chip{width:20px;height:20px}
+/* a bet or raise: a second chip on top (drawn as the design's drop-shadow(0 -4px 0 rgba(0,0,0,.25))) */
+.tp.live .bet .c2{position:absolute;left:0;top:-4px;z-index:-1}
+.tp.live .bet .c2 .chip{filter:brightness(0);opacity:.25}
+.tp.live .bet .c2+.chip{filter:none}
+/* one soft glow (all-in on the avatar, the winner's plate): only its opacity is animated */
+.tp.live .seat:not(.turn) .av::after{content:"";position:absolute;inset:0;border-radius:var(--r-av,50%);box-shadow:0 0 10px var(--acc);opacity:0;pointer-events:none}
+.tp.live .seat .plate::after{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:0 0 0 2px var(--acc),0 0 16px var(--acc);opacity:0;pointer-events:none}
