@@ -32,16 +32,6 @@
 .waitline{flex:1;min-height:56px;display:grid;place-items:center;color:var(--mut);font-size:15px;text-align:center}
 .tp.still *, .tp.still *::before, .tp.still *::after{animation:none!important;transition:none!important}
 
-/* raise */
-.tp-raise{position:absolute;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center}
-.tp-raise-in{width:min(520px,100%);background:#1c1612;color:#f3ead7;border-radius:18px 18px 0 0;padding:18px 16px 22px;display:grid;gap:14px;box-shadow:0 -10px 30px rgba(0,0,0,.4)}
-.tp-raise .amt{display:grid;justify-items:center}.tp-raise .amt b{font:800 34px system-ui}.tp-raise .amt small{opacity:.75}
-.tp-raise input[type=range]{width:100%;height:36px;accent-color:#d9a441}
-.tp-raise .presets{display:flex;gap:8px}.tp-raise .presets button{flex:1;min-height:44px;border-radius:10px;background:rgba(255,255,255,.08);color:inherit;font-weight:700}
-.tp-raise .presets button.on{background:#d9a441;color:#1c1612}
-.tp-raise .row{display:flex;gap:8px}.tp-raise .act{min-height:56px;border-radius:14px;flex:1;font-weight:800;font-size:16px}
-.tp-raise .act.ghost{background:rgba(255,255,255,.1);color:inherit}.tp-raise .act.raise{background:#d9a441;color:#1c1612}
-
 /* win tiers (table/tiers.ts): the design's 390 x 844 scene, scaled to the screen */
 .tp-over>.tpw-wrap{position:absolute;inset:0;overflow:hidden;pointer-events:none}
 .tp-over>.tpw-wrap.tpw-tap{pointer-events:auto;cursor:pointer}
@@ -96,15 +86,7 @@ body[data-playing] #info-btn{display:none}
 .tp-over .tp-presence.sit{position:absolute;left:12px;right:12px;top:62px;z-index:40;padding:10px 14px;font:600 13px var(--ui);text-align:center;max-width:420px;margin:0 auto}
 @media (prefers-reduced-motion:reduce){.tp-over .pz-bn,.tp-over .pz-dots i,.tp-over .pz-toast,.tp-over .pz-ring{animation:none}}
 .tp-over .pz-toast,.tp-over .pz-dim,.tp-over .pz-pause{pointer-events:auto}
-/* the table's own sheets and cards (raise, first-time tips, cannot-join, watching) in the theme's tokens */
-.tp-raise-in{background:linear-gradient(var(--panel,var(--chipbg)),var(--panel,var(--chipbg))),var(--bg,#1c1612);color:var(--tx,#f3ead7);border-radius:var(--r-panel,18px) var(--r-panel,18px) 0 0;box-shadow:var(--panelsh,inset 0 0 0 1px var(--line)),0 -10px 30px rgba(0,0,0,.4)}
-.tp-raise .amt b{font:var(--numw,800) 34px var(--num,system-ui);color:var(--tx)}.tp-raise .amt small{color:var(--mut);opacity:1}
-.tp-raise input[type=range]{accent-color:var(--acc,#d9a441)}
-.tp-raise .presets button{border:0;border-radius:calc(var(--r-btn,12px) * .8);background:var(--chipbg);box-shadow:inset 0 0 0 1px var(--line);color:var(--tx);font:700 13px var(--ui)}
-.tp-raise .presets button.on{background:var(--acc);color:var(--acctx);box-shadow:none}
-.tp-raise .act{border:0;border-radius:var(--r-btn,14px);font:800 16px var(--ui)}
-.tp-raise .act.ghost{background:var(--chipbg);color:var(--tx);box-shadow:inset 0 0 0 1.5px var(--line)}
-.tp-raise .act.raise{background:var(--b-raise,var(--b-call));color:var(--b-raisetx,var(--b-calltx));box-shadow:var(--b-raisesh,none)}
+/* the table's own sheets and cards (first-time tips, cannot-join, watching) in the theme's tokens */
 .tp-intro-in,.tp-fatal{background:linear-gradient(var(--panel,var(--chipbg)),var(--panel,var(--chipbg))),var(--bg,#1c1612);color:var(--tx,#f3ead7);border-radius:var(--r-panel,18px);box-shadow:var(--panelsh,inset 0 0 0 1px var(--line)),0 18px 40px rgba(0,0,0,.45)}
 .tp-intro-in h2{font:var(--dspw,700) 22px var(--dsp,system-ui);color:var(--tx)}.tp-intro-in p{color:var(--mut);opacity:1}.tp-intro-in small{color:var(--acc);opacity:1;font:700 11px var(--ui);letter-spacing:.12em;text-transform:uppercase}
 .tp-intro-in .act{border:0;border-radius:var(--r-btn,14px);background:var(--b-call);color:var(--b-calltx);box-shadow:var(--b-callsh,none);font:800 16px var(--ui)}
@@ -155,3 +137,114 @@ body[data-playing] #info-btn{display:none}
 @media (prefers-reduced-motion:reduce){.tp-over>.tp-wcard{animation:none}}
 .tp.live .seat .tag.hn{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;box-sizing:border-box}
 .tp.live .seat .shown.shl{left:auto;right:calc(50% + 6px)}
+/* readable action buttons (design: v3raise.py, "Readable buttons"): every label and amount at full strength in
+   the theme's own button colours; where a pair was under 4.5:1 the colour is darkened just enough. The key
+   hints show only once a keyboard was used (.kb on the screen), never after a touch. */
+/* the design drew these as spans; as buttons, base2's `.tp button{font:inherit}` outranks `.act` and the labels
+   lost their weight and size. Same specificity as the theme's own `.th-x .act` (loaded later, so it still wins). */
+.live .act{font-weight:800;font-size:16.5px}
+.tp.live .act small{opacity:1}.live .act small{font-weight:700}
+.tp.live .act kbd{opacity:1;background:none} /* outlined only: a dark fill under the letter dimmed it */
+.tp-screen:not(.kb) .tp.live .act kbd,.tp-screen:not(.kb) .tp-raise .kbd,.tp-screen:not(.kb) .tp-raise .keys{display:none}
+html .th-classic{--b-call:linear-gradient(180deg,#2a7a55,#1f6748)}
+html .th-ivory{--b-raise:#8f6436}
+html .th-cyber{--b-raise:linear-gradient(90deg,#cc1466,#d81b72)}
+.tp.live.th-cyber .act.raise{background:var(--b-raise)}
+.tp.live.th-cyber .act.raise small{color:#fff}
+html .th-pixel{--b-call:#386e43}
+html .th-edo{--b-raise:#bf3b27}
+.th-edo .act.call{color:#14203d}
+
+/* raise (table/raise.ts; design: v3raise.py, motion: v3motion.py). --ease and --k are the theme's feel. */
+.tp-raise{position:absolute;inset:0;pointer-events:none;color:var(--tx);font-family:var(--ui);line-height:1.3;-webkit-font-smoothing:antialiased;z-index:45}
+.tp-over>.tp-raise{background:none;box-shadow:none} /* it carries the theme's class for its tokens; the theme's root rule paints pages */
+.tp-raise>*{pointer-events:auto}
+.tp-raise *,.tp-raise *::before,.tp-raise *::after{box-sizing:border-box}
+.tp-raise button{border:0;margin:0;padding:0;background:none;color:inherit;font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.tp-raise button:focus-visible,.tp-raise .rsl:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.tp-raise .rdim{position:absolute;inset:0;background:rgba(0,0,0,.5);backdrop-filter:blur(2px)}
+.tp-raise .rpos{position:absolute}
+.tp-raise .rbox{position:relative;background:var(--bg);color:var(--tx);display:grid;gap:12px;outline:none}
+.tp-raise .grip{width:40px;height:4px;border-radius:2px;background:var(--line);justify-self:center}
+.tp-raise .rtop{display:flex;align-items:baseline;justify-content:space-between;gap:10px;min-width:0}
+.tp-raise .rtop b{font:var(--dspw,700) 19px var(--dsp)}.tp-raise .rtop span{font-size:12px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tp-raise .ramt{display:flex;align-items:center;gap:12px}
+.tp-raise .pm{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;flex:none;background:var(--chipbg);box-shadow:inset 0 0 0 1.5px var(--line);color:var(--tx);position:relative;touch-action:none;transition:transform .1s}
+.tp-raise .pm svg{width:24px;height:24px}
+.tp-raise .pm.press{transform:scale(.92);box-shadow:inset 0 0 0 2px var(--acc);background:color-mix(in srgb,var(--acc) 22%,var(--chipbg))}
+.tp-raise .pm.press::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:2px solid var(--acc);opacity:.6;pointer-events:none}
+.tp-raise.m-full .pm.press::after{animation:rz-hold calc(1s * var(--k)) ease-out infinite}
+@keyframes rz-hold{from{opacity:.9;transform:scale(.9)}to{opacity:0;transform:scale(1.25)}}
+.tp-raise .pm.dis{opacity:.35;cursor:default}
+.tp-raise .amc{flex:1;min-width:0;display:grid;justify-items:center;gap:2px}
+.tp-raise .amt{position:relative;font:var(--numw,700) 42px/1.05 var(--num);color:var(--tx);border-bottom:2px dashed var(--line);padding:0 6px;display:flex;align-items:center;justify-content:center;min-height:46px;min-width:88px;max-width:100%;cursor:text}
+.tp-raise .amt .v{display:inline-block;white-space:nowrap}
+.tp-raise .amt .caret{display:none;width:2px;height:.8em;margin-left:2px;background:var(--acc)}
+.tp-raise.typing .amt{border-bottom:2px solid var(--acc);outline:none}.tp-raise.typing .amt .caret{display:block}
+.tp-raise.typing.m-full .amt .caret,.tp-raise.typing.m-calm .amt .caret{animation:rz-caret 1s steps(1) infinite}
+@keyframes rz-caret{50%{opacity:0}}
+.tp-raise .amc small{font-size:11.5px;color:var(--mut);white-space:nowrap}
+.tp-raise .flo{position:absolute;right:-30px;top:-4px;font:var(--numw,700) 14px var(--num);color:var(--acc);pointer-events:none;animation:rz-flo calc(1s * var(--k)) ease-out both}
+.tp-raise .flo.dn{right:auto;left:-30px}
+@keyframes rz-flo{from{transform:translateY(8px);opacity:0}30%{opacity:1}to{transform:translateY(-14px);opacity:0}}
+.tp-raise .rmid{display:grid;gap:12px}
+.tp-raise .rmid[hidden],.tp-raise .rpad[hidden],.tp-raise .rnote[hidden],.tp-raise .tail[hidden]{display:none}
+.tp-raise .rsl{display:grid;gap:4px;padding:10px 6px 2px;margin:-8px 0 0;touch-action:none;cursor:pointer;border-radius:8px}
+.tp-raise .trk{position:relative;height:8px;border-radius:4px;background:color-mix(in srgb,var(--tx) 14%,transparent)}
+.tp-raise .trk b{position:absolute;left:0;top:0;bottom:0;border-radius:4px;background:var(--acc)}
+.tp-raise .trk i{position:absolute;top:-3px;width:2px;height:14px;margin-left:-1px;background:color-mix(in srgb,var(--tx) 35%,transparent)}
+.tp-raise .trk u{position:absolute;top:50%;width:28px;height:28px;margin:-14px 0 0 -14px;border-radius:50%;background:var(--tx);box-shadow:0 0 0 4px color-mix(in srgb,var(--acc) 45%,transparent),0 4px 10px rgba(0,0,0,.35)}
+.tp-raise .rsl.snap .trk b{transition:width calc(.3s * var(--k)) var(--ease)}
+.tp-raise .rsl.snap .trk u{transition:left calc(.3s * var(--k)) var(--ease)}
+.tp-raise .tlab{position:relative;height:14px}.tp-raise .tlab span{position:absolute;transform:translateX(-50%);font:600 10px var(--ui);color:var(--mut);white-space:nowrap}
+.tp-raise .tlab span:first-child{transform:none}.tp-raise .tlab span:last-child{transform:translateX(-100%)}
+.tp-raise .rpre{display:flex;gap:6px}
+.tp-raise .rpre button{flex:1;min-width:0;min-height:44px;text-align:center;padding:6px 2px;border-radius:var(--r-btn,10px);background:var(--chipbg);box-shadow:inset 0 0 0 1px var(--line);font:700 12.5px var(--ui);color:var(--tx);white-space:nowrap}
+.tp-raise .rpre button.on{background:var(--acc);color:var(--acctx);box-shadow:none}
+.tp-raise.th-cyber .rpre button.on,.tp-raise.th-edo .rpre button.on{background:var(--b-raise);color:var(--b-raisetx)} /* their accent pair is under 4.5:1 */
+.tp-raise .rpre.g2{display:grid;grid-template-columns:1fr 1fr}
+.tp-raise .racts{display:grid;grid-template-columns:1fr 1.7fr;gap:10px}
+.tp-raise .bb{height:54px;border-radius:var(--r-btn,12px);display:flex;align-items:center;justify-content:center;gap:2px;font:800 15.5px var(--ui);padding:0 12px;flex-direction:column;line-height:1.1;min-width:0}
+.tp-raise .bb.r{background:var(--b-raise);color:var(--b-raisetx);box-shadow:var(--b-raisesh,none);font-size:16.5px}
+.tp-raise .bb.g{background:transparent;color:var(--tx);box-shadow:inset 0 0 0 1.5px var(--line)}
+.tp-raise .gl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.tp-raise .kbd{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:6px;font:700 10.5px system-ui,-apple-system,'Segoe UI',sans-serif;box-shadow:inset 0 -2px 0 rgba(0,0,0,.25),inset 0 0 0 1px var(--line);background:var(--chipbg);color:var(--tx);opacity:1}
+.tp-raise .racts .kbd{background:rgba(0,0,0,.18);color:inherit;margin-top:2px}
+.tp-raise .keys{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:11.5px;color:var(--mut)}.tp-raise .keys span{display:flex;align-items:center;gap:4px}
+.tp-raise .rnote{margin:-4px 0 0;font-size:11.5px;color:var(--mut);text-align:center}
+.tp-raise .rpad{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.tp-raise .rpad button{min-height:44px;display:grid;place-items:center;border-radius:var(--r-btn,10px);background:var(--chipbg);box-shadow:inset 0 0 0 1px var(--line);font:var(--numw,600) 21px var(--num);color:var(--tx)}
+.tp-raise.allin .go{box-shadow:var(--b-raisesh,none),0 0 0 3px color-mix(in srgb,var(--acc) 35%,transparent),0 0 18px color-mix(in srgb,var(--acc) 45%,transparent)}
+.tp-raise.m-full.allin .go{animation:rz-glow calc(1.6s * var(--k)) ease-in-out infinite}
+@keyframes rz-glow{0%,100%{box-shadow:var(--b-raisesh,none)}50%{box-shadow:var(--b-raisesh,none),0 0 0 3px color-mix(in srgb,var(--acc) 45%,transparent),0 0 24px color-mix(in srgb,var(--acc) 60%,transparent)}}
+/* phones and tablets: a sheet from the bottom (tablets: the same sheet, zoomed with the table) */
+.tp-raise.r-phone .rpos{left:0;right:0;bottom:0}
+.tp-raise.r-phone .rbox{padding:8px 16px calc(22px + env(safe-area-inset-bottom));border-radius:var(--r-panel,20px) var(--r-panel,20px) 0 0;box-shadow:var(--panelsh,inset 0 0 0 1px var(--line)),0 -18px 40px rgba(0,0,0,.45)}
+.tp-raise.cmp .rbox{gap:8px;padding-bottom:calc(16px + env(safe-area-inset-bottom))}
+.tp-raise.cmp .pm{width:46px;height:46px}.tp-raise.cmp .amt{font-size:34px;min-height:44px}.tp-raise.cmp .bb{height:48px}
+.tp-raise.cmp .rpre button{padding:4px 1px;font-size:11.5px}.tp-raise.cmp .rmid{gap:8px}
+/* a phone held sideways: a panel over the thumb column */
+.tp-raise.r-land .rbox{height:100%;padding:10px 12px 12px;gap:9px;align-content:start;overflow:auto;box-shadow:var(--panelsh,inset 1px 0 0 var(--line)),-12px 0 30px rgba(0,0,0,.35)}
+.tp-raise.r-land .rmid{gap:9px}
+.tp-raise.r-land .pm{width:44px;height:44px}.tp-raise.r-land .amt{font-size:30px;min-height:44px;min-width:72px}
+.tp-raise.r-land .rpre button{padding:4px 2px;font-size:11.5px}
+.tp-raise.r-land .bb{height:44px;font-size:13px;padding:0 8px}.tp-raise.r-land .bb.r{font-size:14px}
+.tp-raise.r-land .rsl{padding-top:12px}
+.tp-raise.r-land .rpad{gap:5px}.tp-raise.r-land .rpad button{font-size:18px}
+.tp-raise.r-land.padon .rtop,.tp-raise.r-land .rnote{display:none} /* the pad needs the height; the button already says what typing does */
+.tp-raise.r-land .ramt{gap:8px}
+/* laptops and desktops: a popover above the Raise button, keys written in */
+.tp-raise.r-lap .rbox{width:470px;padding:16px 18px 18px;border-radius:var(--r-panel,18px);box-shadow:var(--panelsh,inset 0 0 0 1px var(--line)),0 24px 60px rgba(0,0,0,.55)}
+.tp-raise.r-lap .rpre button{min-height:38px}
+.tp-raise .tail{position:absolute;right:56px;bottom:-9px;width:18px;height:18px;background:var(--bg);transform:rotate(45deg);box-shadow:var(--panelsh,inset 0 0 0 1px var(--line))}
+/* the moves: the sheet rises (0.4 s), the panel slides in, the popover pops; off shows the end at once */
+.tp-raise.enter .rdim{animation:rz-fade calc(.3s * var(--k)) var(--ease) both}
+.tp-raise.enter.r-phone .rbox{animation:rz-rise calc(.4s * var(--k)) var(--ease) both}
+.tp-raise.enter.r-land .rbox{animation:rz-slide calc(.35s * var(--k)) var(--ease) both}
+.tp-raise.enter.r-lap .rbox{animation:rz-pop calc(.3s * var(--k)) var(--ease) both}
+@keyframes rz-fade{from{opacity:0}}
+@keyframes rz-rise{from{transform:translateY(40%);opacity:0}}
+@keyframes rz-slide{from{transform:translateX(30px);opacity:0}}
+@keyframes rz-pop{from{transform:translateY(10px) scale(.97);opacity:0}}
+.tp-raise.m-off *,.tp-raise.m-off *::before,.tp-raise.m-off *::after{animation:none!important;transition:none!important}
+@media (prefers-reduced-motion:reduce){.tp-raise *,.tp-raise *::before,.tp-raise *::after{animation:none!important;transition:none!important}}

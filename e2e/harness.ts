@@ -171,10 +171,10 @@ export async function playOneAction(phones: Phone[], rnd: () => number): Promise
     const call = p.locator('.tp.live [data-act=call]');
     if (r < 0.2 && (await seen(raise))) {
       await raise.first().click({ timeout: 3000 });
-      const presets = p.locator('.tp-raise-in .presets button');
+      const presets = p.locator('.tp-raise .rpre button');
       const k = await presets.count();
       if (k) await presets.nth(Math.floor(rnd() * k)).click({ timeout: 3000 }).catch(() => {});
-      await p.locator('.tp-raise-in [data-x=go]').click({ timeout: 3000 }).catch(() => {});
+      await p.locator('.tp-raise [data-x=go]').click({ timeout: 3000 }).catch(() => {});
     } else if (r < 0.32 && !(await seen(check))) {
       await fold.first().click({ timeout: 3000 }).catch(() => {});
     } else if (await seen(check)) await check.first().click({ timeout: 3000 }).catch(() => {});
