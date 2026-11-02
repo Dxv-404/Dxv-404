@@ -118,7 +118,9 @@ const wss = new WebSocketServer({ noServer: true, maxPayload: 8 * 1024 });
 let nextId = 1;
 server.on('upgrade', (req, socket, head) => {
   if (new URL(req.url ?? '/', 'http://host').pathname !== '/table/OFFLINE') { socket.destroy(); return; }
+  socket.on('error', () => socket.destroy());
   wss.handleUpgrade(req, socket, head, (ws) => {
+    ws.on('error', () => ws.terminate()); // a bad frame closes that phone only, not the host
     const id = nextId++;
     sockets.set(id, ws);
     call(() => rt.open(id));

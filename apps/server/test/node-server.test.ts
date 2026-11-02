@@ -35,6 +35,19 @@ beforeAll(async () => {
 afterAll(async () => { await kill(); });
 
 describe('Oracle table server (real sockets)', () => {
+  it('a frame that is too big, broken or binary closes only that socket; the server keeps running', async () => {
+    for (const bad of ['x'.repeat(300_000), new Uint8Array(20_000), '{"t":"hello"']) {
+      const ws = new WebSocket(`ws://127.0.0.1:${port}/table/HUGE`);
+      await new Promise((r) => { ws.onopen = r; ws.onerror = r; });
+      const closed = new Promise((r) => { ws.onclose = r; });
+      ws.send(bad);
+      if (typeof bad === 'string' && bad.length > 8192) await closed;
+      else ws.close();
+    }
+    await new Promise((r) => setTimeout(r, 300));
+    expect((await fetch(`http://127.0.0.1:${port}/health`)).ok).toBe(true);
+  });
+
   it('health answers with the protocol version', async () => {
     const h = await (await fetch(`http://127.0.0.1:${port}/health`)).json() as { ok: boolean; protocol: number };
     expect(h).toMatchObject({ ok: true, protocol: 1 });
