@@ -96,3 +96,16 @@ body[data-playing] #info-btn{display:none}
 .tp-over .tp-presence.sit{position:absolute;left:12px;right:12px;top:62px;z-index:40;padding:10px 14px;font:600 13px var(--ui);text-align:center;max-width:420px;margin:0 auto}
 @media (prefers-reduced-motion:reduce){.tp-over .pz-bn,.tp-over .pz-dots i,.tp-over .pz-toast,.tp-over .pz-ring{animation:none}}
 .tp-over .pz-toast,.tp-over .pz-dim,.tp-over .pz-pause{pointer-events:auto}
+/* the table's own sheets and cards (raise, first-time tips, cannot-join, watching) in the theme's tokens */
+.tp-raise-in{background:linear-gradient(var(--panel,var(--chipbg)),var(--panel,var(--chipbg))),var(--bg,#1c1612);color:var(--tx,#f3ead7);border-radius:var(--r-panel,18px) var(--r-panel,18px) 0 0;box-shadow:var(--panelsh,inset 0 0 0 1px var(--line)),0 -10px 30px rgba(0,0,0,.4)}
+.tp-raise .amt b{font:var(--numw,800) 34px var(--num,system-ui);color:var(--tx)}.tp-raise .amt small{color:var(--mut);opacity:1}
+.tp-raise input[type=range]{accent-color:var(--acc,#d9a441)}
+.tp-raise .presets button{border:0;border-radius:calc(var(--r-btn,12px) * .8);background:var(--chipbg);box-shadow:inset 0 0 0 1px var(--line);color:var(--tx);font:700 13px var(--ui)}
+.tp-raise .presets button.on{background:var(--acc);color:var(--acctx);box-shadow:none}
+.tp-raise .act{border:0;border-radius:var(--r-btn,14px);font:800 16px var(--ui)}
+.tp-raise .act.ghost{background:var(--chipbg);color:var(--tx);box-shadow:inset 0 0 0 1.5px var(--line)}
+.tp-raise .act.raise{background:var(--b-raise,var(--b-call));color:var(--b-raisetx,var(--b-calltx));box-shadow:var(--b-raisesh,none)}
+.tp-intro-in,.tp-fatal{background:linear-gradient(var(--panel,var(--chipbg)),var(--panel,var(--chipbg))),var(--bg,#1c1612);color:var(--tx,#f3ead7);border-radius:var(--r-panel,18px);box-shadow:var(--panelsh,inset 0 0 0 1px var(--line)),0 18px 40px rgba(0,0,0,.45)}
+.tp-intro-in h2{font:var(--dspw,700) 22px var(--dsp,system-ui);color:var(--tx)}.tp-intro-in p{color:var(--mut);opacity:1}.tp-intro-in small{color:var(--acc);opacity:1;font:700 11px var(--ui);letter-spacing:.12em;text-transform:uppercase}
+.tp-intro-in .act{border:0;border-radius:var(--r-btn,14px);background:var(--b-call);color:var(--b-calltx);box-shadow:var(--b-callsh,none);font:800 16px var(--ui)}
+.tp-watching{background:linear-gradient(var(--panel,var(--chipbg)),var(--panel,var(--chipbg))),var(--bg,#14100c);color:var(--tx,#f3ead7);box-shadow:var(--panelsh,inset 0 0 0 1px var(--line))}
