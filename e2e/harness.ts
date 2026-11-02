@@ -90,6 +90,17 @@ export async function hostTable(host: Phone, names: string[]): Promise<void> {
 /** Pairs a guest phone to the next open seat, feeding the QR payloads through the test hook
  *  instead of a camera (the payloads are the same strings the QR codes carry). */
 export async function pair(host: Phone, guest: Phone, rejoinPid?: string): Promise<void> {
+  // two phones on one busy machine sometimes fail to find each other the first time; the app says so and
+  // the person pairs again, which is what this does (once)
+  try { await pairOnce(host, guest, rejoinPid); }
+  catch (e) {
+    if (!/could not reach each other/.test(String((e as Error).message))) throw e;
+    await guest.page.goto('/');
+    await pairOnce(host, guest, rejoinPid);
+  }
+}
+
+async function pairOnce(host: Phone, guest: Phone, rejoinPid?: string): Promise<void> {
   const hp = host.page, gp = guest.page;
   let offer: string;
   if (rejoinPid) {

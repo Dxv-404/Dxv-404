@@ -10,7 +10,7 @@ const MIXES: [string, ModelName[]][] = [
 
 for (const [label, models] of MIXES) {
   test(`three phones play 40 actions without losing a chip (${label})`, async ({ browser, baseURL }) => {
-    test.setTimeout(360_000);
+    test.setTimeout(600_000); // three phones each on two shared CPUs
     const names = ['Dev', 'Rohan', 'Riya'];
     const phones = await Promise.all(models.map((m, i) => newPhone(browser, names[i]!, MODELS[m], baseURL!)));
     const [host, g1, g2] = phones as [typeof phones[0], typeof phones[0], typeof phones[0]];

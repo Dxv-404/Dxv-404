@@ -61,6 +61,8 @@ for (const theme of THEMES) {
     // hold to look
     const hc = guest.page.locator('.hero .hc');
     if (await guest.page.locator('.hero .hc:not(.none)').count()) {
+      await expect(hc).toBeVisible();
+      await expect.poll(async () => !!(await hc.boundingBox())).toBe(true); // laid out (a redraw can be in flight)
       const box = (await hc.boundingBox())!;
       await guest.page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
       await guest.page.mouse.down();
