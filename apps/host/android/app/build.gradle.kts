@@ -10,8 +10,8 @@ android {
         applicationId = "app.trainpoker.host"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.5.0"
+        versionCode = 4
+        versionName = "0.5.1"
     }
     // The release key lives outside the repository (TP_SIGNING_DIR); the app can only ever be updated with it.
     val signingDir = System.getenv("TP_SIGNING_DIR")

@@ -75,7 +75,7 @@ const CHECK = `(f) => {
   return { issues: [...new Set(out)], minFont: Math.round(minFont * 10) / 10 };
 }`;
 
-for (const scene of ['flop', 'preflop', 'showdown'] as const) test(`693 layout checks (${scene}): 9 themes, 11 screens, 2 to 15 players`, async ({ browser, baseURL }) => {
+for (const [scene, big] of [['flop', false], ['preflop', false], ['showdown', false], ['flop', true]] as const) test(`693 layout checks (${scene}${big ? ', large text' : ''}): 9 themes, 11 screens, 2 to 15 players`, async ({ browser, baseURL }) => {
   test.setTimeout(600_000);
   const views = Object.fromEntries(COUNTS.map((n) => [n, viewFor(n, scene)]));
   const failures: string[] = [];
@@ -90,23 +90,24 @@ for (const scene of ['flop', 'preflop', 'showdown'] as const) test(`693 layout c
       await page.evaluate((t) => (window as any).__tpLab.setTheme(t), theme);
       await page.waitForFunction(() => Array.from(document.styleSheets).some((s) => s.href?.includes('/tp/t-')) && document.fonts.status === 'loaded');
       for (const n of COUNTS) {
-        const r = await page.evaluate(([v, t, w, h, check]) => {
+        const r = await page.evaluate(([v, t, w, h, check, bigText]) => {
           const lab = (window as any).__tpLab;
           let host = document.getElementById('lab');
           if (!host) { host = document.createElement('div'); host.id = 'lab'; host.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#000'; document.body.append(host); }
           host.innerHTML = lab.sprite(t) + lab.renderTable(v, t, w, h, { peek: false, bubble: 'Riya bets 60.', code: 'QK7P', net: 'good' }).html;
+          if (bigText) host.querySelector('.tp').classList.add('bigtext', 'still');
           return (0, eval)(check)(host.querySelector('.tp'));
-        }, [views[n], theme, W, H, CHECK] as const);
+        }, [views[n], theme, W, H, CHECK, big] as const);
         checked++;
         smallest = Math.min(smallest, r.minFont);
         if (r.issues.length) failures.push(`${theme} ${label} ${W}x${H} ${n} players: ${r.issues.join(', ')}`);
         if (r.minFont < 9) failures.push(`${theme} ${label} ${n} players: text ${r.minFont}px`);
-        if ((W === 390 || W === 1440 || W === 844) && (n === 6 || n === 15)) await page.screenshot({ path: `test-results/tables/${scene}-${theme}-${W}x${H}-${n}.png` });
+        if ((W === 390 || W === 1440 || W === 844) && (n === 6 || n === 15)) await page.screenshot({ path: `test-results/tables/${scene}${big ? '-big' : ''}-${theme}-${W}x${H}-${n}.png` });
       }
     }
     await ctx.close();
   }
-  console.log(`layout checks (${scene}): ${checked}, failures ${failures.length}, smallest text ${smallest}px`);
+  console.log(`layout checks (${scene}${big ? ', large text' : ''}): ${checked}, failures ${failures.length}, smallest text ${smallest}px`);
   expect(checked).toBe(693);
   expect(failures).toEqual([]);
 });

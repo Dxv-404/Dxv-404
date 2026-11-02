@@ -64,5 +64,5 @@ body[data-playing] #info-btn{display:none}
 .tp-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .tp.four{--dia:#2f6fd8;--club:#1e8a4a}
 .tp.calm *{animation-iteration-count:1!important;animation-duration:.25s!important;transition-duration:.15s!important}
-.tp.bigtext .plate,.tp.bigtext .tag,.tp.bigtext .pot,.tp.bigtext .waitline{zoom:1.15}
+.tp.bigtext .plate b,.tp.bigtext .plate i,.tp.bigtext .pot,.tp.bigtext .waitline{zoom:1.15}
 .tp.live{touch-action:manipulation}
