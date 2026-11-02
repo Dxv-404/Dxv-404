@@ -98,7 +98,7 @@ export function chipStack(amount, bb) {
 
 export function toast(msg, ms = 2600) {
   let t = document.getElementById('toast');
-  if (!t) { t = h('div', { id: 'toast', role: 'status', 'aria-live': 'polite' }); document.body.append(t); }
+  if (!t) { t = h('div', { id: 'toast', role: 'status', 'aria-live': 'polite' }); (document.getElementById('app') ?? document.body).append(t); }
   t.textContent = msg;
   t.classList.add('show');
   clearTimeout(t._h);

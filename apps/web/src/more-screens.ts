@@ -4,8 +4,8 @@ import { h, toast } from './legacy/ui.js';
 import { settings, saveSettings } from './legacy/fx.js';
 import { VAPID_PUBLIC_KEY } from '@tp/protocol';
 import type { Account, PushPrefs } from '@tp/account';
-import { THEME_KEYS, THEMES } from './table/render';
 import { currentTheme, setTheme } from './table/screen';
+import { themeSwatches } from './ui/shell';
 import type { Ui } from './offline-screens';
 
 export const APP_VERSION = '0.5.0';
@@ -107,15 +107,11 @@ export function settingsScreen(ui: Ui): void {
       draw();
       return h('div', { class: 'field' }, h('span', {}, label), wrap);
     };
-    const themes = h('div', { class: 'theme-grid', role: 'radiogroup', 'aria-label': 'Table theme' });
-    const drawThemes = () => themes.replaceChildren(...THEME_KEYS.map((k) => h('button', {
-      role: 'radio', 'aria-checked': currentTheme() === k ? 'true' : 'false', class: 'theme-pick' + (currentTheme() === k ? ' on' : ''), 'data-theme': k,
-      onclick: () => { setTheme(k); drawThemes(); },
-    }, THEMES[k]!.name)));
-    drawThemes();
+    const themes = themeSwatches((k) => setTheme(k));
     const pushBox = h('div', {});
     el.append(head('Settings', ui.home),
-      h('section', { class: 'block' }, h('h2', {}, 'Table theme'), themes),
+      h('section', { class: 'block' }, h('h2', {}, 'Theme'), themes,
+        h('button', { class: 'btn ghost small', 'data-testid': 'open-picker', onclick: () => (window as unknown as { __tpPicker?: () => void }).__tpPicker?.() }, 'See it on every screen')),
       h('section', { class: 'block' }, h('h2', {}, 'At the table'),
         sw('holdToPeek', 'Hold to see my cards', 'Off: your cards are shown face up on your screen'),
         sw('fourColor', 'Four-colour deck', 'Diamonds blue, clubs green'),
@@ -127,6 +123,7 @@ export function settingsScreen(ui: Ui): void {
       h('section', { class: 'block' }, h('h2', {}, 'Notifications'), pushBox),
       h('section', { class: 'block' }, h('h2', {}, 'Help'),
         h('button', { class: 'btn ghost', 'data-testid': 'open-report', onclick: () => reportScreen(ui, () => settingsScreen(ui)) }, 'Report a problem'),
+        h('button', { class: 'btn ghost', 'data-testid': 'open-hands', onclick: () => (window as unknown as { __tpHands?: () => void }).__tpHands?.() }, 'Poker hands'),
         h('button', { class: 'btn ghost', 'data-testid': 'open-privacy', onclick: () => privacyScreen(ui, () => settingsScreen(ui)) }, 'Privacy'),
         h('p', { class: 'hint small' }, `Train Poker ${APP_VERSION}`)));
     void pushBlock(pushBox);

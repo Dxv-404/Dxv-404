@@ -1,7 +1,7 @@
 // Screens for offline tables (see offline.ts for how they work).
 import { h, toast, fmt } from './legacy/ui.js';
-import { TableScreen, setTheme, currentTheme } from './table/screen';
-import { THEME_KEYS, THEMES } from './table/render';
+import { TableScreen, setTheme } from './table/screen';
+import { themeSwatches } from './ui/shell';
 import { infoContent } from './legacy/info.js';
 import type { TableSettings } from '@tp/protocol';
 import {
@@ -246,10 +246,7 @@ function tableMenu(ui: Ui, net: NetTable, o: { offline: boolean; code?: string; 
         h('a', { class: 'btn ghost small', href: `https://wa.me/?text=${encodeURIComponent(`Poker table ${o.code}: ${link}`)}`, target: '_blank', rel: 'noopener' }, 'Send on WhatsApp')),
       h('button', { class: 'btn ghost small', 'data-testid': 'copy-watch-link', onclick: () => { const w = `${location.origin}${location.pathname}#/w/${o.code}`; navigator.clipboard?.writeText(w).then(() => toast('Watch link copied'), () => toast(w, 8000)); } }, 'Copy a link to watch')));
   }
-  const themeRow = h('div', { class: 'theme-grid', role: 'radiogroup', 'aria-label': 'Table theme' }, ...THEME_KEYS.map((k) => h('button', {
-    role: 'radio', 'aria-checked': currentTheme() === k ? 'true' : 'false', class: 'theme-pick' + (currentTheme() === k ? ' on' : ''), 'data-theme': k,
-    onclick: () => { setTheme(k); close(); },
-  }, THEMES[k]!.name)));
+  const themeRow = themeSwatches((k) => { setTheme(k); close(); });
   body.append(h('section', { class: 'block' }, h('h3', {}, 'Theme'), themeRow));
   body.append(h('section', { class: 'block' }, h('div', { class: 'menu-actions' },
     meP && h('button', { class: 'btn ghost', onclick: () => { net.sitOut(!meP.sittingOut); close(); } }, meP.sittingOut ? 'Sit back in' : 'Sit out from next hand'),

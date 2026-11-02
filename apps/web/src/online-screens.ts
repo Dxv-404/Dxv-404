@@ -122,7 +122,7 @@ export function onlineStart(ui: Ui): void {
   });
 }
 
-function hostOnline(ui: Ui): void {
+export function hostOnline(ui: Ui): void {
   const cfg: TableSettings = { ...(store.get<TableSettings>('tp-online-settings') ?? { startStack: 1000, sb: 5, bb: 10, turnTime: 20, rebuys: true }) };
   ui.screen((el) => {
     el.className = 'screen setup';

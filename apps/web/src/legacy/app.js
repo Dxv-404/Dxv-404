@@ -9,10 +9,14 @@ import { warmUpCamera, parsePayload } from './net.js';
 import { accountScreens } from './account-ui.js';
 import { offlineStart, hostPhoneHome, hostPhoneTable } from '../offline-screens.ts';
 import { onHostPhonePage } from '../offline.ts';
-import { onlineStart, routeOnline } from '../online-screens.ts';
+import { onlineStart, routeOnline, playOnline, hostOnline } from '../online-screens.ts';
+import { initShell, loadingScreen, menuScreen, pickerScreen, leaveMenu } from '../ui/shell.ts';
+import { setTheme, currentTheme } from '../table/screen.ts';
 import { settingsScreen, installErrorReporting, noteScreen } from '../more-screens.ts';
 
-const app = $('#app');
+// every screen sits inside the player's theme (its background, tokens and art); screens go in #view
+const appRoot = $('#app');
+const app = initShell(appRoot);
 let host = null;
 let guest = null;
 let table = null;
@@ -34,7 +38,7 @@ function openSheet(content, { label = 'Panel', onClose, tall = false } = {}) {
     h('button', { class: 'icon-btn sheet-close', 'aria-label': 'Close', onclick: close }, '✕'),
     h('div', { class: 'sheet-body' }, content));
   const wrap = h('div', { class: 'sheet-wrap' }, scrim, sheet);
-  document.body.append(wrap);
+  appRoot.append(wrap);
   requestAnimationFrame(() => { sheet.classList.add('open'); scrim.classList.add('open'); });
   document.addEventListener('keydown', onKey);
   // swipe down to close
@@ -49,11 +53,15 @@ const accounts = accountScreens({ screen, openSheet, home: () => home() });
 const ui = { screen, openSheet, home: () => home() };
 window.addEventListener('hashchange', () => { if (!routeOnline(ui)) accounts.route(); });
 
-// The info button is always on top of everything.
-$('#info-btn').addEventListener('click', () => openSheet(infoContent(), { label: 'Poker hands', tall: true }));
+// (the old floating info button: the table and Settings have their own way to the hand rankings)
+$('#info-btn')?.remove();
+export const showHands = () => openSheet(infoContent(), { label: 'Poker hands', tall: true });
+window.__tpHands = showHands;
+window.__tpPicker = () => themePicker();
 
 function screen(build) {
   if (current) { try { current(); } catch {} current = null; }
+  leaveMenu();
   app.replaceChildren();
   const el = h('main', { class: 'screen' });
   app.append(el);
@@ -63,34 +71,41 @@ function screen(build) {
   window.scrollTo(0, 0);
 }
 
-// ---------------- home ----------------
+// ---------------- home: the theme's main menu ----------------
+function menuActions() {
+  const crews = (() => { try { return JSON.parse(localStorage.getItem('tp-crews') || '[]'); } catch { return []; } })();
+  return {
+    joinOnline: (code) => playOnline(ui, code),
+    joinOffline: () => offlineStart(ui),
+    host: () => hostChoice(),
+    profile: () => accounts.profile(),
+    settings: () => settingsScreen(ui),
+    crew: (id) => accounts.crew(id),
+    rejoin: (code) => playOnline(ui, code),
+    league: () => (crews.length ? accounts.league(crews[0]) : accounts.profile()),
+    replays: () => accounts.history(),
+    theme: () => themePicker(),
+  };
+}
+
 function home() {
   delete document.body.dataset.playing;
+  screen((el) => menuScreen(el, menuActions()));
+}
+
+function themePicker() {
   screen((el) => {
-    el.className = 'screen home';
-    const saved = Host.savedSummary();
-    const gsaved = Guest.saved();
-    el.append(
-      h('div', { class: 'home-hero' },
-        h('div', { class: 'home-cards', 'aria-hidden': 'true' }, h('span', { class: 'hc a' }, 'A', h('i', {}, '♠')), h('span', { class: 'hc b' }, 'K', h('i', {}, '♥'))),
-        h('h1', {}, 'Train Poker'),
-        h('p', { class: 'tagline' }, "No-limit Texas Hold'em, one phone each, no internet needed.")),
-      h('div', { class: 'home-actions' },
-        saved && h('button', { class: 'btn primary', onclick: () => resumeHost() }, 'Resume your table', h('small', {}, `${saved.players} players, hand ${saved.handNo}`)),
-        h('button', { class: 'btn ' + (saved ? 'secondary' : 'primary'), 'data-testid': 'play-online', onclick: () => onlineStart(ui) }, 'Play online', h('small', {}, 'Open a table or join with a code')),
-        h('button', { class: 'btn secondary', 'data-testid': 'play-offline', onclick: () => offlineStart(ui) }, 'Play offline', h('small', {}, 'No internet: one phone runs the host app on its hotspot')),
-        h('button', { class: 'btn ghost', onclick: () => setup() }, 'Host a new table', h('small', {}, 'Without the host app: phones pair by QR code')),
-        h('button', { class: 'btn ghost', onclick: () => join() }, gsaved ? 'Join or rejoin a table' : 'Join a table', h('small', {}, gsaved ? `Last time you were ${gsaved.name}` : 'Scan the host’s QR code')),
-        h('button', { class: 'btn ghost', 'data-testid': 'open-profile', onclick: () => accounts.profile() }, 'Profile and crews', h('small', {}, 'Recovery code, crews, invites')),
-        h('button', { class: 'btn ghost', 'data-testid': 'open-settings', onclick: () => settingsScreen(ui) }, 'Settings', h('small', {}, 'Theme, sounds, motion, notifications, Report a problem'))),
-      h('details', { class: 'howto' },
-        h('summary', {}, 'How phones connect without WiFi'),
-        h('ol', {},
-          h('li', {}, 'One person turns on their phone’s hotspot. Mobile data can stay off, the hotspot still works as a local network.'),
-          h('li', {}, 'Everyone else connects to that hotspot’s WiFi. It will say “no internet”, that’s fine.'),
-          h('li', {}, 'The host opens a table and shows each friend a code. Friends scan it, show a reply code, and the host scans that back.'),
-          h('li', {}, 'Open this page once with internet and add it to your home screen, so it opens on the train.'))));
+    pickerScreen(el, () => home(), menuActions());
+    return () => setTheme(currentTheme()); // leaving without Use puts your own theme back
   });
+}
+
+/** Host a new table: online (a table server) or offline (the host app on a hotspot). */
+function hostChoice() {
+  const s = openSheet(h('div', { class: 'menu-actions' },
+    h('h2', {}, 'Host a new table'),
+    h('button', { class: 'btn primary', 'data-testid': 'online-host', onclick: () => { s.close(); hostOnline(ui); } }, 'Online', h('small', {}, 'Friends join with a code or a link, from anywhere')),
+    h('button', { class: 'btn secondary', 'data-testid': 'offline-host', onclick: () => { s.close(); offlineStart(ui); } }, 'Offline', h('small', {}, 'No internet: the host app runs the table on your hotspot'))), { label: 'Host a new table' });
 }
 
 // ---------------- setup (host) ----------------
@@ -452,10 +467,5 @@ window.__tp = { get host() { return host; }, get guest() { return guest; }, get 
 // on the host phone's own page (http://<hotspot>:8765): the offline table, or the host app's screen
 if (onHostPhonePage()) {
   if (location.pathname === '/join') hostPhoneTable(ui); else hostPhoneHome(ui);
-} else
-// make sure this browser can actually connect phones
-if (!window.RTCPeerConnection || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-  app.replaceChildren(h('main', { class: 'screen home' }, h('div', { class: 'home-hero' }, h('h1', {}, 'Train Poker'),
-    h('p', { class: 'tagline' }, 'This browser can’t connect phones or use the camera. Open train-poker.vercel.app in Chrome (or Safari on iPhone).'))));
-} else if (!routeOnline(ui) && !accounts.route()) home();
+} else loadingScreen(() => { if (!routeOnline(ui) && !accounts.route()) home(); });
 installErrorReporting();

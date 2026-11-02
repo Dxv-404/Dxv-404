@@ -170,7 +170,11 @@ export function accountScreens({ screen, openSheet, home }) {
     busy(box);
     try {
       const crews = await a.crews();
-      try { localStorage.setItem('tp-crews', JSON.stringify(crews.filter((c) => c.status === 'active').map((c) => ({ id: c.id, name: c.name })))); } catch { /* see above */ }
+      try {
+        // keep what the menu already knows about each crew (its first members and size)
+        const had = new Map((JSON.parse(localStorage.getItem('tp-crews') || '[]')).map((c) => [c.id, c]));
+        localStorage.setItem('tp-crews', JSON.stringify(crews.filter((c) => c.status === 'active').map((c) => ({ ...(had.get(c.id) || {}), id: c.id, name: c.name }))));
+      } catch { /* see above */ }
       box.replaceChildren(crews.length
         ? h('ul', { class: 'crew-list', 'data-testid': 'crews' }, ...crews.map((c) => h('li', {},
           h('button', { class: 'crew-row', onclick: () => crewScreen(c.id) },
@@ -417,5 +421,5 @@ export function accountScreens({ screen, openSheet, home }) {
     return false;
   }
 
-  return { profile, invite, route };
+  return { profile, invite, route, crew: crewScreen, league: (c) => lg.league(c, () => profile()), history: () => lg.history() };
 }
