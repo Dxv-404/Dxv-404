@@ -16,8 +16,10 @@ export function qrSvg(text, { dark = '#17110C', light = '#F7F1E3' } = {}) {
 // Camera scanner. Uses the native BarcodeDetector where available (Android Chrome),
 // otherwise decodes frames with jsQR in a worker so the UI never stutters.
 export class Scanner {
-  constructor(video) {
+  /** accept: which scanned texts count (pairing codes by default; the crews screens take crew links) */
+  constructor(video, accept = (t) => t.startsWith('PK1~')) {
     this.video = video;
+    this.accept = accept;
     this.stream = null;
     this.running = false;
     this.worker = null;
@@ -52,7 +54,7 @@ export class Scanner {
   }
 
   _found(text) {
-    if (!text.startsWith('PK1~')) return;
+    if (!this.accept(text)) return;
     this.running = false;
     this.onCode && this.onCode(text);
   }

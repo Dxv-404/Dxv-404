@@ -12,6 +12,9 @@ import { onlineStart, routeOnline, playOnline, hostOnline } from '../online-scre
 import { initShell, loadingScreen, menuScreen, pickerScreen, leaveMenu } from '../ui/shell.ts';
 import { setTheme, currentTheme, TableScreen } from '../table/screen.ts';
 import { settingsScreen, installErrorReporting, noteScreen } from '../more-screens.ts';
+import { crewsUi } from '../crews/screens.ts';
+import { newCode, pickServer, playOnline as openOnline, hostOnline as openTableScreen } from '../online-screens.ts';
+import { joinCode as offlineJoin } from '../offline-screens.ts';
 
 // every screen sits inside the player's theme (its background, tokens and art); screens go in #view
 const appRoot = $('#app');
@@ -48,9 +51,20 @@ function openSheet(content, { label = 'Panel', onClose, tall = false } = {}) {
   return { close, sheet };
 }
 
-const accounts = accountScreens({ screen, openSheet, home: () => home() });
 const ui = { screen, openSheet, home: () => home(), qrJoin: () => join() };
-window.addEventListener('hashchange', () => { if (!routeOnline(ui)) accounts.route(); });
+// the Crews tab and the crew page (v3)
+const crews = crewsUi({
+  screen, openSheet, nav: () => menuActions(), play: () => home(),
+  openGame: (id, back) => accounts.game(id, back),
+  openTable: async (cfg) => { const code = newCode(await pickServer()); void openOnline(ui, code, cfg); return code; },
+  joinTable: (code) => void openOnline(ui, code),
+  changeForTonight: (preset, opened, canSave) => openTableScreen(ui, { preset, opened, canSave, back: () => crews.tab() }),
+  hostOffline: () => offlineStart(ui),
+  hostQr: () => setup(),
+  joinOffline: () => offlineJoin(ui),
+});
+const accounts = accountScreens({ screen, openSheet, home: () => home(), crews });
+window.addEventListener('hashchange', () => { if (!routeOnline(ui) && !crews.route()) accounts.route(); });
 
 // (the old floating info button: the table and Settings have their own way to the hand rankings)
 $('#info-btn')?.remove();
@@ -72,7 +86,6 @@ function screen(build) {
 
 // ---------------- home: the theme's main menu ----------------
 function menuActions() {
-  const crews = (() => { try { return JSON.parse(localStorage.getItem('tp-crews') || '[]'); } catch { return []; } })();
   const saved = Host.savedSummary();
   return {
     ...(saved ? { resumeHost: { sub: `QR table · ${saved.players} players, hand ${saved.handNo}`, go: () => resumeHost() } } : {}),
@@ -81,9 +94,10 @@ function menuActions() {
     host: () => hostChoice(),
     profile: () => accounts.profile(),
     settings: () => settingsScreen(ui),
-    crew: (id) => accounts.crew(id),
+    crew: (id) => crews.open(id),
     rejoin: (code) => playOnline(ui, code),
-    league: () => (crews.length ? accounts.league(crews[0]) : accounts.profile()),
+    crews: () => crews.tab(),
+    play: () => home(),
     replays: () => accounts.history(),
     theme: () => themePicker(),
   };
@@ -460,5 +474,5 @@ window.__tp = { get host() { return host; }, get guest() { return guest; }, get 
 // on the host phone's own page (http://<hotspot>:8765): the offline table, or the host app's screen
 if (onHostPhonePage()) {
   if (location.pathname === '/join') hostPhoneTable(ui); else hostPhoneHome(ui);
-} else loadingScreen(() => { if (!routeOnline(ui) && !accounts.route()) home(); });
+} else loadingScreen(() => { if (!routeOnline(ui) && !crews.route() && !accounts.route()) home(); });
 installErrorReporting();

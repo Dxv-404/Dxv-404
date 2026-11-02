@@ -1,0 +1,266 @@
+/* The Crews tab and the crew page (v3): the design kit (tools/design/gen/v3kit.py KIT_CSS), the crews screens
+   (v3crews.py, v3crew.py) and their layouts on every screen (v3sizes.py), in the player's theme tokens. Motion uses
+   the theme's feel: --cw-k (speed; shorter when calm) and --cw-ease; data-motion="off" shows end states at once. */
+
+/* ---------------------------------------------------------------- the screen and its layouts */
+.tp.app .screen.cw-screen:not(.tp-screen):not(.table-screen){max-width:none;margin:0;padding:0;min-height:100dvh;display:block;gap:0}
+.tp.app .cw{--cw-k:1;--cw-ease:cubic-bezier(.2,.7,.2,1);color:var(--tx);font-family:var(--ui)}
+.tp.app .cw-lay{display:flex;min-height:100dvh;position:relative}
+.tp.app .cw-col{display:flex;flex-direction:column;gap:14px;min-width:0}
+/* phones: one column; the bottom bar stays pinned and the content scrolls under it */
+.tp.app .cw-lay.s-phone{display:block;max-width:460px;margin:0 auto;padding:calc(18px + env(safe-area-inset-top)) 18px calc(24px + env(safe-area-inset-bottom))}
+.tp.app .cw-screen.with-nav .cw-lay.s-phone{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
+.tp.app .cw-lay.s-phone>.cw-col{min-height:calc(100dvh - 42px - env(safe-area-inset-top) - env(safe-area-inset-bottom))}
+.tp.app .cw-screen.with-nav .cw-lay.s-phone>.cw-col{min-height:calc(100dvh - 114px - env(safe-area-inset-top) - env(safe-area-inset-bottom))}
+/* bigger screens: columns side by side, each scrolling on its own */
+.tp.app .cw-lay:not(.s-phone){height:100dvh;overflow:hidden}
+.tp.app .cw-lay:not(.s-phone)>.cw-col{overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.tp.app .cw-lay .clist{width:340px;flex:none;padding:22px 16px;gap:12px;box-shadow:inset -1px 0 0 var(--line);background:color-mix(in srgb,var(--bg) 60%,transparent)}
+.tp.app .cw-lay.s-phone .clist{width:auto;padding:0;box-shadow:none;background:none}
+.tp.app .cw-lay .cmain{flex:1;padding:22px 26px 28px;gap:14px}
+.tp.app .cw-lay.s-phone .cmain{padding:0}
+.tp.app .cw-lay .mcol{width:320px;flex:none;padding:22px 18px 22px 0;gap:14px}
+.tp.app .cw-lay.s-tab{height:calc(100dvh - 74px - env(safe-area-inset-bottom))}
+.tp.app .cw-lay.s-tab .clist{width:300px}
+.tp.app .cw-lay.s-tab .cmain{padding:20px}
+.tp.app .cw-lay.s-side .clist{width:300px;padding:12px;gap:8px}
+.tp.app .cw-lay.s-side .cmain{padding:12px 16px;gap:10px}
+.tp.app .cw-lay.s-side .ccard{padding:10px;gap:8px}.tp.app .cw-lay.s-side .ccard .hrow.ft{display:none}.tp.app .cw-lay.s-side .lvbar{margin:-10px -10px 0}
+.tp.app .cw-lay.s-side .pnl{padding:11px;gap:8px}
+.tp.app .cw-lay.s-side .bb:not(.sm){height:46px}
+.tp.app .cw-lay.s-side .clist .hrow .ct{font-size:20px}
+/* the rail: sideways phones (icons), laptops and desktops (with the logo) */
+.tp.app .cw .rail{display:flex;flex-direction:column;gap:6px;padding:12px 8px calc(12px + env(safe-area-inset-bottom));width:64px;box-shadow:inset -1px 0 0 var(--line);background:color-mix(in srgb,var(--bg) 85%,transparent);flex:none;align-items:center;overflow:hidden}
+.tp.app .cw .rail.w{width:220px;align-items:stretch;padding:22px 16px}
+.tp.app .cw .rail>button{display:flex;align-items:center;gap:12px;padding:10px;min-height:44px;min-width:44px;border-radius:var(--r-btn,12px);font:700 14px var(--ui);color:var(--mut);justify-content:center}
+.tp.app .cw .rail.w>button{justify-content:flex-start;padding:11px 12px}
+.tp.app .cw .rail>button i{font-style:normal;font-size:18px;width:22px;text-align:center}
+.tp.app .cw .rail:not(.w)>button span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.tp.app .cw .rail>button.on{background:color-mix(in srgb,var(--acc) 16%,transparent);color:var(--acc);box-shadow:inset 3px 0 0 var(--acc)}
+.tp.app .cw .rlogo{min-height:8px}
+.tp.app .cw .rail.w .rlogo{height:70px;margin-bottom:14px;overflow:hidden}
+.tp.app .cw .rail.w .rlogo .lg{transform:scale(.62);transform-origin:left top;white-space:nowrap;text-align:left}
+.tp.app .cw .rail .rme{margin-top:auto;padding:6px}.tp.app .cw .rail .rme b{font:700 14px var(--ui);color:var(--tx)}
+/* the bottom bar on the crews screens: see-through, the theme's underline under the open tab */
+.tp.app .cw-screen>.nav{background:color-mix(in srgb,var(--bg) 86%,transparent);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.tp.app .cw-screen[data-size=tab]>.nav{left:0;right:0;width:auto;transform:none;border-radius:0;box-shadow:inset 0 1px 0 var(--line)}
+.tp.app .nav button{position:relative}
+.tp.app .nav button.on::after{content:"";position:absolute;bottom:-7px;left:50%;width:22px;height:3px;margin-left:-11px;border-radius:2px;background:var(--acc);animation:cwnavin calc(.45s * var(--cw-k,1)) var(--cw-ease,ease) both}
+@keyframes cwnavin{from{transform:scaleX(0);opacity:0}}
+.tp.app .nav .bdg{position:absolute;top:-2px;right:14px;min-width:16px;height:16px;border-radius:8px;background:var(--red,#d33);color:#fff;font:800 9.5px/16px var(--num);text-align:center;padding:0 4px}
+
+/* ---------------------------------------------------------------- the kit */
+.tp.app .cw button{background:none;border:0;font:inherit;color:inherit;cursor:pointer;text-align:inherit;padding:0;margin:0}
+.tp.app .cw button:disabled,.tp.app .cw button[aria-disabled=true]{opacity:.5;cursor:default}
+.tp.app .cw :focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.tp.app .cw-lay>.cw-col,.tp.app .cw-sheet{text-shadow:0 0 5px var(--bg),0 0 2px var(--bg)}
+.tp.app .cw .bb,.tp.app .cw .chipt,.tp.app .cw .klive,.tp.app .cw .seg button.on,.tp.app .cw .kslots span,.tp.app .cw .digits span,.tp.app .cw .mb{text-shadow:none}
+.tp.app .cw .pnl,.tp.app .cw .ccard,.tp.app .cw .inp{background-image:linear-gradient(var(--panel,var(--chipbg)),var(--panel,var(--chipbg)));background-color:var(--bg)}
+.tp.app .cw .row,.tp.app .cw .stat,.tp.app .cw .grow,.tp.app .cw .lrow,.tp.app .cw .seg,.tp.app .cw .troph span,.tp.app .cw .pick button{background-image:linear-gradient(var(--chipbg),var(--chipbg));background-color:var(--bg)}
+.tp.app .cw .inp{background-image:none}
+.tp.app .cw .v3h{display:flex;align-items:center;gap:12px;min-height:44px}
+.tp.app .cw .v3h>div{display:grid;gap:1px;min-width:0}
+.tp.app .cw .v3h h1.t{font:var(--dspw,700) 23px/1.1 var(--dsp);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tp.app .cw .v3h small{font-size:12px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tp.app .cw .ib{width:44px;height:44px;border-radius:var(--r-btn,12px);display:grid;place-items:center;background:var(--chipbg);box-shadow:inset 0 0 0 1px var(--line);color:var(--tx);font:700 20px/1 var(--ui);flex:none}
+.tp.app .cw .ib svg{width:20px;height:20px}
+.tp.app .cw .txt{flex:1;display:grid;gap:2px;min-width:0}
+.tp.app .cw .sp{flex:1}
+.tp.app .cw .pnl{border-radius:var(--r-panel,16px);box-shadow:var(--panelsh,inset 0 0 0 1px var(--line));padding:15px;display:grid;gap:11px;position:relative}
+.tp.app .cw .pnl .ttl,.tp.app .cw .pnl>h2.ttl{font:var(--dspw,700) 17px var(--dsp);margin:0;display:flex;align-items:center;gap:8px;white-space:nowrap}
+.tp.app .cw .klbl{font:800 10.5px var(--ui);letter-spacing:.2em;text-transform:uppercase;color:var(--mut)}
+.tp.app .cw .mut{color:var(--mut)}.tp.app .cw .acc{color:var(--acc)}
+.tp.app .cw .lnk{color:var(--acc);font:700 12.5px var(--ui);min-height:36px;min-width:44px;padding:0 4px;text-align:right}
+.tp.app .cw .bb{min-height:52px;border-radius:var(--r-btn,12px);display:flex;align-items:center;justify-content:center;gap:8px;font:800 15.5px var(--ui);padding:6px 16px;flex-direction:column;line-height:1.1;text-align:center;transition:transform .12s}
+.tp.app .cw .bb:active:not(:disabled){transform:scale(.98)}
+.tp.app .cw .bb small{font:600 11.5px var(--ui);opacity:.8}
+.tp.app .cw .bb.p{background:var(--b-call);color:var(--b-calltx);box-shadow:var(--b-callsh,none)}
+.tp.app .cw .bb.s{background:linear-gradient(var(--chipbg),var(--chipbg)),var(--bg);color:var(--tx);box-shadow:inset 0 0 0 1px var(--line)}
+.tp.app .cw .bb.g{background:linear-gradient(color-mix(in srgb,var(--bg) 70%,transparent),color-mix(in srgb,var(--bg) 70%,transparent));color:var(--tx);box-shadow:inset 0 0 0 1.5px var(--line)}
+.tp.app .cw .bb.d{background:var(--b-fold);color:var(--b-foldtx);box-shadow:var(--b-foldsh,none)}
+.tp.app .cw .bb.sm{min-height:44px;font-size:13px;padding:0 13px;flex-direction:row}
+.tp.app .cw .bb.hz{flex-direction:row}
+.tp.app .cw .bottom{margin-top:auto}
+.tp.app .cw .ico{display:inline-grid;width:18px;height:18px;flex:none;font-style:normal}.tp.app .cw .ico svg{width:100%;height:100%}
+.tp.app .cw .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}.tp.app .cw .three{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tp.app .cw .hrow{display:flex;align-items:center;gap:10px;min-width:0}
+.tp.app .cw .chipt{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 9px;border-radius:99px;font:800 10.5px var(--ui);letter-spacing:.05em;background:var(--chipbg);box-shadow:inset 0 0 0 1px var(--line);color:var(--tx);white-space:nowrap;flex:none}
+.tp.app .cw .chipt.a{background:var(--acc);color:var(--acctx);box-shadow:none}
+.tp.app .cw .chipt.o{box-shadow:inset 0 0 0 1.5px var(--acc);color:var(--acc);background:var(--bg)}
+.tp.app .cw .klive{display:inline-flex;align-items:center;gap:6px;font:800 10.5px var(--num);padding:3px 9px 3px 7px;border-radius:99px;background:var(--acc);color:var(--acctx);letter-spacing:.08em;flex:none}
+.tp.app .cw .klive::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor;animation:cwlive calc(1.4s * var(--cw-k)) ease-in-out infinite}
+@keyframes cwlive{50%{opacity:.25;transform:scale(.7)}}
+.tp.app .cw .stk{display:flex}.tp.app .cw .stk .av{margin-left:calc(var(--av) * -.3);box-shadow:0 0 0 2px var(--bg);border-radius:50%}.tp.app .cw .stk .av:first-child{margin-left:0}
+.tp.app .cw .av{filter:none;opacity:1;animation:none}
+.tp.app .kemb{position:relative;width:var(--es);height:var(--es);display:inline-grid;place-items:center;flex:none;filter:drop-shadow(0 3px 6px rgba(0,0,0,.3))}
+.tp.app .kemb svg{position:absolute;inset:0;width:100%;height:100%}
+.tp.app .kemb b{position:relative;font:var(--dspw,800) calc(var(--es) * .34) var(--dsp);letter-spacing:.02em;margin-top:calc(var(--es) * -.04);text-shadow:none}
+.tp.app .cw .row{display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:var(--r-btn,12px);box-shadow:inset 0 0 0 1px var(--line);min-height:52px;width:100%;text-align:left}
+.tp.app .cw .row .txt b{font:700 14px var(--ui);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tp.app .cw .row .txt small{font-size:11.5px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tp.app .cw .row .go{color:var(--mut);font-size:20px}
+.tp.app .cw .row>.ico{color:var(--acc);width:22px;height:22px}
+.tp.app .cw .fld{display:grid;gap:6px}.tp.app .cw .fld>span:first-child{font:600 12px var(--ui);color:var(--mut)}
+.tp.app .cw .inp{height:50px;border-radius:var(--r-btn,12px);background-color:var(--bg);box-shadow:inset 0 0 0 1.5px var(--line);display:flex;align-items:center;padding:0 14px;font:600 15px var(--ui);color:var(--tx);gap:8px}
+.tp.app .cw .inp:focus-within{box-shadow:inset 0 0 0 1.5px var(--acc)}
+.tp.app .cw .inp input{flex:1;min-width:0;min-height:0;height:100%;padding:0;border:0;background:none;box-shadow:none;font:600 15px var(--ui);color:var(--tx);outline:none}
+.tp.app .cw .inp input:focus{box-shadow:none}
+.tp.app .cw .inp .ico{color:var(--mut)}
+.tp.app .cw .srch{flex:1;height:44px}
+/* code boxes (the same as the table code's) */
+.tp.app .cw .kcode{display:grid;gap:10px}
+.tp.app .cw .kslots{position:relative;display:flex;gap:7px}
+.tp.app .cw .kslots span{flex:1;height:54px;border-radius:var(--r-btn,12px);display:grid;place-items:center;font:var(--numw,700) 26px var(--num);background:var(--bg);box-shadow:inset 0 0 0 1.5px var(--line);color:var(--tx);min-width:0}
+.tp.app .cw .kslots span.f{box-shadow:inset 0 0 0 1.5px var(--acc)}
+.tp.app .cw .kslots span.c::after{content:"";width:2px;height:26px;background:var(--acc);animation:caret 1s steps(1) infinite}
+.tp.app .cw .kslots .dash{flex:0 0 10px;box-shadow:none;background:none;color:var(--mut);font-size:20px}
+.tp.app .cw .kslots input{position:absolute;inset:0;opacity:0;width:100%;height:100%;min-height:0;font-size:16px;cursor:text;padding:0}
+.tp.app .cw .kslots.err span:not(.dash){box-shadow:inset 0 0 0 1.5px var(--red,#e0524a);color:var(--red,#e0524a);animation:cwshake calc(.42s * var(--cw-k)) both}
+.tp.app .cw .kslots.rest{opacity:.55}
+.tp.app .cw .kslots.busy span.f{animation:cwbusy 1s ease-in-out infinite}
+@keyframes cwshake{20%{transform:translateX(-6px)}40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}
+@keyframes cwbusy{50%{opacity:.55}}
+.tp.app .cw .errm{margin:0;font-size:12.5px;color:var(--red,#e0524a);line-height:1.45}
+.tp.app .cw .cmsg{margin:0}
+.tp.app .cw .seg{display:flex;gap:3px;padding:3px;border-radius:var(--r-btn,12px);box-shadow:inset 0 0 0 1px var(--line);border:0;max-width:100%}
+.tp.app .cw .seg button{flex:1;text-align:center;min-height:40px;padding:6px 4px;border-radius:calc(var(--r-btn,12px) * .8);font:700 12.5px var(--ui);color:var(--mut);white-space:nowrap;background:none}
+.tp.app .cw .seg button.on{background:var(--acc);color:var(--acctx)}
+.tp.app .cw .swrow{display:flex;align-items:center;gap:12px;min-height:48px;cursor:pointer}
+.tp.app .cw .swrow>span{flex:1;display:grid;gap:2px;font:600 14.5px var(--ui)}.tp.app .cw .swrow small{font:500 11.5px var(--ui);color:var(--mut)}
+.tp.app .cw .ktabs{display:flex;gap:4px;box-shadow:inset 0 -1px 0 var(--line);margin:0 -2px;overflow-x:auto;scrollbar-width:none;flex:none}
+.tp.app .cw .ktabs::-webkit-scrollbar{display:none}
+.tp.app .cw .ktabs button{padding:10px 10px 11px;min-height:44px;font:700 13px var(--ui);color:var(--mut);position:relative;white-space:nowrap}
+.tp.app .cw .ktabs button.on{color:var(--tx)}
+.tp.app .cw .ktabs button.on::after{content:"";position:absolute;left:8px;right:8px;bottom:0;height:3px;border-radius:2px;background:var(--acc);animation:cwtab calc(.45s * var(--cw-k)) var(--cw-ease) both}
+@keyframes cwtab{from{transform:scaleX(0)}}
+.tp.app .cw .hint{font-size:12px;color:var(--mut);line-height:1.45;text-align:center;margin:0}
+.tp.app .cw .hint.flat{text-align:left}
+.tp.app .cw .big{font:var(--numw,700) 40px var(--num);letter-spacing:.08em}
+.tp.app .cw .stat{display:grid;gap:2px;padding:10px 8px;border-radius:var(--r-btn,12px);box-shadow:inset 0 0 0 1px var(--line);text-align:center;min-width:0}
+.tp.app .cw .stat b{font:var(--numw,700) 19px var(--num);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tp.app .cw .stat small{font-size:10.5px;color:var(--mut)}
+.tp.app .cw .tu{color:#3fbf7f}.tp.app .cw .td{color:var(--red,#e0524a)}
+.tp.app .cw .trend{display:inline-grid;width:10px;height:10px}.tp.app .cw .trend svg{width:10px;height:10px}
+.tp.app .cw .dev{display:grid;place-items:center;width:40px;height:40px;border-radius:var(--r-btn,12px);background:var(--chipbg);box-shadow:inset 0 0 0 1px var(--line);color:var(--acc);flex:none}.tp.app .cw .dev svg{width:22px;height:22px}
+.tp.app .cw .spk{display:block}
+
+/* ---------------------------------------------------------------- the Crews tab */
+.tp.app .cw .ct{font:var(--dspw,700) 26px var(--dsp);margin:0}
+.tp.app .cw .clist-cards{display:grid;gap:12px}
+.tp.app .cw .ccard{border-radius:var(--r-panel,16px);box-shadow:var(--panelsh,inset 0 0 0 1px var(--line));padding:13px;display:grid;gap:11px;overflow:hidden;cursor:pointer;flex:none;animation:cwrise calc(.5s * var(--cw-k)) var(--cw-ease) both;animation-delay:calc(var(--i,0) * 60ms)}
+@keyframes cwrise{from{transform:translateY(14px);opacity:0}}
+.tp.app .cw .ccard.sel{box-shadow:var(--panelsh,inset 0 0 0 1px var(--line)),inset 0 0 0 2px var(--acc)}
+.tp.app .cw .ccard .txt b{font:var(--dspw,700) 17px var(--dsp);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tp.app .cw .ccard .txt small{font-size:11.5px;color:var(--mut)}
+.tp.app .cw .ccard .ft{font-size:11.5px}
+.tp.app .cw .lvbar{display:flex;align-items:center;gap:10px;margin:-13px -13px 0;padding:10px 13px;background:color-mix(in srgb,var(--acc) 16%,transparent);box-shadow:inset 0 -1px 0 color-mix(in srgb,var(--acc) 35%,transparent)}
+.tp.app .cw .lvbar .txt b{font:700 12.5px var(--ui);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tp.app .cw .lvbar .txt small{font-size:11px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tp.app .cw .row.invite{box-shadow:inset 0 0 0 1.5px var(--acc)}
+.tp.app .cw .hero1{justify-items:center;text-align:center;padding:22px 18px}.tp.app .cw .hero1 .h{font:var(--dspw,700) 21px/1.2 var(--dsp)}.tp.app .cw .hero1 p{margin:0;font-size:13px;line-height:1.5}
+.tp.app .cw .cill{position:relative;width:170px;height:96px}.tp.app .cw .cill .kemb{position:absolute}
+.tp.app .cw .cill .e1{left:52px;top:8px;z-index:2;animation:cwbob calc(3.2s * var(--cw-k)) ease-in-out infinite}
+.tp.app .cw .cill .e2{left:8px;top:34px;transform:rotate(-12deg);opacity:.85;animation:cwbob calc(3.2s * var(--cw-k)) .4s ease-in-out infinite}
+.tp.app .cw .cill .e3{right:8px;top:38px;transform:rotate(10deg);opacity:.85;animation:cwbob calc(3.2s * var(--cw-k)) .8s ease-in-out infinite}
+@keyframes cwbob{50%{translate:0 -5px}}
+.tp.app .cw-empty{display:flex;flex-direction:column;gap:14px;min-height:inherit}
+.tp.app .cw .prev{display:grid;justify-items:center;gap:6px;padding:6px 0 4px}.tp.app .cw .prev>b{font:var(--dspw,700) 22px var(--dsp);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tp.app .cw .prev small{font-size:12px}
+.tp.app .cw .pick{display:flex;gap:8px}.tp.app .cw .pick button{flex:1;height:52px;display:grid;place-items:center;border-radius:var(--r-btn,12px);box-shadow:inset 0 0 0 1px var(--line);min-width:0}
+.tp.app .cw .pick button.on{box-shadow:inset 0 0 0 2px var(--acc)}
+.tp.app .cw .cols button{height:44px;border-radius:var(--r-btn,10px)}.tp.app .cw .cols button.on{outline:2px solid var(--acc);outline-offset:3px}
+.tp.app .cw .made{display:grid;justify-items:center;gap:8px;text-align:center;padding:10px 6px 0}.tp.app .cw .made>b{font:var(--dspw,700) 26px var(--dsp)}.tp.app .cw .made p{margin:0;font-size:13px;line-height:1.5;max-width:300px}
+.tp.app .cw .codep{justify-items:stretch;text-align:center}
+.tp.app .cw .or2{display:flex;align-items:center;gap:12px;margin:0;font:700 11px var(--ui);letter-spacing:.24em;color:var(--mut);text-transform:uppercase}.tp.app .cw .or2::before,.tp.app .cw .or2::after{content:"";flex:1;height:1px;background:var(--line)}
+.tp.app .cw .invh{display:grid;justify-items:center;gap:8px;text-align:center;padding:4px 0}.tp.app .cw .invh>b{font:var(--dspw,700) 26px/1.1 var(--dsp)}
+.tp.app .cw .wyj{gap:7px;font-size:12.5px;line-height:1.5}
+.tp.app .cw .wait{display:flex;gap:6px}.tp.app .cw .wait i{width:8px;height:8px;border-radius:50%;background:var(--acc);animation:cwwait calc(1.2s * var(--cw-k)) ease-in-out infinite}.tp.app .cw .wait i:nth-child(2){animation-delay:.15s}.tp.app .cw .wait i:nth-child(3){animation-delay:.3s}
+@keyframes cwwait{50%{transform:translateY(-6px);opacity:.4}}
+.tp.app .cw .digits{display:flex;gap:6px;justify-content:center;perspective:400px}
+.tp.app .cw .digits span{width:42px;height:58px;border-radius:var(--r-btn,10px);display:grid;place-items:center;font:var(--numw,700) 30px var(--num);background:var(--chipbg);box-shadow:inset 0 0 0 1px var(--line);animation:cwdig calc(.5s * var(--cw-k)) cubic-bezier(.2,1.3,.4,1) both}
+.tp.app .cw .digits i{width:10px}
+.tp.app .cw .digits span:nth-of-type(2){animation-delay:.06s}.tp.app .cw .digits span:nth-of-type(3){animation-delay:.12s}.tp.app .cw .digits span:nth-of-type(4){animation-delay:.18s}.tp.app .cw .digits span:nth-of-type(5){animation-delay:.24s}.tp.app .cw .digits span:nth-of-type(6){animation-delay:.3s}
+@keyframes cwdig{from{transform:rotateX(90deg);opacity:0}}
+.tp.app .cw .conf{position:fixed;inset:0;z-index:30;pointer-events:none;overflow:hidden}
+.tp.app .cw .conf i{position:absolute;width:7px;height:12px;border-radius:2px;top:-14px;animation:cwconf calc(2.6s * var(--cw-k)) linear 1 both}
+@keyframes cwconf{to{transform:translateY(110vh) rotate(720deg)}}
+.tp.app .kemb.stamp{animation:cwstamp calc(.7s * var(--cw-k)) cubic-bezier(.2,1.4,.4,1) both}
+@keyframes cwstamp{0%{transform:scale(2.2) rotate(-14deg);opacity:0}60%{opacity:1}100%{transform:none}}
+
+/* ---------------------------------------------------------------- the crew page */
+.tp.app .cw .crh .kemb{margin-left:-2px}.tp.app .cw .crh h1.t{font-size:19px}
+.tp.app .cw .tabbody{display:flex;flex-direction:column;gap:14px;animation:cwfade calc(.3s * var(--cw-k)) var(--cw-ease) both}
+@keyframes cwfade{from{opacity:0}}
+.tp.app .cw .lvc{box-shadow:var(--panelsh,inset 0 0 0 1px var(--line)),inset 0 0 0 1.5px var(--acc)}.tp.app .cw .lvc .hrow b{font:700 14px var(--ui)}
+.tp.app .cw .req .txt{flex:1;display:grid;gap:1px}.tp.app .cw .req .txt b{font:700 13.5px var(--ui)}.tp.app .cw .req .txt small{font-size:11px;color:var(--mut)}
+.tp.app .cw .mb{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font:800 14px var(--ui);flex:none}.tp.app .cw .mb svg{width:18px;height:18px}
+.tp.app .cw .mb.y{background:var(--b-call);color:var(--b-calltx)}.tp.app .cw .mb.n{background:var(--chipbg);box-shadow:inset 0 0 0 1px var(--line);color:var(--mut)}
+.tp.app .cw .rq{transition:background calc(.2s * var(--cw-k))}
+.tp.app .cw .rq.ok{background:color-mix(in srgb,#3fbf7f 18%,transparent);box-shadow:inset 0 0 0 2px #3fbf7f;border-radius:var(--r-btn,12px);animation:cwreq calc(.5s * var(--cw-k)) var(--cw-ease) .15s both}
+.tp.app .cw .rq.gone{animation:cwout calc(.35s * var(--cw-k)) var(--cw-ease) both}
+@keyframes cwreq{to{transform:translateY(-24px);opacity:0}}
+@keyframes cwout{to{transform:translateX(30px);opacity:0}}
+.tp.app .cw .rk{display:grid}.tp.app .cw .rk b{font:var(--numw,700) 34px/1 var(--num)}.tp.app .cw .rk small{font-size:11px;color:var(--mut)}
+.tp.app .cw .nb{display:grid;margin-left:14px}.tp.app .cw .nb b{font:var(--numw,700) 18px var(--num)}.tp.app .cw .nb small{font-size:11px;color:var(--mut)}
+.tp.app .cw .podium{display:grid;grid-template-columns:1fr 1.15fr 1fr;align-items:end;gap:6px}
+.tp.app .cw .pd{display:grid;justify-items:center;gap:2px;text-align:center;position:relative;min-width:0}
+.tp.app .cw .pd b{font:700 12.5px var(--ui);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tp.app .cw .pd small{font:var(--numw,700) 11.5px var(--num);color:var(--acc)}
+.tp.app .cw .pd i{font-style:normal;display:grid;place-items:center;width:100%;border-radius:8px 8px 0 0;margin-top:4px;font:var(--numw,800) 15px var(--num);background:color-mix(in srgb,var(--acc) 22%,transparent);box-shadow:inset 0 1px 0 color-mix(in srgb,var(--acc) 60%,transparent);transform-origin:bottom;animation:cwpod calc(.6s * var(--cw-k)) var(--cw-ease) both}
+.tp.app .cw .pd.p1 i{height:44px;background:color-mix(in srgb,var(--acc) 40%,transparent)}.tp.app .cw .pd.p2 i{height:30px;animation-delay:.08s}.tp.app .cw .pd.p3 i{height:20px;animation-delay:.16s}
+@keyframes cwpod{from{transform:scaleY(0)}}
+.tp.app .cw .podium.big .pd.p1 .av{animation:cwcrown calc(2.4s * var(--cw-k)) ease-in-out infinite}
+@keyframes cwcrown{50%{transform:translateY(-4px)}}
+.tp.app .cw .lhead{display:flex;gap:8px;font:700 10px var(--ui);letter-spacing:.14em;text-transform:uppercase;color:var(--mut);padding:0 10px}
+.tp.app .cw .ltable{display:grid;gap:4px}
+.tp.app .cw .lrow{display:flex;align-items:center;gap:9px;padding:6px 10px;border-radius:var(--r-btn,10px);min-height:44px;width:100%;text-align:left}
+.tp.app .cw .lrow .n{width:16px;font:var(--numw,700) 13px var(--num);color:var(--mut)}.tp.app .cw .lrow b{flex:1;font:700 13px var(--ui);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tp.app .cw .lrow .g{width:34px;text-align:center;font-size:12px;color:var(--mut)}
+.tp.app .cw .lrow .v{width:52px;text-align:right;font:var(--numw,700) 13.5px var(--num)}
+.tp.app .cw .lrow.me{box-shadow:inset 0 0 0 1.5px var(--acc);background-image:linear-gradient(color-mix(in srgb,var(--acc) 12%,var(--chipbg)),color-mix(in srgb,var(--acc) 12%,var(--chipbg)))}
+.tp.app .cw .glist{display:grid;gap:7px}
+.tp.app .cw .gh{margin-top:2px}
+.tp.app .cw .grow{display:flex;align-items:center;gap:8px;padding:10px 11px;border-radius:var(--r-btn,12px);box-shadow:inset 0 0 0 1px var(--line);min-height:52px;width:100%;text-align:left}
+.tp.app .cw .grow .txt b{font:700 13px var(--ui);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tp.app .cw .grow .txt small{font-size:11px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tp.app .cw .grow .win{display:flex;align-items:center;gap:4px;font:var(--numw,700) 11.5px var(--num);color:var(--acc);flex:none}
+.tp.app .cw .grow .me{font:var(--numw,700) 12.5px var(--num);width:40px;text-align:right;flex:none}.tp.app .cw .grow.void{opacity:.6}.tp.app .cw .grow .go{color:var(--mut)}
+.tp.app .cw .mlist{display:grid;gap:2px}
+.tp.app .cw .mrow{padding:6px 4px;position:relative;box-shadow:inset 0 -1px 0 var(--line)}
+.tp.app .cw .mrow[hidden]{display:none}
+.tp.app .cw .mrow .mhit{display:flex;align-items:center;gap:10px;flex:1;min-width:0;min-height:44px;text-align:left;position:relative}
+.tp.app .cw .mrow .txt b{font:700 14px var(--ui);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tp.app .cw .mrow .txt small{font-size:11.5px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tp.app .cw .mrow .onl{position:absolute;left:26px;top:28px;width:11px;height:11px;border-radius:50%;background:#3fbf7f;box-shadow:0 0 0 2px var(--bg);z-index:3}
+.tp.app .cw .mm{width:44px;height:44px;display:grid;place-items:center;color:var(--mut);flex:none}.tp.app .cw .mm svg{width:18px;height:18px}
+.tp.app .cw .leave{align-self:flex-start;margin-top:4px}
+.tp.app .cw .alist{display:grid;gap:7px}
+.tp.app .cw .qrw{display:flex;gap:14px;align-items:center;padding:12px;border-radius:var(--r-panel,14px);background:var(--panel,var(--chipbg));box-shadow:var(--panelsh,inset 0 0 0 1px var(--line))}
+.tp.app .cw .qrimg{width:120px;height:120px;flex:none;border-radius:10px;overflow:hidden;background:#fff;padding:4px}.tp.app .cw .qrimg svg{width:100%;height:100%;display:block}
+.tp.app .cw .qrc{display:grid;gap:4px;min-width:0}.tp.app .cw .qrc .big{font-size:26px;white-space:nowrap}.tp.app .cw .qrc small{font-size:11.5px;line-height:1.4}
+.tp.app .cw .qrbig{width:min(260px,70vw);margin:0 auto;border-radius:12px;overflow:hidden;background:#fff;padding:8px}.tp.app .cw .qrbig svg{width:100%;display:block}
+.tp.app .cw .scanbox{position:relative;border-radius:var(--r-panel,14px);overflow:hidden;background:#000;aspect-ratio:1;max-height:50vh;margin:0 auto;width:100%}
+.tp.app .cw .scanbox video{width:100%;height:100%;object-fit:cover;display:block}
+.tp.app .cw .scanl{position:absolute;left:0;right:0;height:3px;background:var(--acc);box-shadow:0 0 10px var(--acc);animation:cwscan calc(2.4s * var(--cw-k)) ease-in-out infinite;z-index:2}
+@keyframes cwscan{0%,100%{top:6%}50%{top:90%}}
+.tp.app .cw .pcard{display:grid;justify-items:center;gap:4px;text-align:center}.tp.app .cw .pcard>b{font:var(--dspw,700) 24px var(--dsp)}
+.tp.app .cw .bestc .cd{flex:none}
+.tp.app .cw .troph{display:flex;gap:10px;flex-wrap:wrap}.tp.app .cw .troph span{flex:1;min-width:80px;display:grid;justify-items:center;gap:4px;padding:10px 4px;border-radius:var(--r-btn,12px);box-shadow:inset 0 0 0 1px var(--line)}
+.tp.app .cw .troph i{font-style:normal;font-size:24px;animation:cwbob calc(3s * var(--cw-k)) ease-in-out infinite}.tp.app .cw .troph span:nth-child(2) i{animation-delay:.4s}.tp.app .cw .troph span:nth-child(3) i{animation-delay:.8s}.tp.app .cw .troph small{font-size:11px;color:var(--mut)}
+.tp.app .cw .rules{font:600 13.5px/1.4 var(--ui)}
+/* the crew on big screens (v3sizes.py) */
+.tp.app .cw .cmh{display:flex;align-items:center;gap:14px;min-width:0}
+.tp.app .cw .cmh h1.t{font:var(--dspw,700) 28px var(--dsp);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tp.app .cw .cmh .txt small{font-size:13px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tp.app .cw .cgrid{display:grid;gap:16px;align-items:start}.tp.app .cw .cgrid.c2{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr)}.tp.app .cw .cc{display:grid;gap:14px;min-width:0}
+.tp.app .cw-lay.s-tab .cgrid.c2{grid-template-columns:1fr}
+.tp.app .cw .mcol .mlist{max-height:none}
+/* sheets that carry the crews kit */
+.tp.app .cw-sheet{display:grid;gap:12px}
+.tp.app .cw-sheet>.hrow:first-child{padding-right:46px}
+.tp.app .cw-sheet .sh2{font:var(--dspw,700) 21px var(--dsp);margin:0;color:var(--tx)}
+.tp.app .cw-sheet .hrow .txt{display:grid;gap:2px}
+.tp.app .ask .ask-d{font:500 12.5px/1.45 var(--ui);color:var(--mut);margin-top:-6px}
+/* the toast (top of the screen) */
+.tp.app .cw-toast,.tp .cw-toast{position:fixed;left:50%;top:calc(14px + env(safe-area-inset-top));z-index:960;width:min(420px,calc(100vw - 36px));translate:-50% 0;display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:var(--r-btn,14px);background:var(--tx);color:var(--bg);font:700 13.5px var(--ui);box-shadow:0 14px 30px rgba(0,0,0,.4);animation:cwtoast calc(4s * var(--cw-k,1)) cubic-bezier(.2,.8,.25,1) both}
+.tp .cw-toast .ico{color:var(--acc);display:inline-grid;width:18px;height:18px;font-style:normal;flex:none}.tp .cw-toast .ico svg{width:100%;height:100%}
+@keyframes cwtoast{0%{transform:translateY(-20px);opacity:0}10%,85%{transform:none;opacity:1}100%{opacity:0}}
+
+/* ---------------------------------------------------------------- calm and off */
+/* calm: the meaning stays, the flourishes go (no confetti, no bobbing, no breathing loops) */
+.tp.app [data-motion=calm] .cill .kemb,.tp.app [data-motion=calm] .troph i,.tp.app [data-motion=calm] .podium.big .pd.p1 .av{animation:none}
+.tp.app [data-motion=calm] .conf{display:none}
+/* off (or the phone's Reduce motion): everything at its end state at once */
+.tp.app [data-motion=off] *,.tp.app [data-motion=off] *::before,.tp.app [data-motion=off] *::after,.tp [data-motion=off].cw-toast{animation:none!important;transition:none!important}
+.tp.app [data-motion=off] .conf{display:none}
+@media (prefers-reduced-motion:reduce){.tp.app .cw *,.tp.app .cw *::before,.tp.app .cw *::after,.tp .cw-toast,.tp.app .nav button.on::after{animation:none!important;transition:none!important}}
