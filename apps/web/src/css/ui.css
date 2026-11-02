@@ -13,6 +13,8 @@ html:has(#app.tp.app),body:has(#app.tp.app){background:var(--app-bg,#1b120d)}
 .tp.app h1{font-size:26px}.tp.app h2{font-size:19px}.tp.app h3{font-size:16px}
 .tp.app p{margin:0}
 .tp.app .hint,.tp.app .small,.tp.app small{color:var(--mut)}
+/* loose text straight on a picture background (pixel's tavern, edo's paper) sits on a panel so it stays readable */
+.tp.app .screen>p.hint,.tp.app .screen>div>p.hint:only-child,.tp.app .screen>div>p.hint:first-child{border-radius:var(--r-panel,16px);background:var(--panel,var(--chipbg));box-shadow:var(--panelsh,inset 0 0 0 1px var(--line));padding:12px 14px;font:500 14px/1.45 var(--ui)}
 .tp.app a{color:var(--acc)}
 .tp.app :focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 
@@ -41,7 +43,26 @@ html:has(#app.tp.app),body:has(#app.tp.app){background:var(--app-bg,#1b120d)}
 .tp.app .btn:active:not(:disabled),.tp.app .bigb:active{transform:scale(.98)}
 .tp.app .btn:disabled{opacity:.45;cursor:default}
 .tp.app .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.tp.app .menu-actions{display:grid;gap:10px}
+.tp.app .menu-actions{display:grid;grid-template-columns:1fr;gap:10px}
+.tp.app .menu-actions h2{margin-bottom:4px}
+/* "How it works" and other fold-outs: a themed panel with a turning chevron */
+.tp.app details{border-radius:var(--r-panel,16px);background:var(--panel,var(--chipbg));box-shadow:var(--panelsh,inset 0 0 0 1px var(--line));padding:0 16px;color:var(--mut);font:500 14px/1.45 var(--ui);border-top:0}
+.tp.app details>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;min-height:52px;font:700 15px var(--ui);color:var(--tx);cursor:pointer;padding:0}
+.tp.app details>summary::-webkit-details-marker{display:none}
+.tp.app details>summary::after{content:"";width:8px;height:8px;border-right:2px solid var(--mut);border-bottom:2px solid var(--mut);transform:rotate(45deg);transition:transform .2s;margin-right:4px}
+.tp.app details[open]>summary::after{transform:rotate(-135deg)}
+.tp.app details>ol,.tp.app details>p,.tp.app details>div{margin:0 0 14px;padding-left:20px;display:grid;gap:8px}
+.tp.app ol.steps{margin:0;padding-left:20px;display:grid;gap:6px;color:var(--mut);font:500 14px/1.45 var(--ui)}
+.tp.app ol.steps li::marker{color:var(--acc);font-weight:800}
+/* the poker hands list: the theme's own cards */
+.tp.app .rank-list li{display:grid;gap:8px;padding:12px 0;border-bottom:1px solid var(--line)}
+.tp.app .rank-head{display:flex;align-items:baseline;gap:10px}.tp.app .rank-head strong{font:var(--dspw,700) 18px var(--dsp);color:var(--tx)}
+.tp.app .rank-n{width:18px;color:var(--acc);font:800 13px var(--ui)}
+.tp.app .mini-cards{display:flex;gap:5px;padding-left:28px}
+.tp.app .rank-list p{padding-left:28px;color:var(--mut);font-size:13.5px}
+.tp.app .info .lede{color:var(--mut);font-size:14px;line-height:1.5}
+.tp.app .info dl.terms{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:8px 0}.tp.app .info dt{font-weight:800;color:var(--tx)}.tp.app .info dd{margin:0;color:var(--mut)}
+.tp.app .info .credit{font-size:11px;color:var(--mut);margin-top:12px}
 
 /* fields: the design's code slots, for every text box */
 .tp.app .field{display:grid;gap:6px}
@@ -149,3 +170,28 @@ html:has(#app.tp.app),body:has(#app.tp.app){background:var(--app-bg,#1b120d)}
   .tp.app .pk-grid{display:grid;gap:14px;align-content:start;min-width:0}.tp.app .pk-fit{display:grid;gap:14px}.tp.app .pk-top{display:flex;align-items:center;gap:14px}.tp.app .pk-top .pk-seg{width:360px}
   .tp.app .pk-row{display:flex;gap:22px;align-items:flex-end;justify-content:center}
 }
+.tp.app .sticky-go{position:sticky;bottom:0;padding:10px 0 calc(4px + env(safe-area-inset-bottom));background:none;display:grid;gap:10px;margin-top:4px}
+/* panels and chip buttons sit on the theme's solid background, so a patterned backdrop (night train's windows,
+   pixel's bricks, edo's sun) never shows through the text */
+.tp.app .screen:not(.menu-screen) .block,.tp.app .screen .card2,.tp.app .screen details,.tp.app .screen>p.hint,.tp.app .screen>div>p.hint:first-child{background:linear-gradient(var(--panel,var(--chipbg)),var(--panel,var(--chipbg))),var(--bg)}
+.tp.app .screen .btn.secondary,.tp.app .screen .btn.ghost,.tp.app .sheet .btn.ghost{background:linear-gradient(var(--chipbg),var(--chipbg)),var(--bg)}
+.tp.app .quick{display:flex;gap:8px;flex-wrap:wrap}
+.tp.app .chip-btn{flex:1;min-height:40px;border:0;border-radius:calc(var(--r-btn,12px) * .8);background:var(--chipbg);box-shadow:inset 0 0 0 1px var(--line);color:var(--tx);font:700 14px var(--num,var(--ui));cursor:pointer}
+.tp.app .chip-btn:active{transform:scale(.97)}
+.tp.app .sticky-go{background:linear-gradient(transparent,var(--bg) 40%)}
+/* the QR mode's seat list */
+.tp.app .seat-list{display:grid;gap:8px}
+.tp.app .seat-row{display:flex;align-items:center;gap:8px;padding:10px 12px 10px 4px;border-radius:var(--r-btn,12px);background:linear-gradient(var(--chipbg),var(--chipbg)),var(--bg);box-shadow:inset 0 0 0 1px var(--line);border:0;color:var(--tx)}
+.tp.app .seat-row.connected{box-shadow:inset 0 0 0 1.5px var(--acc)}
+.tp.app .seat-row .reorder{display:grid}.tp.app .seat-row .reorder .icon-btn{width:34px;height:26px;font-size:15px}
+.tp.app .seat-row .reorder .icon-btn:disabled{opacity:.3}
+.tp.app .seat-row .status{position:static;display:inline-flex;align-items:center;height:auto;width:auto;min-width:0;line-height:1.2;inset:auto;transform:none;padding:6px 10px;border-radius:99px;font:700 12px var(--ui);background:var(--acc);color:var(--acctx);white-space:nowrap}
+/* the theme's question box (in place of the browser's confirm and prompt) */
+.ask-wrap{position:fixed;inset:0;z-index:90;display:grid;place-items:center;padding:20px;background:rgba(0,0,0,0);transition:background .18s}
+.ask-wrap.on{background:rgba(0,0,0,.55)}
+.tp.app .ask,.tp .ask{width:min(360px,100%);display:grid;gap:14px;padding:20px;border-radius:var(--r-panel,18px);background:linear-gradient(var(--panel,var(--chipbg)),var(--panel,var(--chipbg))),var(--bg);box-shadow:var(--panelsh,inset 0 0 0 1px var(--line)),0 24px 60px rgba(0,0,0,.5);color:var(--tx);transform:translateY(12px) scale(.97);opacity:0;transition:transform .2s cubic-bezier(.2,.8,.3,1),opacity .18s}
+.ask-wrap.on .ask{transform:none;opacity:1}
+.tp .ask-q{font:600 16px/1.4 var(--ui);margin:0}
+.tp .ask-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tp .ask-btns .btn{min-height:48px}
+@media (prefers-reduced-motion:reduce){.ask-wrap,.tp .ask{transition:none}}

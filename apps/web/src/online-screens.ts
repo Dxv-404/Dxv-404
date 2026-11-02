@@ -1,7 +1,7 @@
 // Online tables: a table server (Hyderabad, with Cloudflare as the backup) runs the table; phones join with
 // a 4-letter code or a link. Signed-in phones sit as their account (their games go to history and the
 // league); anyone else plays as a guest.
-import { h, toast } from './legacy/ui.js';
+import { h, toast, ask } from './legacy/ui.js';
 import type { TableSettings } from '@tp/protocol';
 import { TableClient, newSeatToken, type SocketLike } from '@tp/table';
 import { NetTable } from './net-table';
@@ -65,7 +65,7 @@ async function mySeat(code: string, sitting = true): Promise<Seat> {
   let name = localStorage.getItem('tp-name');
   if (!name && !sitting) name = 'Watcher';
   if (!name) {
-    name = (prompt('Your name at the table', '') ?? '').trim().slice(0, 20) || 'Player';
+    name = (String((await ask('Your name at the table', { yes: 'Sit down', input: { placeholder: 'Your name', max: 20 } })) ?? '')).trim().slice(0, 20) || 'Player';
     try { localStorage.setItem('tp-name', name); } catch { /* blocked */ }
   }
   return { id, name, token };

@@ -4,6 +4,7 @@ import type { Action, GameEvent } from '@tp/engine';
 import type { ScreenView } from '../net-table';
 import { renderTable, sprite, fmt, THEME_KEYS, THEMES, type ThemeKey, type Frame } from './render';
 import { sfx, buzz, settings } from '../legacy/fx.js';
+import { ask } from '../legacy/ui.js';
 
 export interface TableLike {
   view: ScreenView | null;
@@ -171,7 +172,7 @@ export class TableScreen {
     switch (act) {
       case 'menu': return this.o.menu();
       case 'info': return this.o.info();
-      case 'fold': if (L && v?.hand?.toAct === v.me) { if (L.canCheck && !confirm('You can check for free. Fold anyway?')) return; this.t.act({ type: 'fold' }); } return;
+      case 'fold': if (L && v?.hand?.toAct === v.me) { if (L.canCheck) { void ask('You can check for free. Fold anyway?', { yes: 'Fold', no: 'Keep my cards', danger: true }).then((ok) => { if (ok) this.t.act({ type: 'fold' }); }); return; } this.t.act({ type: 'fold' }); } return;
       case 'check': if (L?.canCheck) this.t.act({ type: 'check' }); return;
       case 'call': if (L?.canCall) this.t.act({ type: 'call' }); return;
       case 'allin': this.t.act({ type: 'allin' }); return;

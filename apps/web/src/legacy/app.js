@@ -1,17 +1,16 @@
-import { h, $, fmt, toast, sleep } from './ui.js';
+import { h, $, fmt, toast, sleep, ask } from './ui.js';
 import { Host } from './host.js';
 import { Guest } from './guest.js';
-import { TableView } from './table.js';
 import { qrSvg, Scanner } from './qr.js';
 import { infoContent } from './info.js';
 import { settings, saveSettings, unlockAudio, keepAwake, sfx } from './fx.js';
 import { warmUpCamera, parsePayload } from './net.js';
 import { accountScreens } from './account-ui.js';
-import { offlineStart, hostPhoneHome, hostPhoneTable } from '../offline-screens.ts';
+import { offlineStart, joinCode, hostPhoneHome, hostPhoneTable } from '../offline-screens.ts';
 import { onHostPhonePage } from '../offline.ts';
 import { onlineStart, routeOnline, playOnline, hostOnline } from '../online-screens.ts';
 import { initShell, loadingScreen, menuScreen, pickerScreen, leaveMenu } from '../ui/shell.ts';
-import { setTheme, currentTheme } from '../table/screen.ts';
+import { setTheme, currentTheme, TableScreen } from '../table/screen.ts';
 import { settingsScreen, installErrorReporting, noteScreen } from '../more-screens.ts';
 
 // every screen sits inside the player's theme (its background, tokens and art); screens go in #view
@@ -50,7 +49,7 @@ function openSheet(content, { label = 'Panel', onClose, tall = false } = {}) {
 }
 
 const accounts = accountScreens({ screen, openSheet, home: () => home() });
-const ui = { screen, openSheet, home: () => home() };
+const ui = { screen, openSheet, home: () => home(), qrJoin: () => join() };
 window.addEventListener('hashchange', () => { if (!routeOnline(ui)) accounts.route(); });
 
 // (the old floating info button: the table and Settings have their own way to the hand rankings)
@@ -74,9 +73,11 @@ function screen(build) {
 // ---------------- home: the theme's main menu ----------------
 function menuActions() {
   const crews = (() => { try { return JSON.parse(localStorage.getItem('tp-crews') || '[]'); } catch { return []; } })();
+  const saved = Host.savedSummary();
   return {
+    ...(saved ? { resumeHost: { sub: `QR table · ${saved.players} players, hand ${saved.handNo}`, go: () => resumeHost() } } : {}),
     joinOnline: (code) => playOnline(ui, code),
-    joinOffline: () => offlineStart(ui),
+    joinOffline: () => joinCode(ui),
     host: () => hostChoice(),
     profile: () => accounts.profile(),
     settings: () => settingsScreen(ui),
@@ -105,7 +106,8 @@ function hostChoice() {
   const s = openSheet(h('div', { class: 'menu-actions' },
     h('h2', {}, 'Host a new table'),
     h('button', { class: 'btn primary', 'data-testid': 'online-host', onclick: () => { s.close(); hostOnline(ui); } }, 'Online', h('small', {}, 'Friends join with a code or a link, from anywhere')),
-    h('button', { class: 'btn secondary', 'data-testid': 'offline-host', onclick: () => { s.close(); offlineStart(ui); } }, 'Offline', h('small', {}, 'No internet: the host app runs the table on your hotspot'))), { label: 'Host a new table' });
+    h('button', { class: 'btn secondary', 'data-testid': 'offline-host', onclick: () => { s.close(); offlineStart(ui); } }, 'Offline', h('small', {}, 'No internet: the host app runs the table on your hotspot')),
+    h('button', { class: 'btn ghost', 'data-testid': 'qr-host', onclick: () => { s.close(); setup(); } }, 'Pair phones by QR', h('small', {}, 'No internet and no host app: each phone scans this one'))), { label: 'Host a new table' });
 }
 
 // ---------------- setup (host) ----------------
@@ -306,43 +308,34 @@ function playTable() {
   keepAwake();
   screen((el) => {
     const isHost = !!host && !guest;
-    const client = isHost ? {
-      isHost: true,
-      act: (a) => host.localAct(a),
-      show: () => host.localShow(),
-      rebuy: () => host.localRebuy(),
-      sitOut: (v) => host.localSitOut(v),
-      dealNow: () => { host.e.s.paused = false; host.dealNext(); },
-      menu: () => hostMenu(),
-    } : {
-      isHost: false,
-      act: (a) => guest.act(a),
-      show: () => guest.show(),
-      rebuy: () => guest.rebuy(),
-      sitOut: (v) => guest.sitOut(v),
-      dealNow: () => {},
-      menu: () => guestMenu(),
+    // the QR mode's host and guests drive the same designed table as online and offline tables
+    const src = isHost ? host : guest;
+    const like = {
+      get view() { return isHost ? host.currentView() : guest.view; },
+      subscribe: (fn) => src.subscribe(fn),
+      act: (a) => (isHost ? host.localAct(a) : guest.act(a)),
+      show: () => (isHost ? host.localShow() : guest.show()),
+      rebuy: () => (isHost ? host.localRebuy() : guest.rebuy()),
+      sitOut: (v) => (isHost ? host.localSitOut(v) : guest.sitOut(v)),
+      dealNow: () => { if (isHost) { host.e.s.paused = false; host.dealNext(); } },
+      vote: () => {},
     };
-    table = new TableView(el, client);
-    const onUpdate = (events, view) => {
-      if (events.some((e) => e.t === 'ended') || view.phase === 'ended') { standings(view.standings || events.find((e) => e.t === 'ended').standings, isHost); return; }
-      table.update(events, view);
-    };
-    let unsub, offStatus;
-    if (isHost) {
-      unsub = host.subscribe(onUpdate);
-      table.update([{ t: 'sync' }], host.currentView());
-    } else {
-      unsub = guest.subscribe(onUpdate);
-      if (guest.view) table.update([{ t: 'sync' }], guest.view);
+    table = new TableScreen(el, like, { code: 'QR', menu: () => (isHost ? hostMenu() : guestMenu()), info: () => showHands(), offline: true });
+    let done = false;
+    const unsub = src.subscribe((events, view) => {
+      if (done) return;
+      if (events.some((e) => e.t === 'ended') || view.phase === 'ended') { done = true; standings(view.standings || events.find((e) => e.t === 'ended').standings, isHost); }
+    });
+    let offStatus;
+    if (!isHost) {
       offStatus = guest.onStatus((s) => {
         if (s === 'lost') lostHost();
-        if (table) table.setHostQuiet(s === 'quiet');
+        if (table) table.setConnection(s === 'quiet' ? 'weak' : s === 'lost' ? 'lost' : 'good');
         if (s === 'kicked') { toast('The host removed you from the table.'); guest.destroy(); guest = null; home(); }
       });
       if (!guest.view) table.say('Connected. Waiting for the host to start.');
     }
-    return () => { unsub && unsub(); offStatus && offStatus(); table && table.destroy(); table = null; };
+    return () => { unsub && unsub(); offStatus && offStatus(); table && table.destroy(); table = null; delete document.body.dataset.playing; };
   });
 }
 
@@ -385,7 +378,7 @@ function hostMenu() {
       if (!me && !p.connected && S.hand && S.hand.toAct === p.id) btns.push(h('button', { class: 'btn small ghost', onclick: () => { host.foldFor(p.id); rerender(); } }, 'Check/fold for them'));
       btns.push(h('button', { class: 'btn small ghost', onclick: () => { host.sitOut(p.id, !p.sittingOut); rerender(); } }, p.sittingOut ? 'Sit in' : 'Sit out'));
       if (S.cfg.rebuys && p.stack < S.cfg.startStack && !inHand) btns.push(h('button', { class: 'btn small ghost', onclick: () => { host.rebuyFor(p.id); rerender(); } }, 'Rebuy'));
-      if (!me) btns.push(h('button', { class: 'btn small danger', onclick: () => { if (confirm(`Remove ${p.name} from the table? Their chips leave with them.`)) { host.removePlayer(p.id); rerender(); } } }, 'Remove'));
+      if (!me) btns.push(h('button', { class: 'btn small danger', onclick: async () => { if (await ask(`Remove ${p.name} from the table? Their chips leave with them.`, { yes: 'Remove', danger: true })) { host.removePlayer(p.id); rerender(); } } }, 'Remove'));
       return h('div', { class: 'p-row' },
         h('div', { class: 'who' }, h('strong', {}, p.name), h('small', {}, `${fmt(p.stack)} chips${me ? ', this phone' : p.connected ? ', connected' : ', away'}${p.sittingOut ? ', sitting out' : ''}`)),
         h('div', { class: 'p-btns' }, btns));
@@ -400,8 +393,8 @@ function hostMenu() {
       h('section', { class: 'block' }, h('h3', {}, 'Players'), rows,
         h('div', { class: 'add-row' }, addInput, h('button', { class: 'btn small primary', onclick: () => { const n = addInput.value.trim(); if (!n) return; if (S.players.length >= 9) return toast('The table is full.'); const p = host.addPlayer(n); s.close(); pair(p.id); } }, 'Add and pair'))),
       logBlock(v2),
-      settingsBlock(() => table && table.reconcile(host.currentView())),
-      h('section', { class: 'block' }, h('button', { class: 'btn danger', onclick: () => { if (confirm('End the game and show the final standings?')) { s.close(); host.endGame(); } } }, 'End game')));
+      settingsBlock(() => {}),
+      h('section', { class: 'block' }, h('button', { class: 'btn danger', onclick: async () => { if (await ask('End the game and show the final standings?', { yes: 'End game', danger: true })) { s.close(); host.endGame(); } } }, 'End game')));
   };
   rerender();
   void v;
@@ -417,8 +410,8 @@ function guestMenu() {
       me && h('button', { class: 'btn ghost', onclick: () => { guest.sitOut(!me.sittingOut); s.close(); } }, me.sittingOut ? 'Sit back in' : 'Sit out from next hand'),
       me && v.cfg.rebuys && me.stack < v.cfg.startStack && h('button', { class: 'btn ghost', onclick: () => { guest.rebuy(); s.close(); } }, `Top up to ${fmt(v.cfg.startStack)}`))),
     logBlock(v),
-    settingsBlock(() => table && table.reconcile(guest.view)),
-    h('section', { class: 'block' }, h('button', { class: 'btn danger', onclick: () => { if (confirm('Leave the table? Your chips leave with you.')) { s.close(); guest.leave(); guest = null; home(); } } }, 'Leave table')));
+    settingsBlock(() => {}),
+    h('section', { class: 'block' }, h('button', { class: 'btn danger', onclick: async () => { if (await ask('Leave the table? Your chips leave with you.', { yes: 'Leave', danger: true })) { s.close(); guest.leave(); guest = null; home(); } } }, 'Leave table')));
   const s = openSheet(body, { label: 'Table menu', tall: true });
 }
 

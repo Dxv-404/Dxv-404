@@ -1,7 +1,7 @@
 // Phase 3 in the browser, against the real accounts project (LIVE_SUPABASE=1; each run makes 5 accounts
 // and deletes them). Every phone is its own browser profile; a wiped phone is a brand-new profile.
 import { test, expect, type Browser, type Page } from '@playwright/test';
-import { MODELS, newPhone, type Phone } from '../harness';
+import { MODELS, newPhone, type Phone, autoAnswer } from '../harness';
 
 test.skip(!process.env.LIVE_SUPABASE, 'needs LIVE_SUPABASE=1 (talks to the real accounts project)');
 test.describe.configure({ mode: 'serial' });
@@ -10,7 +10,7 @@ const proxy = process.env.HTTPS_PROXY ? { server: process.env.HTTPS_PROXY, bypas
 const phones: Phone[] = [];
 async function phone(browser: Browser, name: string, baseURL: string, model = MODELS.pixel7): Promise<Phone> {
   const p = await newPhone(browser, name, model, baseURL, proxy ? { proxy } : {});
-  p.page.on('dialog', (d) => d.accept());
+  await autoAnswer(p.page);
   phones.push(p);
   return p;
 }

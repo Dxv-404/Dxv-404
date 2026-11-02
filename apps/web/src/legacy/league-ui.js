@@ -1,7 +1,7 @@
 // History, game results, hand replays, the crew league (three views), player cards and trophies.
 // Everything here is read from the cloud; results are only ever written by table servers.
 import { verifyDeck } from '@tp/engine';
-import { h, toast, fmt, cardEl } from './ui.js';
+import { h, toast, fmt, cardEl, ask } from './ui.js';
 
 const HAND_NAMES = ['High card', 'One pair', 'Two pair', 'Three of a kind', 'Straight', 'Flush', 'Full house', 'Four of a kind', 'Straight flush', 'Royal flush'];
 const TROPHY = {
@@ -16,7 +16,7 @@ const ordinal = (n) => (n == null ? '' : n + (['th', 'st', 'nd', 'rd'][(n % 100 
 export function leagueScreens({ screen, openSheet, account, back }) {
   const head = (title, onBack) => h('header', { class: 'page-head' }, h('button', { class: 'icon-btn', 'aria-label': 'Back', onclick: onBack }, '‹'), h('h1', {}, title));
   const busy = (el) => el.replaceChildren(h('p', { class: 'hint', role: 'status' }, 'Loading…'));
-  const failed = (el, err, retry) => el.replaceChildren(h('p', { class: 'hint', role: 'alert' }, navigator.onLine === false ? 'This needs the internet.' : `Something went wrong: ${err?.message || err}`), h('button', { class: 'btn ghost', onclick: retry }, 'Try again'));
+  const failed = (el, err, retry) => el.replaceChildren(h('p', { class: 'hint', role: 'alert' }, navigator.onLine === false ? 'This needs the internet.' : /permission denied|not.signed|jwt/i.test(String(err?.message || err)) ? 'Make your profile first (Profile, top left of the main menu). Your games and leagues show up here after that.' : `Something went wrong: ${err?.message || err}`), h('button', { class: 'btn ghost', onclick: retry }, 'Try again'));
 
   // ---------------- my games ----------------
   function history() {
@@ -70,7 +70,7 @@ export function leagueScreens({ screen, openSheet, account, back }) {
             admin && g.status === 'ended' && h('section', { class: 'block' }, h('h3', {}, 'Admin'),
               h('button', { class: 'btn ghost', 'data-testid': 'adjust', onclick: () => adjustSheet(a, g, players, load) }, 'Correct a result', h('small', {}, 'Move chips from one player to another; everyone sees why')),
               h('button', { class: 'btn danger', 'data-testid': 'void', onclick: async () => {
-                const reason = prompt('Why is this game void? Everyone in the crew will see this.');
+                const reason = await ask('Why is this game void? Everyone in the crew will see this.', { yes: 'Void game', danger: true, input: { placeholder: 'For example: we were testing' } });
                 if (!reason || reason.trim().length < 3) return;
                 try { await a.voidGame(id, reason.trim()); toast('Game voided'); load(); } catch (err) { toast(err.message); }
               } }, 'Void this game')));

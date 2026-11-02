@@ -7,7 +7,7 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { MODELS, newPhone, type Phone } from '../harness';
+import { MODELS, newPhone, type Phone, autoAnswer } from '../harness';
 
 const root = join(import.meta.dirname, '..', '..');
 const PORT = 18900 + Math.floor(Math.random() * 300);
@@ -96,7 +96,7 @@ test('watching a table: the public view, no cards; then taking a seat; leaving a
   await expect(fan.page.getByTestId('watching')).toHaveCount(0);
   await expect(host.page.locator('.tp.live .seat')).toHaveCount(2);
   // Riya leaves the table (sits out, seat kept) and is back home
-  guest.page.on('dialog', (d) => void d.accept());
+  await autoAnswer(guest.page);
   await guest.page.locator('[data-act=menu]').click();
   await guest.page.getByTestId('leave-table').click();
   await expect(guest.page.getByTestId('play-online')).toBeVisible();

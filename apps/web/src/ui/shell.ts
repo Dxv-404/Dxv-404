@@ -102,7 +102,7 @@ function fitLogo(w: HTMLElement): void {
 // ---------------------------------------------------------------- main menu
 export interface MenuActions {
   joinOnline(code: string): void; joinOffline(): void; host(): void;
-  profile(): void; settings(): void; crew(id: string): void; rejoin(code: string): void; resumeHost?: () => void;
+  profile(): void; settings(): void; crew(id: string): void; rejoin(code: string): void; resumeHost?: { sub: string; go: () => void };
   league(): void; replays(): void; theme(): void;
 }
 type Tab = 'play' | 'league' | 'replays' | 'theme';
@@ -189,8 +189,11 @@ export function menuScreen(root: HTMLElement, a: MenuActions & { onPlay?: never 
     mm.append(rj);
   }
   if (a.resumeHost) {
-    const rh = el('button', 'rejoin', '<span class="dot"></span><span><b>Your offline table is still open</b><small>Pick up where you left off</small></span><span class="rj">Resume</span>');
-    rh.addEventListener('click', a.resumeHost);
+    const rh = el('button', 'rejoin', `<span class="dot"></span><span><b>Resume your table</b><small>${esc(a.resumeHost.sub)}</small></span><span class="rj">Resume</span>`);
+    rh.dataset.testid = 'resume-host';
+    rh.setAttribute('aria-label', 'Resume your table');
+    const go = a.resumeHost.go;
+    rh.addEventListener('click', () => go());
     mm.append(rh);
   }
   mm.insertAdjacentHTML('beforeend', t.menu.extra);

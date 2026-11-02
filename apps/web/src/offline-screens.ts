@@ -1,5 +1,5 @@
 // Screens for offline tables (see offline.ts for how they work).
-import { h, toast, fmt } from './legacy/ui.js';
+import { h, toast, fmt, ask } from './legacy/ui.js';
 import { TableScreen, setTheme } from './table/screen';
 import { themeSwatches } from './ui/shell';
 import { infoContent } from './legacy/info.js';
@@ -12,7 +12,7 @@ import type { NetTable, ScreenView } from './net-table';
 
 type Screen = (build: (el: HTMLElement) => void | (() => void)) => void;
 type Sheet = (content: HTMLElement, o?: { label?: string; onClose?: () => void; tall?: boolean }) => { close(): void };
-export interface Ui { screen: Screen; openSheet: Sheet; home(): void }
+export interface Ui { screen: Screen; openSheet: Sheet; home(): void; qrJoin?: () => void }
 
 /** Leave for the host phone's page (tests replace this to see where it would go). */
 const leaveFor = (url: string): void => { const w = window as unknown as { __tpNavigate?: (u: string) => void }; if (w.__tpNavigate) w.__tpNavigate(url); else location.href = url; };
@@ -25,7 +25,7 @@ export function offlineStart(ui: Ui): void {
   const last = lastOffline();
   ui.screen((el) => {
     el.className = 'screen offline';
-    el.append(head('Play offline', ui.home),
+    el.append(...[head('Play offline', ui.home),
       h('p', { class: 'hint' }, 'No internet needed. One Android phone runs the Train Poker Host app and turns on its hotspot; everyone else joins that hotspot\'s Wi-Fi.'),
       last && h('button', { class: 'btn primary', 'data-testid': 'offline-back', onclick: () => backToLast(last) }, last.role === 'host' ? 'Back to my offline table' : `Back to table ${formatCode(last.code ?? '')}`, h('small', {}, 'Your seat and chips are kept')),
       h('button', { class: 'btn ' + (last ? 'secondary' : 'primary'), 'data-testid': 'offline-host', onclick: () => hostSetup(ui) }, 'Host on this phone', h('small', {}, 'Needs the Train Poker Host app (Android)')),
@@ -36,7 +36,7 @@ export function offlineStart(ui: Ui): void {
           h('li', {}, 'Everyone else connects to that hotspot’s Wi-Fi. It may say “no internet”; that is fine.'),
           h('li', {}, 'Friends tap Join a table here and type the 5-digit code shown on the host phone. Only once a night.'),
           h('li', {}, 'Locked screens, closed browsers and walking out of range are fine: your seat and chips wait for you.'),
-          h('li', {}, 'At most 10 players. The night goes to your history and league once two players confirm it online.'))));
+          h('li', {}, 'At most 10 players. The night goes to your history and league once two players confirm it online.')))].filter((x): x is HTMLElement => !!x));
   });
 }
 
@@ -47,7 +47,7 @@ function backToLast(last: NonNullable<ReturnType<typeof lastOffline>>): void {
   leaveFor(handOverUrl(me, addr));
 }
 
-function hostSetup(ui: Ui): void {
+export function hostSetup(ui: Ui): void {
   const saved = (lastOffline()?.settings ?? { startStack: 1000, sb: 5, bb: 10, turnTime: 20, rebuys: true }) as TableSettings;
   const cfg: TableSettings = { ...saved };
   ui.screen((el) => {
@@ -85,7 +85,7 @@ function hostSetup(ui: Ui): void {
   });
 }
 
-function joinCode(ui: Ui): void {
+export function joinCode(ui: Ui): void {
   ui.screen((el) => {
     el.className = 'screen join';
     const input = h('input', { type: 'text', inputmode: 'numeric', maxlength: 6, placeholder: '48 213', 'aria-label': 'Table code', autocomplete: 'off', class: 'code-input', 'data-testid': 'offline-code' }) as HTMLInputElement;
@@ -100,7 +100,8 @@ function joinCode(ui: Ui): void {
     el.append(head('Join offline', () => offlineStart(ui)),
       h('p', { class: 'hint' }, 'Connect to the host’s hotspot first, then type the 5-digit code shown on the host phone.'),
       h('label', { class: 'field' }, h('span', {}, 'Table code'), input),
-      h('div', { class: 'sticky-go' }, h('button', { class: 'btn primary', 'data-testid': 'offline-go', onclick: go }, 'Join')));
+      h('div', { class: 'sticky-go' }, h('button', { class: 'btn primary', 'data-testid': 'offline-go', onclick: go }, 'Join')),
+      ...(ui.qrJoin ? [h('div', { class: 'or' }, 'OR'), h('button', { class: 'btn ghost', 'data-testid': 'qr-join', onclick: ui.qrJoin }, 'Scan a QR code instead', h('small', {}, 'For a table whose host paired phones by QR'))] : []));
     setTimeout(() => input.focus(), 50);
   });
 }
@@ -119,7 +120,7 @@ export function hostPhoneHome(ui: Ui): void {
       h('section', { class: 'block' }, h('h2', {}, 'Play'),
         h('p', { class: 'hint' }, 'You play in your browser like everyone else: open Train Poker, tap Play offline, then Host on this phone.'),
         h('button', { class: 'btn ghost', 'data-testid': 'host-reset', onclick: async () => {
-          if (!confirm('Close this table and start a new one? The night so far is kept for upload.')) return;
+          if (!(await ask('Close this table and start a new one? The night so far is kept for upload.', { yes: 'New table' }))) return;
           await fetch('/reset', { method: 'POST' }); toast('Ready for a new table');
         } }, 'Start a new table')));
     let stop = false;
@@ -235,7 +236,7 @@ function tableMenu(ui: Ui, net: NetTable, o: { offline: boolean; code?: string; 
       v.canUndo && h('button', { class: 'btn ghost', onclick: () => { net.host('undo'); close(); } }, 'Undo last action'))),
     h('section', { class: 'block' }, h('h3', {}, 'Players'), ...v.players.filter((p) => p.id !== v.me).map((p) => h('div', { class: 'p-row' },
       h('div', { class: 'who' }, h('strong', {}, p.name), h('small', {}, `${fmt(p.stack)} chips${p.connected ? '' : ', away'}${p.sittingOut ? ', sitting out' : ''}`)),
-      h('div', { class: 'p-btns' }, h('button', { class: 'btn small danger', onclick: () => { if (confirm(`Remove ${p.name}? Their chips leave with them.`)) { net.host('remove', { pid: p.id }); close(); } } }, 'Remove'))))));
+      h('div', { class: 'p-btns' }, h('button', { class: 'btn small danger', onclick: async () => { if (await ask(`Remove ${p.name}? Their chips leave with them.`, { yes: 'Remove', danger: true })) { net.host('remove', { pid: p.id }); close(); } } }, 'Remove'))))));
   }
   if (!o.offline && 'code' in o && o.code) {
     const link = `${location.origin}${location.pathname}#/t/${o.code}`;
@@ -251,13 +252,13 @@ function tableMenu(ui: Ui, net: NetTable, o: { offline: boolean; code?: string; 
   body.append(h('section', { class: 'block' }, h('div', { class: 'menu-actions' },
     meP && h('button', { class: 'btn ghost', onclick: () => { net.sitOut(!meP.sittingOut); close(); } }, meP.sittingOut ? 'Sit back in' : 'Sit out from next hand'),
     meP && v.cfg.rebuys && meP.stack < v.cfg.startStack && v.phase !== 'hand' && h('button', { class: 'btn ghost', onclick: () => { net.rebuy(); close(); } }, `Top up to ${fmt(v.cfg.startStack)}`))),
-  h('section', { class: 'block' }, h('button', { class: 'btn ghost', 'data-testid': 'leave-table', onclick: () => {
-    if (meP && !confirm('Leave the table? You sit out; your seat and chips are kept if you come back.')) return;
+  h('section', { class: 'block' }, h('button', { class: 'btn ghost', 'data-testid': 'leave-table', onclick: async () => {
+    if (meP && !(await ask('Leave the table? You sit out; your seat and chips are kept if you come back.', { yes: 'Leave' }))) return;
     if (meP && !meP.sittingOut) net.sitOut(true);
     close();
     setTimeout(() => (o.onLeave ? o.onLeave() : ui.home()), 150);
   } }, meP ? 'Leave the table' : 'Stop watching')),
-  S.isHost && h('section', { class: 'block' }, h('button', { class: 'btn danger', 'data-testid': 'end-game', onclick: () => { if (confirm('End the game and show the final standings?')) { net.host('end'); close(); } } }, 'End game')));
+  S.isHost && h('section', { class: 'block' }, h('button', { class: 'btn danger', 'data-testid': 'end-game', onclick: async () => { if (await ask('End the game and show the final standings?', { yes: 'End game', danger: true })) { net.host('end'); close(); } } }, 'End game')));
   void o;
 }
 

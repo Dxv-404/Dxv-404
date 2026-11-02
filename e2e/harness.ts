@@ -81,6 +81,7 @@ export async function newPhone(browser: Browser, name: string, model: PhoneModel
 export async function hostTable(host: Phone, names: string[]): Promise<void> {
   const p = host.page;
   await p.getByRole('button', { name: 'Host a new table' }).click();
+  await p.getByTestId('qr-host').click();
   for (let i = 2; i < names.length; i++) await p.getByRole('button', { name: 'Add player' }).click();
   const inputs = p.locator('.name-row input');
   for (let i = 0; i < names.length; i++) await inputs.nth(i).fill(names[i]!);
@@ -113,7 +114,8 @@ async function pairOnce(host: Phone, guest: Phone, rejoinPid?: string): Promise<
     await expectNoJunkText(host);
   }
   await gp.evaluate(() => { (window as any).__tpScanner = null; });
-  await gp.getByRole('button', { name: /Join (or rejoin )?a table/ }).click();
+  await gp.getByTestId('play-offline').click();
+  await gp.getByTestId('qr-join').click();
   await gp.waitForFunction(() => (window as any).__tpScanner, undefined, { timeout: 30_000 });
   await gp.evaluate((o) => (window as any).__tpScanner._found(o), offer);
   await gp.waitForFunction(() => (window as any).__tp.guest?.lastReply);
@@ -138,32 +140,35 @@ export async function chipTotal(host: Phone): Promise<number> {
   });
 }
 
-/** Whoever has live action buttons takes one random legal action through the real UI.
+/** Whoever has live action buttons takes one random legal action through the real UI (the designed table).
  *  Busted players rebuy and the host deals the next hand, as real players would. */
 export async function playOneAction(phones: Phone[], rnd: () => number): Promise<boolean> {
+  const seen = async (l: ReturnType<Page['locator']>) => (await l.count()) > 0 && (await l.first().isVisible().catch(() => false));
   for (const ph of phones) {
-    const rebuy = ph.page.getByRole('button', { name: /^Rebuy/ });
-    if (await rebuy.count()) await rebuy.first().click({ timeout: 3000 }).catch(() => {});
+    const rebuy = ph.page.locator('.tp.live [data-act=rebuy]');
+    if (await seen(rebuy)) await rebuy.first().click({ timeout: 3000 }).catch(() => {});
   }
-  const deal = phones[0]!.page.getByRole('button', { name: 'Deal next hand' });
-  if (await deal.count()) await deal.first().click({ timeout: 3000 }).catch(() => {});
+  const deal = phones[0]!.page.locator('.tp.live [data-act=deal]');
+  if (await seen(deal)) await deal.first().click({ timeout: 3000 }).catch(() => {});
   for (const ph of phones) {
     const p = ph.page;
-    if (!(await p.locator('.actions.live').count())) continue;
+    const fold = p.locator('.tp.live [data-act=fold]');
+    if (!(await seen(fold))) continue;
     const r = rnd();
-    const raise = p.locator('.actions.live .act.raise:not([disabled])');
-    if (r < 0.2 && (await raise.count())) {
-      await raise.click({ timeout: 3000 });
-      const presets = ['Min', '½ pot', 'Pot', 'All-in'];
-      await p.locator('.preset').getByText(presets[Math.floor(rnd() * presets.length)]!, { exact: true }).click();
-      await p.locator('.raise-sheet .act').click();
-      if (await p.locator('.raise-sheet.open').count()) await p.locator('.raise-sheet .act').click(); // all-in confirm
-    } else {
-      const btns = p.locator('.actions.live .act:not([disabled])');
-      const k = await btns.count();
-      if (!k) continue;
-      await btns.nth(r < 0.35 ? 0 : Math.min(1, k - 1)).click({ timeout: 3000 });
-    }
+    const raise = p.locator('.tp.live [data-act=raise]');
+    const check = p.locator('.tp.live [data-act=check]');
+    const call = p.locator('.tp.live [data-act=call]');
+    if (r < 0.2 && (await seen(raise))) {
+      await raise.first().click({ timeout: 3000 });
+      const presets = p.locator('.tp-raise-in .presets button');
+      const k = await presets.count();
+      if (k) await presets.nth(Math.floor(rnd() * k)).click({ timeout: 3000 }).catch(() => {});
+      await p.locator('.tp-raise-in [data-x=go]').click({ timeout: 3000 }).catch(() => {});
+    } else if (r < 0.32 && !(await seen(check))) {
+      await fold.first().click({ timeout: 3000 }).catch(() => {});
+    } else if (await seen(check)) await check.first().click({ timeout: 3000 }).catch(() => {});
+    else if (await seen(call)) await call.first().click({ timeout: 3000 }).catch(() => {});
+    else await fold.first().click({ timeout: 3000 }).catch(() => {});
     return true;
   }
   return false;
@@ -199,4 +204,11 @@ export async function expectNoJunkText(ph: Phone): Promise<void> {
 /** A hotspot with no internet: phones still reach each other, but every web request fails. */
 export async function noInternet(ph: Phone): Promise<void> {
   await ph.ctx.route('**/*', (route) => route.abort('internetdisconnected'));
+}
+
+/** Answers the app's own question boxes (they replaced the browser's confirm and prompt) the way a player would: yes, or this text. */
+export async function autoAnswer(page: Page, text = 'Test game, not a real night'): Promise<void> {
+  const set = (t: string) => { (window as unknown as { __tpAsk: (q: string, isText: boolean) => unknown }).__tpAsk = (_q, isText) => (isText ? t : true); };
+  await page.addInitScript(set, text);
+  await page.evaluate(set, text).catch(() => {});
 }

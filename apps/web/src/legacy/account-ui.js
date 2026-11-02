@@ -1,7 +1,7 @@
 // Profile, recovery code, crews and crew invite links. No sign-up: the first visit makes an account for
 // this phone. The account code (Supabase client) is loaded only when one of these screens opens, so the
 // game itself still starts instantly and works offline.
-import { h, toast } from './ui.js';
+import { h, toast, ask } from './ui.js';
 import { leagueScreens } from './league-ui.js';
 import { offerPush } from '../more-screens.ts';
 
@@ -87,11 +87,11 @@ export function accountScreens({ screen, openSheet, home }) {
       h('section', { class: 'block' }, h('h2', {}, 'This account'),
         h('button', { class: 'btn ghost', 'data-testid': 'recover-open', onclick: () => recoverSheet() }, 'Recover old account', h('small', {}, 'Make this phone an account you had before')),
         h('button', { class: 'btn ghost', onclick: async () => {
-          if (!confirm('Log out every other phone on this account?')) return;
+          if (!(await ask('Log out every other phone on this account?', { yes: 'Log them out' }))) return;
           try { const n = await a.logoutOtherPhones(); toast(n ? `${n} other phone${n === 1 ? '' : 's'} logged out` : 'No other phones were logged in'); } catch (err) { toast(err.message); }
         } }, 'Log out my other phones'),
         h('button', { class: 'btn danger', onclick: async () => {
-          if (!confirm('Delete your account? Your name and picture go; your past results stay in your crews as "Former player".')) return;
+          if (!(await ask('Delete your account? Your name and picture go; your past results stay in your crews as "Former player".', { yes: 'Delete', danger: true }))) return;
           try { await a.deleteAccount(); localStorage.removeItem(CODE_KEY); toast('Account deleted'); home(); } catch (err) { toast(err.message); }
         } }, 'Delete my account')));
     drawRescueAlerts(alertBox, a);
@@ -114,7 +114,7 @@ export function accountScreens({ screen, openSheet, home }) {
             try { toast((await a.confirmOfflineGame(g.game_id)) === 'ended' ? 'Confirmed. It is in your history now.' : 'Confirmed. Waiting for one more player.'); drawRescueAlerts(box, a); } catch (err) { toast(err.message); }
           } }, 'Yes, I played'),
           h('button', { class: 'btn ghost', 'data-testid': 'offline-dispute', onclick: async () => {
-            if (!confirm('Say this seat was not you? It becomes a guest seat and leaves your history.')) return;
+            if (!(await ask('Say this seat was not you? It becomes a guest seat and leaves your history.', { yes: 'Not me' }))) return;
             try { await a.disputeOfflineSeat(g.game_id); toast('Done. That seat is a guest now.'); drawRescueAlerts(box, a); } catch (err) { toast(err.message); }
           } }, 'That wasn’t me')))),
         ...list.map((r) => h('section', { class: 'block alert', role: 'alert', 'data-testid': 'rescue-alert' },
@@ -137,7 +137,7 @@ export function accountScreens({ screen, openSheet, home }) {
         h('ul', { class: 'member-list', 'data-testid': 'phones' }, ...list.map((p, i) => h('li', {},
           h('div', { class: 'who' }, h('strong', {}, p.this_phone ? 'This phone' : `Phone ${i + 1}`), h('small', {}, `added ${when(p.added)}, last used ${when(p.last_seen)}`)),
           !p.this_phone && h('button', { class: 'btn small ghost', onclick: async () => {
-            if (!confirm('Log this phone out? It will no longer be your account.')) return;
+            if (!(await ask('Log this phone out? It will no longer be your account.', { yes: 'Log out', danger: true }))) return;
             try { await a.logoutPhone(p.phone); toast('Logged out'); drawPhones(box, a); } catch (err) { toast(err.message); }
           } }, 'Log out')))),
         list.length > 1 && h('p', { class: 'hint small' }, 'Don’t recognise a phone? Log it out, then make a new recovery code.'));
@@ -154,7 +154,7 @@ export function accountScreens({ screen, openSheet, home }) {
         h('a', { class: 'btn ghost small', href: share(`My Train Poker recovery code: ${mod.formatCode(code)}`), target: '_blank', rel: 'noopener' }, 'Send to myself on WhatsApp')),
       h('button', { class: 'btn ghost small', onclick: () => make(true) }, 'Make a new code'));
     const make = async (replace) => {
-      if (replace && !confirm('Make a new code? The old code stops working.')) return;
+      if (replace && !(await ask('Make a new code? The old code stops working.', { yes: 'New code' }))) return;
       try { const code = await a.newRecoveryCode(); localStorage.setItem(CODE_KEY, code); show(code); } catch (err) { toast(err.message); }
     };
     if (local) return show(local);
@@ -197,7 +197,7 @@ export function accountScreens({ screen, openSheet, home }) {
         if (await a.hasLogin()) {
           await a.start(localStorage.getItem('tp-name') || 'Player');
           const mine = await a.crews();
-          if (mine.length) merge = confirm(`Add this phone's ${mine.length} crew${mine.length === 1 ? '' : 's'} to your old account?\n\nOK adds them. Cancel leaves them out.`);
+          if (mine.length) merge = await ask(`Add this phone's ${mine.length} crew${mine.length === 1 ? '' : 's'} to your old account?`, { yes: 'Add them', no: 'Leave them out' });
         }
         const r = await a.recover(code, merge);
         if (!r.ok) { go.disabled = false; msg.textContent = r.reason === 'wrong' ? "That code doesn't match an account." : r.message; return; }
@@ -316,8 +316,8 @@ export function accountScreens({ screen, openSheet, home }) {
               h('label', { class: 'switch-row' }, h('span', {}, 'Approve new members', h('small', {}, 'An admin lets each new member in')),
                 h('input', { type: 'checkbox', role: 'switch', checked: crew.require_approval ? true : null, onchange: (e) => act(() => a.updateCrew(id, { requireApproval: e.target.checked })) }))),
             crew.status === 'active' && logBox,
-            h('section', { class: 'block' }, h('button', { class: 'btn danger', onclick: () => {
-              if (!confirm(crew.role === 'owner' ? 'Leave the crew? The longest-serving admin becomes the owner.' : 'Leave the crew?')) return;
+            h('section', { class: 'block' }, h('button', { class: 'btn danger', onclick: async () => {
+              if (!(await ask(crew.role === 'owner' ? 'Leave the crew? The longest-serving admin becomes the owner.' : 'Leave the crew?', { yes: 'Leave', danger: true }))) return;
               act(async () => { await a.leaveCrew(id); profile(); });
             } }, 'Leave crew')));
         } catch (err) { failed(body, err, load); }
@@ -331,8 +331,8 @@ export function accountScreens({ screen, openSheet, home }) {
       crew.role === 'owner' && (m.role === 'admin'
         ? h('button', { class: 'btn ghost', onclick: () => run(() => a.setRole(crew.id, m.account_id, 'member'), 'No longer an admin') }, 'Remove as admin')
         : h('button', { class: 'btn ghost', onclick: () => run(() => a.setRole(crew.id, m.account_id, 'admin'), 'Made an admin') }, 'Make admin')),
-      crew.role === 'owner' && h('button', { class: 'btn ghost', onclick: () => { if (confirm(`Make ${m.name} the owner? You become an admin.`)) run(() => a.setRole(crew.id, m.account_id, 'owner'), 'Ownership handed over'); } }, 'Make owner'),
-      h('button', { class: 'btn danger', onclick: () => { if (confirm(`Remove ${m.name} from the crew?`)) run(() => a.removeMember(crew.id, m.account_id), 'Removed'); } }, 'Remove from crew')), { label: m.name });
+      crew.role === 'owner' && h('button', { class: 'btn ghost', onclick: async () => { if (await ask(`Make ${m.name} the owner? You become an admin.`, { yes: 'Make owner' })) run(() => a.setRole(crew.id, m.account_id, 'owner'), 'Ownership handed over'); } }, 'Make owner'),
+      h('button', { class: 'btn danger', onclick: async () => { if (await ask(`Remove ${m.name} from the crew?`, { yes: 'Remove', danger: true })) run(() => a.removeMember(crew.id, m.account_id), 'Removed'); } }, 'Remove from crew')), { label: m.name });
   }
 
   // ---------------- invite links ----------------

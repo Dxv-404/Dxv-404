@@ -2,7 +2,7 @@
 // One phone opens a table (the app picks the server), another follows the link, they play a few moves, and
 // the host ends the game.
 import { test, expect } from '@playwright/test';
-import { MODELS, newPhone } from '../harness';
+import { MODELS, newPhone, autoAnswer } from '../harness';
 
 const SITE = process.env.LIVE_SITE;
 
@@ -33,7 +33,7 @@ test('the deployed app: open a table, a friend follows the link, play, end', asy
     await host.page.waitForTimeout(400);
   }
   expect(acted).toBeGreaterThanOrEqual(4);
-  host.page.on('dialog', (d) => void d.accept());
+  await autoAnswer(host.page);
   await host.page.locator('[data-act=menu]').click();
   await host.page.getByTestId('end-game').click();
   await expect(host.page.getByTestId('standings')).toBeVisible({ timeout: 20_000 });

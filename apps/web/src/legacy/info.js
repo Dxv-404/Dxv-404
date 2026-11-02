@@ -1,4 +1,5 @@
-import { h, cardEl } from './ui.js';
+import { h } from './ui.js';
+import { card } from '../table/render.ts';
 
 const HANDS = [
   ['Royal Flush', 'Ace, King, Queen, Jack and Ten, all of one suit. The best hand there is.', ['As', 'Ks', 'Qs', 'Js', 'Ts']],
@@ -18,7 +19,7 @@ export function infoContent() {
   HANDS.forEach(([name, desc, cards], i) => {
     list.append(h('li', {},
       h('div', { class: 'rank-head' }, h('span', { class: 'rank-n' }, String(i + 1)), h('strong', {}, name)),
-      h('div', { class: 'mini-cards' }, cards.map((c) => cardEl(c, { size: 'xs', down: false }))),
+      h('div', { class: 'mini-cards', html: cards.map((c) => card(c, 40)).join('') }),
       h('p', {}, desc)));
   });
   return h('div', { class: 'info' },

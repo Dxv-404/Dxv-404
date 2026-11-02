@@ -150,3 +150,32 @@ export function countTo(el, to, ms = 500) {
   };
   requestAnimationFrame(step);
 }
+
+/** The theme's own question box, in place of the browser's confirm(): resolves true for yes.
+ *  With `input`, it asks for a line of text instead and resolves the text (or null).
+ *  @param {string} question
+ *  @param {{ yes?: string, no?: string, danger?: boolean, input?: { placeholder?: string, max?: number, value?: string } | null }} [o]
+ *  @returns {Promise<any>} */
+export function ask(question, o = {}) {
+  const { yes = 'Yes', no = 'Cancel', danger = false, input = null } = o;
+  const auto = window.__tpAsk; // tests answer for the player
+  if (auto) return Promise.resolve(auto(question, !!input));
+  return new Promise((resolve) => {
+    const root = document.getElementById('app') ?? document.body;
+    const prev = document.activeElement;
+    const field = input ? h('input', { type: 'text', maxlength: input.max ?? 120, placeholder: input.placeholder ?? '', value: input.value ?? '', 'aria-label': question, 'data-testid': 'ask-text' }) : null;
+    const done = (v) => { wrap.classList.remove('on'); document.removeEventListener('keydown', key, true); setTimeout(() => wrap.remove(), 180); prev?.focus?.(); resolve(v); };
+    const ok = () => done(field ? (field.value.trim() || null) : true);
+    const key = (e) => { if (e.key === 'Escape') { e.stopPropagation(); done(field ? null : false); } if (e.key === 'Enter' && field) ok(); };
+    const box = h('div', { class: 'ask', role: 'alertdialog', 'aria-modal': 'true', 'aria-label': question },
+      h('p', { class: 'ask-q' }, question), field,
+      h('div', { class: 'ask-btns' },
+        h('button', { class: 'btn ghost', 'data-testid': 'ask-no', onclick: () => done(field ? null : false) }, no),
+        h('button', { class: 'btn ' + (danger ? 'danger' : 'primary'), 'data-testid': 'ask-yes', onclick: ok }, yes)));
+    const wrap = h('div', { class: 'ask-wrap', onclick: (e) => { if (e.target === wrap) done(field ? null : false); } }, box);
+    root.append(wrap);
+    document.addEventListener('keydown', key, true);
+    requestAnimationFrame(() => { wrap.classList.add('on'); (field ?? box.querySelector('[data-testid=ask-yes]')).focus(); });
+  });
+}
+if (typeof window !== 'undefined') window.__tpAskBox = ask;

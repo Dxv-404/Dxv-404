@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test';
 import WS from 'ws';
 import { Account, type KeyStore } from '@tp/account';
 import { TableClient, type SocketLike } from '@tp/table';
-import { MODELS, newPhone } from '../harness';
+import { MODELS, newPhone, autoAnswer } from '../harness';
 
 test.skip(!process.env.LIVE_SUPABASE, 'needs LIVE_SUPABASE=1 (talks to the real accounts project)');
 const TABLES = process.env.TABLE_URL ?? 'wss://train-poker-tables.apins-subdomain.workers.dev';
@@ -53,7 +53,7 @@ test('My games, results, replay, league views, and an admin voids a game', async
 
     // the browser, signed in as Devika (the same login a phone keeps in its storage)
     const ph = await newPhone(browser, 'Devika', MODELS.pixel7, baseURL!, proxy ? { proxy } : {});
-    ph.page.on('dialog', (d) => (d.type() === 'prompt' ? d.accept('Test game, not a real night') : d.accept()));
+    await autoAnswer(ph.page);
     await ph.ctx.addInitScript(([login, name]) => { localStorage.setItem('tp-login', login!); localStorage.setItem('tp-name', name!); }, [stores[0]!.get('tp-login')!, 'Devika']);
     const page = ph.page;
     await page.goto('/');
