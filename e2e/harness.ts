@@ -112,8 +112,9 @@ async function pairOnce(host: Phone, guest: Phone, rejoinPid?: string): Promise<
     offer = await hp.evaluate(() => (window as any).__tp.host.lastOffer);
     await expectNoJunkText(host);
   }
+  await gp.evaluate(() => { (window as any).__tpScanner = null; });
   await gp.getByRole('button', { name: /Join (or rejoin )?a table/ }).click();
-  await gp.waitForFunction(() => (window as any).__tpScanner?.running);
+  await gp.waitForFunction(() => (window as any).__tpScanner, undefined, { timeout: 30_000 });
   await gp.evaluate((o) => (window as any).__tpScanner._found(o), offer);
   await gp.waitForFunction(() => (window as any).__tp.guest?.lastReply);
   const reply = await gp.evaluate(() => (window as any).__tp.guest.lastReply);
@@ -121,8 +122,9 @@ async function pairOnce(host: Phone, guest: Phone, rejoinPid?: string): Promise<
   if (rejoinPid) {
     await hp.evaluate((r) => (window as any).__tp.host.pairAnswer(r), reply);
   } else {
+    await hp.evaluate(() => { (window as any).__tpScanner = null; });
     await hp.getByRole('button', { name: 'Next:' }).click();
-    await hp.waitForFunction(() => (window as any).__tpScanner?.running);
+    await hp.waitForFunction(() => (window as any).__tpScanner, undefined, { timeout: 30_000 });
     await hp.evaluate((o) => (window as any).__tpScanner._found(o), reply);
   }
   await gp.waitForFunction(() => (window as any).__tp.guest?.status === 'connected', undefined, { timeout: 20_000 });

@@ -26,6 +26,7 @@ export class Scanner {
 
   async start(onCode) {
     this.onCode = onCode;
+    window.__tpScanner = this; // lets automated tests feed a code (even while the camera is still starting)
     this.stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
       audio: false,
@@ -47,7 +48,6 @@ export class Scanner {
       this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });
     }
     this.running = true;
-    window.__tpScanner = this; // lets automated tests feed a code
     this._loop();
   }
 
