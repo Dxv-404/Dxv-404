@@ -94,19 +94,19 @@ export async function layoutOk(page: Page, where: string): Promise<void> {
     if (document.documentElement.scrollWidth > W + 1) out.push(`page scrolls sideways (${document.documentElement.scrollWidth} > ${W})`);
     const vis = (e: Element) => { const r = e.getBoundingClientRect(); const s = getComputedStyle(e); return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none' && Number(s.opacity) > 0.05; };
     const inScroller = (e: Element) => { for (let p = e.parentElement; p; p = p.parentElement) { const s = getComputedStyle(p); if (/(auto|scroll)/.test(s.overflowX) && p.scrollWidth > p.clientWidth + 1) return true; } return false; };
-    const items = [...document.querySelectorAll('.cw button, .cw .chipt, .cw input, .cw .klive, .cw h1, .cw h2, .cw .txt b, .nav button')].filter(vis);
+    const items = Array.from(document.querySelectorAll('.cw button, .cw .chipt, .cw input, .cw .klive, .cw h1, .cw h2, .cw .txt b, .nav button')).filter(vis);
     for (const e of items) {
       const r = e.getBoundingClientRect();
       if ((r.left < -1 || r.right > W + 1) && !inScroller(e)) out.push(`off the edge: ${e.tagName}.${(e as HTMLElement).className} "${(e.textContent ?? '').trim().slice(0, 30)}" ${Math.round(r.left)}..${Math.round(r.right)}`);
     }
     // text cut off: an element whose text is wider than its box, unless it is meant to end in …
-    for (const e of [...document.querySelectorAll('.cw button, .cw .chipt, .cw .klbl, .cw .stat b, .cw .lrow .v, .cw .bb')].filter(vis)) {
+    for (const e of Array.from(document.querySelectorAll('.cw button, .cw .chipt, .cw .klbl, .cw .stat b, .cw .lrow .v, .cw .bb')).filter(vis)) {
       const s = getComputedStyle(e);
       if (s.textOverflow === 'ellipsis') continue;
       if ((e as HTMLElement).scrollWidth > (e as HTMLElement).clientWidth + 2 && s.overflow !== 'visible') out.push(`cut off: "${(e.textContent ?? '').trim().slice(0, 30)}"`);
     }
     // buttons on top of each other (not nested)
-    const btns = [...document.querySelectorAll('.cw button, .nav button')].filter(vis) as HTMLElement[];
+    const btns = Array.from(document.querySelectorAll('.cw button, .nav button')).filter(vis) as HTMLElement[];
     for (let i = 0; i < btns.length; i++) for (let j = i + 1; j < btns.length; j++) {
       const a = btns[i]!, b = btns[j]!;
       if (a.contains(b) || b.contains(a)) continue;
@@ -127,7 +127,7 @@ export async function layoutOk(page: Page, where: string): Promise<void> {
 /** Touch targets: every visible button in the crews screens is at least 44 px tall and wide (or a link-sized
  *  text button inside a row of its own). */
 export async function targetsOk(page: Page, where: string): Promise<void> {
-  const small = await page.evaluate(() => [...document.querySelectorAll('.cw button, .nav button')].filter((e) => {
+  const small = await page.evaluate(() => Array.from(document.querySelectorAll('.cw button, .nav button')).filter((e) => {
     const r = e.getBoundingClientRect();
     return r.width > 0 && r.height > 0 && (r.height < 31.5 || r.width < 31.5) && !(e as HTMLElement).closest('.ktabs');
   }).map((e) => `${(e.textContent ?? e.getAttribute('aria-label') ?? '').trim().slice(0, 20)} ${Math.round(e.getBoundingClientRect().width)}x${Math.round(e.getBoundingClientRect().height)}`));

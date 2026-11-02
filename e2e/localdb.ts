@@ -90,7 +90,7 @@ export class LocalDb {
     const path = url.pathname;
     try {
       if (path === '/auth/v1/signup' || (path === '/auth/v1/token' && url.searchParams.get('grant_type') === 'refresh_token')) {
-        let id = randomUUID();
+        let id: string = randomUUID();
         if (path === '/auth/v1/token') { const b = req.postDataJSON() as { refresh_token?: string }; id = (b.refresh_token ?? '').replace(/^r-/, '') || id; }
         return json(200, session(id));
       }

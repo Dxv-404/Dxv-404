@@ -15,6 +15,8 @@ import { ask, toast } from '../legacy/ui.js';
 import { qrSvg, Scanner } from '../legacy/qr.js';
 import { enablePush, pushSupported } from '../more-screens';
 import { BADGES, COLORS, COLOR_NAMES, ICON, applyFeel, ago, av, bbText, btn, cardImg, clock, cwToast, dayMonth, duration, el, emblem, endsIn, esc, fmtN, ic, level, monthDay, monthName, ms, ordinal, spark, stack, upDown, usualText, weekGroup } from './kit';
+import { DEFAULT_RULES, rulesText, sizeOf, type Size } from './format';
+export { rulesText, sizeOf };
 import { cachedLists, ensure, existing, fetchLists, forget, type Lists } from './data';
 
 type Sheet = { close(): void; sheet: HTMLElement };
@@ -47,7 +49,6 @@ type View =
   | { k: 'waiting'; crewId: string }
   | { k: 'settings'; id: string }
   | { k: 'player'; crewId: string; accountId: string };
-type Size = 'phone' | 'side' | 'tab' | 'lap' | 'desk';
 const FLOWS = new Set<View['k']>(['create', 'made', 'join', 'preview', 'waiting', 'settings']);
 
 const S = screensJson as unknown as { themes: Record<string, { menu: { logo: string } }> };
@@ -58,25 +59,6 @@ const TROPHY: Record<string, [string, string]> = {
 };
 const ROLE_NAME = { owner: 'leader', admin: 'admin', member: 'member' } as const;
 const roleChip = (r: string): string => (r === 'owner' ? '<span class="chipt a">Leader</span>' : r === 'admin' ? '<span class="chipt o">Admin</span>' : '');
-const DEFAULT_RULES: TableRules = { startStack: 1000, sb: 10, bb: 20, turnTime: 20, rebuys: true, maxRebuys: 2 };
-
-/** What the crew's rules say, as the host sheet shows them. */
-export function rulesText(r: TableRules): string {
-  const x = { ...DEFAULT_RULES, ...r };
-  const up = x.blindUpEvery ? `, up every ${x.blindUpEvery} hands` : '';
-  const rb = x.rebuys ? ` · ${x.maxRebuys ? `${x.maxRebuys} rebuy${x.maxRebuys === 1 ? '' : 's'}` : 'rebuys'} of ${fmtN(x.startStack!)}` : ' · no rebuys';
-  return `${fmtN(x.startStack!)} chips · blinds ${fmtN(x.sb!)}/${fmtN(x.bb!)}${up}${rb}`;
-}
-
-/** Which layout a screen gets (v3sizes.py). */
-export function sizeOf(w: number, h: number): Size {
-  if (w > h && h < 520 && w < 1100) return 'side';
-  if (w < 700) return 'phone';
-  if (w < 1100) return 'tab';
-  if (w < 1700) return 'lap';
-  return 'desk';
-}
-
 export function crewsUi(deps: CrewsDeps) {
   let views: View[] = [{ k: 'list' }];
   let root: HTMLElement | null = null;
