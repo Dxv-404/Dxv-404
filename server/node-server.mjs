@@ -19174,7 +19174,9 @@ server.on("upgrade", (req, socket, head) => {
     socket.end("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n");
     return;
   }
+  socket.on("error", () => socket.destroy());
   wss.handleUpgrade(req, socket, head, (ws) => {
+    ws.on("error", () => ws.terminate());
     perAddress.set(addr, (perAddress.get(addr) ?? 0) + 1);
     ws.on("close", () => {
       const n = (perAddress.get(addr) ?? 1) - 1;
