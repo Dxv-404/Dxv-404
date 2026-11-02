@@ -1,7 +1,7 @@
 -- Crews: invites, approval, roles, removal, leaving, limits, and who sees what.
 begin;
 set search_path = public, extensions;
-select plan(31);
+select plan(33);
 
 \set OWNER '''00000000-0000-0000-0000-0000000000c1'''
 \set ADMIN '''00000000-0000-0000-0000-0000000000c2'''
@@ -55,16 +55,20 @@ select testing.one(:ADMIN, $$select public.approve_member('$$ || :'crew' || $$',
 select is(testing.one(:LATE, $$select count(*) > 1 from crew_members$$), 'true', 'until an admin approves');
 
 -- removing
-select is(testing.one(:ADMIN, $$select public.remove_member('$$ || :'crew' || $$', '$$ || :'owner_acc' || $$')$$), 'The owner cannot be removed', 'the owner cannot be removed');
+select is(testing.one(:ADMIN, $$select public.remove_member('$$ || :'crew' || $$', '$$ || :'owner_acc' || $$')$$), 'The leader cannot be removed', 'the owner (leader) cannot be removed');
 select testing.one(:OWNER, $$select public.set_role('$$ || :'crew' || $$', '$$ || :'mem_acc' || $$', 'admin')$$);
-select is(testing.one(:ADMIN, $$select public.remove_member('$$ || :'crew' || $$', '$$ || :'mem_acc' || $$')$$), 'Only the owner can remove an admin', 'an admin cannot remove another admin');
-select testing.one(:ADMIN, $$select public.remove_member('$$ || :'crew' || $$', '$$ || :'out_acc' || $$')$$);
+select is(testing.one(:ADMIN, $$select public.remove_member('$$ || :'crew' || $$', '$$ || :'mem_acc' || $$')$$), 'Only the crew leader can remove members', 'an admin cannot remove another admin');
+-- v3 roles: only the leader removes members (admins approve, host and correct results)
+select is(testing.one(:ADMIN, $$select public.remove_member('$$ || :'crew' || $$', '$$ || :'out_acc' || $$')$$), 'Only the crew leader can remove members', 'an admin cannot remove a member');
+select testing.one(:OWNER, $$select public.remove_member('$$ || :'crew' || $$', '$$ || :'out_acc' || $$')$$);
 select is(testing.one(:OUT, $$select count(*) from crews$$), '0', 'a removed member loses access');
 select is(testing.one(:MEM, $$select count(*) from crew_audit where what = 'member_removed'$$), '1', 'members can see the removal in the crew log');
 
--- ownership passes when the owner leaves; the last one out closes the crew
+-- a leader leaves only after handing over (v3 roles table); the last one out closes the crew
+select is(testing.one(:OWNER, $$select public.leave_crew('$$ || :'crew' || $$')$$), 'Hand over leadership before you leave', 'the leader cannot leave without handing over');
+select testing.one(:OWNER, $$select public.set_role('$$ || :'crew' || $$', '$$ || :'admin_acc' || $$', 'owner')$$);
 select testing.one(:OWNER, $$select public.leave_crew('$$ || :'crew' || $$')$$);
-select is(testing.one(:ADMIN, $$select a.name from crew_members m join accounts a on a.id = m.account_id where m.role = 'owner'$$), 'Admin', 'the owner leaves: the longest-serving admin owns it');
+select is(testing.one(:ADMIN, $$select a.name from crew_members m join accounts a on a.id = m.account_id where m.role = 'owner'$$), 'Admin', 'after handing over, the old leader leaves and the new one leads');
 select testing.one(:MEM, $$select public.leave_crew('$$ || :'crew' || $$')$$);
 select testing.one(:LATE, $$select public.leave_crew('$$ || :'crew' || $$')$$);
 select testing.one(:ADMIN, $$select public.leave_crew('$$ || :'crew' || $$')$$);
