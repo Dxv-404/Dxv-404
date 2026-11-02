@@ -98,9 +98,9 @@ describe('the typed calls', () => {
   });
 
   it('a device with no sign-in signs in, then redeems; the answer becomes the profile', async () => {
-    const db = fakeDb(() => ({ body: { ok: true, account: PROFILE, moved: { crews: 2, games: 48, trophies: 3 } } }));
+    const db = fakeDb(() => ({ body: { ok: true, account: PROFILE, moved: { crews: 2, games: 48, trophies: 3 }, from: 'laptop' } }));
     const r = await db.account.redeemDeviceCode('482 913', null, { kind: 'phone', detail: 'Pixel 7 · Chrome' });
-    expect(r).toEqual({ ok: true, profile: PROFILE, moved: { crews: 2, games: 48, trophies: 3 } });
+    expect(r).toEqual({ ok: true, profile: PROFILE, moved: { crews: 2, games: 48, trophies: 3 }, from: 'laptop' });
     expect(db.signups()).toBe(1);
     expect(db.calls[0]).toEqual({ fn: 'redeem_device_code', args: { p_code: '482913', p_merge: null, p_kind: 'phone', p_detail: 'Pixel 7 · Chrome' } });
     expect(db.account.profile).toEqual(PROFILE);

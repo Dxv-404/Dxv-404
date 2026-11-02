@@ -2,7 +2,7 @@
 -- limits), bringing a device's own crews along or not, device names, and notices on the other devices.
 begin;
 set search_path = public, extensions;
-select plan(54);
+select plan(55);
 
 \set LAP '''00000000-0000-0000-0000-00000000d001'''
 \set PHONE '''00000000-0000-0000-0000-00000000d002'''
@@ -29,6 +29,7 @@ select is(testing.one(:STRANGER, $$select public.new_device_code()$$), 'No accou
 select testing.one(:PHONE, format($$select public.redeem_device_code('%s %s', null, 'phone', 'Pixel 7 · Chrome')::text$$, left(:'code', 3), right(:'code', 3))) as r \gset
 select is((:'r'::jsonb) ->> 'ok', 'true', 'a fresh device signs in with the code');
 select is((:'r'::jsonb) -> 'account' ->> 'id', :'dev', 'and is that account');
+select is((:'r'::jsonb) ->> 'from', 'laptop', 'and which kind of device made the code');
 select is((:'r'::jsonb) -> 'moved' ->> 'crews', '0', 'it says what moved with it');
 select is(testing.one(:PHONE, $$select (public.ensure_account('Someone')).name$$), 'Dev', 'the phone is Dev now');
 select is(testing.one(:LAP, $$select count(*) from public.my_devices()$$), '2', 'the laptop sees two devices');

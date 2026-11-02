@@ -9,7 +9,7 @@ import { accountScreens } from './account-ui.js';
 import { offlineStart, joinCode, hostPhoneHome, hostPhoneTable } from '../offline-screens.ts';
 import { onHostPhonePage } from '../offline.ts';
 import { onlineStart, routeOnline, playOnline, hostOnline } from '../online-screens.ts';
-import { initShell, loadingScreen, menuScreen, pickerScreen, leaveMenu } from '../ui/shell.ts';
+import { initShell, loadingScreen, menuScreen, pickerScreen, leaveMenu, navBar } from '../ui/shell.ts';
 import { setTheme, currentTheme, TableScreen } from '../table/screen.ts';
 import { settingsScreen, installErrorReporting, noteScreen } from '../more-screens.ts';
 
@@ -48,7 +48,7 @@ function openSheet(content, { label = 'Panel', onClose, tall = false } = {}) {
   return { close, sheet };
 }
 
-const accounts = accountScreens({ screen, openSheet, home: () => home() });
+const accounts = accountScreens({ screen, openSheet, home: () => home(), nav: () => navBar('play', menuActions()) });
 const ui = { screen, openSheet, home: () => home(), qrJoin: () => join() };
 window.addEventListener('hashchange', () => { if (!routeOnline(ui)) accounts.route(); });
 
@@ -92,6 +92,7 @@ function menuActions() {
 function home() {
   delete document.body.dataset.playing;
   screen((el) => menuScreen(el, menuActions()));
+  void accounts.notices(); // a sign-in on another device: "Not me? Log it out"
 }
 
 function themePicker() {

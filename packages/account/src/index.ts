@@ -121,10 +121,10 @@ export class Account {
     }
     const { data, error } = await this.db.rpc('redeem_device_code', { p_code: cleanDeviceCode(code), p_merge: merge, p_kind: device.kind, p_detail: device.detail });
     if (error) return { ok: false, reason: error.code === '54000' ? 'paused' : 'error', message: error.message };
-    const r = data as { ok: boolean; reason?: string; tries_left?: number; mine?: AccountSummary; account?: Profile; moved?: { crews: number; games: number; trophies: number } };
+    const r = data as { ok: boolean; reason?: string; tries_left?: number; mine?: AccountSummary; account?: Profile; moved?: { crews: number; games: number; trophies: number }; from?: DeviceKind | null };
     if (r.ok && r.account) {
       this.profile = r.account;
-      return { ok: true, profile: r.account, moved: r.moved ?? { crews: 0, games: 0, trophies: 0 } };
+      return { ok: true, profile: r.account, moved: r.moved ?? { crews: 0, games: 0, trophies: 0 }, from: r.from ?? null };
     }
     switch (r.reason) {
       case 'ask': return { ok: false, reason: 'ask', mine: r.mine! };

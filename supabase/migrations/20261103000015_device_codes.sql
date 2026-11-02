@@ -209,7 +209,9 @@ begin
   select * into r from public.accounts where id = c.account_id;
   s := private.account_summary(c.account_id);
   return jsonb_build_object('ok', true, 'account', to_jsonb(r),
-    'moved', jsonb_build_object('crews', jsonb_array_length(s -> 'crews'), 'games', s -> 'games', 'trophies', s -> 'trophies'));
+    'moved', jsonb_build_object('crews', jsonb_array_length(s -> 'crews'), 'games', s -> 'games', 'trophies', s -> 'trophies'),
+    -- the kind of device that made the code ("Your laptop got a notice too"), if it is still signed in
+    'from', (select device_kind from public.account_logins where auth_user = c.made_by and account_id = c.account_id));
 end $$;
 
 -- Notices for this device: sign-ins on other devices of my account since this device joined it, not dismissed here.

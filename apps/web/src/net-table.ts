@@ -13,7 +13,9 @@ export type ScreenView = View & {
   nextIn: number;
   standings?: { id: string; name: string; stack: number; buyins: number; net: number; won: number; biggest: number }[];
 };
-type Callbacks = Pick<ClientOptions, 'onView' | 'onStatus' | 'onError' | 'onReact' | 'onNotice' | 'onAck'>;
+type Callbacks = Pick<ClientOptions, 'onView' | 'onStatus' | 'onError' | 'onReact' | 'onNotice' | 'onAck' | 'onSeatElsewhere' | 'onSeatMoved'>;
+/** Which of the player's devices has the seat (see onSeat). */
+export interface SeatDevice { kind: 'phone' | 'tablet' | 'laptop'; name: string | null }
 
 export class NetTable {
   readonly client: TableClient;
@@ -25,6 +27,7 @@ export class NetTable {
   private errors = new Set<(code: string, message: string) => void>();
   private notices = new Set<(text: string) => void>();
   private reacts = new Set<(from: string, reaction: string) => void>();
+  private seats = new Set<(what: 'elsewhere' | 'moved', device: SeatDevice) => void>();
 
   constructor(o: { me: string; makeClient(cb: Callbacks): TableClient }) {
     this.me = o.me;
@@ -38,6 +41,8 @@ export class NetTable {
       onNotice: (t) => { for (const fn of this.notices) fn(t); },
       onReact: (f, r) => { for (const fn of this.reacts) fn(f, r); },
       onAck: (_id, ok, error) => { if (!ok && error) for (const fn of this.errors) fn('refused', error); },
+      onSeatElsewhere: (d) => { for (const fn of this.seats) fn('elsewhere', d); },
+      onSeatMoved: (d) => { for (const fn of this.seats) fn('moved', d); },
     });
     // the table pushes "Your turn" only while the app is not on screen
     if (typeof document !== 'undefined') {
@@ -70,6 +75,12 @@ export class NetTable {
   onError(fn: (code: string, message: string) => void): () => void { this.errors.add(fn); return () => this.errors.delete(fn); }
   onNotice(fn: (text: string) => void): () => void { this.notices.add(fn); return () => this.notices.delete(fn); }
   onReact(fn: (from: string, reaction: string) => void): () => void { this.reacts.add(fn); return () => this.reacts.delete(fn); }
+  /** One seat per player: 'elsewhere' = this device watches because another of the player's devices has the seat; 'moved' = the seat just moved away. */
+  onSeat(fn: (what: 'elsewhere' | 'moved', device: SeatDevice) => void): () => void { this.seats.add(fn); return () => this.seats.delete(fn); }
+  /** Is this device playing the seat (not watching)? */
+  get seated(): boolean { return this.client.you === this.me; }
+  /** "Move seat here". */
+  moveSeat(): void { this.client.moveSeat(); }
 
   // ---------------- buttons ----------------
   get isHost(): boolean { return this.client.host === this.me; }

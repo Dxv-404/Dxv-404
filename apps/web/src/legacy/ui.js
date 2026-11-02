@@ -154,10 +154,12 @@ export function countTo(el, to, ms = 500) {
 /** The theme's own question box, in place of the browser's confirm(): resolves true for yes.
  *  With `input`, it asks for a line of text instead and resolves the text (or null).
  *  @param {string} question
- *  @param {{ yes?: string, no?: string, danger?: boolean, input?: { placeholder?: string, max?: number, value?: string } | null }} [o]
+ *  With `detail` a smaller line explains the question; with `icon` (an SVG string) the question is a title beside it.
+ *  @param {string} question
+ *  @param {{ yes?: string, no?: string, danger?: boolean, input?: { placeholder?: string, max?: number, value?: string } | null, detail?: string, icon?: string, testid?: string }} [o]
  *  @returns {Promise<any>} */
 export function ask(question, o = {}) {
-  const { yes = 'Yes', no = 'Cancel', danger = false, input = null } = o;
+  const { yes = 'Yes', no = 'Cancel', danger = false, input = null, detail = '', icon = '', testid = '' } = o;
   const auto = window.__tpAsk; // tests answer for the player
   if (auto) return Promise.resolve(auto(question, !!input));
   return new Promise((resolve) => {
@@ -167,8 +169,10 @@ export function ask(question, o = {}) {
     const done = (v) => { wrap.classList.remove('on'); document.removeEventListener('keydown', key, true); setTimeout(() => wrap.remove(), 180); prev?.focus?.(); resolve(v); };
     const ok = () => done(field ? (field.value.trim() || null) : true);
     const key = (e) => { if (e.key === 'Escape') { e.stopPropagation(); done(field ? null : false); } if (e.key === 'Enter' && field) ok(); };
-    const box = h('div', { class: 'ask', role: 'alertdialog', 'aria-modal': 'true', 'aria-label': question },
-      h('p', { class: 'ask-q' }, question), field,
+    const q = h('p', { class: 'ask-q' }, question);
+    const box = h('div', { class: 'ask' + (icon ? ' ask-t' : ''), role: 'alertdialog', 'aria-modal': 'true', 'aria-label': question, ...(testid ? { 'data-testid': testid } : {}) },
+      icon ? h('div', { class: 'ask-head' }, h('span', { class: 'ask-ic', html: icon, 'aria-hidden': 'true' }), q) : q,
+      detail && h('small', { class: 'ask-d' }, detail), field,
       h('div', { class: 'ask-btns' },
         h('button', { class: 'btn ghost', 'data-testid': 'ask-no', onclick: () => done(field ? null : false) }, no),
         h('button', { class: 'btn ' + (danger ? 'danger' : 'primary'), 'data-testid': 'ask-yes', onclick: ok }, yes)));

@@ -12,7 +12,7 @@ export interface AccountSummary { name: string; crews: { id: string; name: strin
 export interface DeviceCode { code: string; expiresAt: number }
 
 export type RedeemResult =
-  | { ok: true; profile: import('./index').Profile; moved: { crews: number; games: number; trophies: number } }
+  | { ok: true; profile: import('./index').Profile; moved: { crews: number; games: number; trophies: number }; from: DeviceKind | null }
   | { ok: false; reason: 'ask'; mine: AccountSummary }
   | { ok: false; reason: 'wrong'; triesLeft: number }
   | { ok: false; reason: 'expired' | 'cancelled' | 'used' | 'self' | 'paused' | 'error'; message: string };

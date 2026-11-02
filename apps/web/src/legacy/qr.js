@@ -24,7 +24,9 @@ export class Scanner {
     this.detector = null;
   }
 
-  async start(onCode) {
+  // accept: which scanned texts are ours (the QR pairing payloads by default; device codes pass their own test)
+  async start(onCode, accept = (t) => t.startsWith('PK1~')) {
+    this.accept = accept;
     this.onCode = onCode;
     window.__tpScanner = this; // lets automated tests feed a code (even while the camera is still starting)
     this.stream = await navigator.mediaDevices.getUserMedia({
@@ -52,7 +54,7 @@ export class Scanner {
   }
 
   _found(text) {
-    if (!text.startsWith('PK1~')) return;
+    if (!(this.accept ?? ((t) => t.startsWith('PK1~')))(text)) return;
     this.running = false;
     this.onCode && this.onCode(text);
   }
