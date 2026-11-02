@@ -57,10 +57,10 @@
 
 /* ---------- at the table ---------- */
 /* under your stack: "Rebuys left 1 of 2" and "1,000 chips each" take turns, as in the design (hint1 / hint2) */
-.tp.live .hhint.rb .s1{animation:hint1 5s infinite}
-.tp.live .hhint.rb .s2{animation:hint2 5s infinite;position:absolute;left:0;top:0;opacity:0}
-.tp.live .hmeta .hhint.rb{position:relative}
-.tp.still .hhint.rb .s2{display:none}
+.tp.live .hhint.rbh .s1{animation:hint1 5s infinite}
+.tp.live .hhint.rbh .s2{animation:hint2 5s infinite;position:absolute;left:0;top:0;opacity:0}
+.tp.live .hmeta .hhint.rbh{position:relative}
+.tp.still .hhint.rbh .s2{display:none}
 
 /* the layer over the table that holds the bust-out sheets, the pour and the toast (own theme tokens) */
 .rb-layer.rb-layer{background:none}
