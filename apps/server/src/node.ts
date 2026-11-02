@@ -19,6 +19,7 @@ const SITE = process.env.SITE_NAME ?? 'HYD';
 // tables live next to the VERSION file on the server (/opt/tp/data), else in ./data
 const DATA = process.env.DATA_DIR ?? (process.env.VERSION_FILE ? join(dirname(process.env.VERSION_FILE), 'data') : join(process.cwd(), 'data'));
 const VERSION = (() => { try { return readFileSync(process.env.VERSION_FILE ?? '', 'utf8').trim(); } catch { return 'dev'; } })();
+const STARTED = new Date().toISOString();
 const HELLO_WITHIN_MS = 15_000;
 const IDLE_EVICT_MS = 30 * 60_000;
 const SAVE_EVERY_MS = 100;
@@ -163,7 +164,7 @@ const server = createServer((req, res) => {
     let connections = 0;
     for (const l of live.values()) connections += l.room.connectionCount;
     res.writeHead(200, { 'content-type': 'application/json', ...cors });
-    res.end(JSON.stringify({ ok: true, protocol: PROTOCOL_VERSION, colo: SITE, country: req.headers['cf-ipcountry'] ?? null, version: VERSION, rooms: live.size, connections, league: recorder ? { waiting: recorder.pending, refused: recorder.refused.length } : null }));
+    res.end(JSON.stringify({ ok: true, protocol: PROTOCOL_VERSION, colo: SITE, country: req.headers['cf-ipcountry'] ?? null, version: VERSION, upSince: STARTED, rooms: live.size, connections, league: recorder ? { waiting: recorder.pending, refused: recorder.refused.length } : null }));
     return;
   }
   if (url.pathname === '/offline/upload' && req.method === 'POST') { offlineUpload(req, res, cors); return; }
