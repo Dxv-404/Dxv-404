@@ -91,7 +91,7 @@ create index on private.device_notices (account_id, at);
 
 -- pushes for new sign-ins (missing from a phone's choices = yes, like the others)
 alter table private.push_outbox drop constraint push_outbox_kind_check;
-alter table private.push_outbox add constraint push_outbox_kind_check check (kind in ('crew', 'trophies', 'devices'));
+alter table private.push_outbox add constraint push_outbox_kind_check check (kind in ('crew', 'trophies', 'crewTable', 'devices'));
 
 create function private.code_life() returns interval language sql immutable as $$ select interval '5 minutes' $$;
 
