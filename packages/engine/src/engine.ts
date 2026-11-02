@@ -11,7 +11,7 @@ import { evalBest, cardStr } from './cards';
 import { combineSeeds, deckCommit, deckFromSeed, isSeed, randomSeed, seedCommit } from './fair';
 import type {
   Action, ActResult, Award, GameConfig, GameEvent, GameState, Hand, HandEval, HandPlayer, HandPlayerView,
-  HandRecord, Input, Legal, Player, PlayerId, PotResult, Standing, View,
+  HandRecord, Input, Legal, Player, PlayerId, PotResult, RebuyView, Standing, View,
 } from './types';
 
 /** Bumped whenever a rule changes how a hand plays out. Stored with every hand so old hands replay correctly. */
@@ -36,14 +36,32 @@ export const anteFor = (bb: number): number => Math.max(1, niceRound(bb / 10));
 export const TABLE_DEFAULTS: GameConfig = {
   startStack: 1000, sb: 5, bb: 10, blindUpEvery: 0,
   turnTime: 20, timeBank: 60, bankRefill: 10, bankRefillEvery: 10, disconnectGrace: 10,
-  rebuys: true, maxRebuys: 0, rebuyBelow: 0, rebuyUntilLevel: 0,
+  rebuys: true, maxRebuys: 0, rebuyBelow: 0, rebuyAmount: 0, rebuyUntilLevel: 0,
   anteFromLevel: 0, straddle: false, dealItTwice: false, dealItTwiceVote: 10,
   sharedShuffle: false, maxPlayers: 15,
 };
 
+/** A custom rebuy is 20 to 500 big blinds. */
+export const REBUY_MIN_BB = 20;
+export const REBUY_MAX_BB = 500;
+/** The allowed custom rebuy range for a big blind. */
+export const rebuyRange = (bb: number): [number, number] => [REBUY_MIN_BB * Math.max(1, bb), REBUY_MAX_BB * Math.max(1, bb)];
+/** A custom rebuy amount brought into the allowed range (0 stays 0: the starting stack). */
+export function clampRebuyAmount(amount: number, bb: number): number {
+  if (!Number.isFinite(amount) || amount <= 0) return 0;
+  const [lo, hi] = rebuyRange(bb);
+  return Math.min(hi, Math.max(lo, Math.round(amount)));
+}
+/** Chips one rebuy gives at a table. */
+export const rebuyChips = (c: Pick<GameConfig, 'rebuyAmount' | 'startStack'>): number => c.rebuyAmount || c.startStack;
+
 export function makeConfig(c: Partial<GameConfig> = {}): GameConfig {
   const cfg = { ...TABLE_DEFAULTS, ...c };
-  if (!cfg.rebuyBelow) cfg.rebuyBelow = cfg.startStack;
+  // a rebuy only at 0 chips, between hands: no top-ups (tables saved before kept their own rule)
+  if (!cfg.rebuyBelow) cfg.rebuyBelow = 1;
+  cfg.rebuyAmount = clampRebuyAmount(cfg.rebuyAmount ?? 0, cfg.bb);
+  cfg.maxRebuys = Math.max(0, Math.floor(cfg.maxRebuys || 0));
+  cfg.rebuyUntilLevel = Math.max(0, Math.floor(cfg.rebuyUntilLevel || 0));
   cfg.maxPlayers = Math.min(15, Math.max(2, Math.floor(cfg.maxPlayers)));
   return cfg;
 }
@@ -382,16 +400,30 @@ export class Engine {
     if (!c.rebuys) return 'Rebuys are off at this table';
     const inHand = s.hand?.ps[id];
     if (s.phase === 'hand' && inHand && !inHand.folded) return 'Rebuy after this hand';
-    if (p.stack >= c.rebuyBelow || p.stack >= c.startStack) return 'Your stack is too big to rebuy';
+    if (p.stack > 0 && c.rebuyBelow <= 1) return 'You can rebuy once you are out of chips';
+    if (p.stack >= c.rebuyBelow || p.stack >= rebuyChips(c)) return 'Your stack is too big to rebuy';
     if (c.maxRebuys > 0 && p.rebuysUsed >= c.maxRebuys) return 'No rebuys left';
     if (c.rebuyUntilLevel > 0 && s.level.n > c.rebuyUntilLevel) return 'Rebuys have closed';
     return null;
   }
 
+  /** The table's rebuy rules, and for `pid` how many are left and whether they may rebuy now. */
+  rebuyView(pid: PlayerId | null): RebuyView {
+    const c = this.s.cfg, p = pid ? this.player(pid) : undefined;
+    const used = p?.rebuysUsed ?? 0;
+    const why = p ? this.whyNoRebuy(p.id) : 'You are watching';
+    return {
+      on: !!c.rebuys, amount: rebuyChips(c), max: c.maxRebuys || 0, untilLevel: c.rebuyUntilLevel || 0,
+      closed: (c.rebuyUntilLevel || 0) > 0 && this.s.level.n > c.rebuyUntilLevel,
+      atZero: (c.rebuyBelow || 0) <= 1, used, left: c.maxRebuys > 0 ? Math.max(0, c.maxRebuys - used) : null,
+      can: !why, why,
+    };
+  }
+
   rebuy(id: PlayerId): GameEvent[] {
     if (this.whyNoRebuy(id)) return [];
     const p = this.P(id);
-    const add = this.s.cfg.startStack - p.stack;
+    const add = rebuyChips(this.s.cfg) - p.stack;
     p.stack += add;
     p.buyins += add;
     p.rebuysUsed += 1;
@@ -697,8 +729,15 @@ export class Engine {
   undo(): GameEvent[] | null {
     if (!this.canUndo()) return null;
     const now = this.s.now;
+    const cur = this.s;
     this.s = this.undoStack.pop()!;
     this.s.now = now;
+    // a rebuy by someone out of this hand is not an action in it: undoing an action keeps it
+    for (const p of this.s.players) {
+      const q = cur.players.find((x) => x.id === p.id);
+      if (!q || q.rebuysUsed <= p.rebuysUsed || this.s.hand?.ps[p.id]) continue;
+      Object.assign(p, { stack: q.stack, buyins: q.buyins, rebuysUsed: q.rebuysUsed, busted: q.busted, sittingOut: q.sittingOut, away: q.away, sitOutHands: q.sitOutHands });
+    }
     this.H.turnStartedAt = now;
     this.logLine('Dealer undoes the last action');
     return [{ t: 'undo' }, { t: 'turn', pid: this.H.toAct, deadline: this.deadline() }];
@@ -1089,7 +1128,9 @@ export class Engine {
     const c = s.cfg;
     const v: View = {
       gameId: s.gameId, phase: s.phase, handNo: s.handNo, level: s.level,
-      cfg: { startStack: c.startStack, rebuys: c.rebuys, turnTime: c.turnTime, blindUpEvery: c.blindUpEvery, timeBank: c.timeBank, dealItTwice: c.dealItTwice, straddle: c.straddle, maxPlayers: c.maxPlayers },
+      cfg: { startStack: c.startStack, rebuys: c.rebuys, turnTime: c.turnTime, blindUpEvery: c.blindUpEvery, timeBank: c.timeBank, dealItTwice: c.dealItTwice, straddle: c.straddle, maxPlayers: c.maxPlayers, maxRebuys: c.maxRebuys || 0, rebuyUntilLevel: c.rebuyUntilLevel || 0 },
+      rebuy: this.rebuyView(pid),
+      stats: pid && this.player(pid) ? { won: s.stats[pid]?.won ?? 0, biggest: s.stats[pid]?.biggest ?? 0 } : null,
       button: s.button, paused: s.paused,
       players: s.players.map((p) => ({
         id: p.id, name: p.name, seat: p.seat, chair: p.chair, stack: p.stack, sittingOut: p.sittingOut, away: p.away,

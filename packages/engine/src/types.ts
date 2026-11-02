@@ -24,8 +24,11 @@ export interface GameConfig {
   rebuys: boolean;
   /** Rebuys per player; 0 = no limit. */
   maxRebuys: number;
-  /** A rebuy is allowed only below this stack (default: the starting stack, i.e. top-ups allowed). */
+  /** A rebuy is allowed only below this stack. New tables: 1, i.e. only at 0 chips (no top-ups). Tables saved
+   *  before v3 keep the starting stack here (top-ups up to the starting stack). */
   rebuyBelow: number;
+  /** Chips a rebuy brings the stack up to; 0 = the starting stack. A custom amount is 20 to 500 big blinds. */
+  rebuyAmount: number;
   /** No rebuys after this blind level; 0 = always allowed. */
   rebuyUntilLevel: number;
   /** Antes start at this blind level (1 = from the start); 0 = never. */
@@ -231,13 +234,38 @@ export interface HandView {
   vote: { pids: PlayerId[]; deadline: number; voted: PlayerId[] } | null;
 }
 
+export interface RebuyView {
+  /** Rebuys allowed at this table at all. */
+  on: boolean;
+  /** Chips one rebuy gives (the stack becomes this). */
+  amount: number;
+  /** Rebuys per player; 0 = no limit. */
+  max: number;
+  /** Rebuys close after this blind level; 0 = never. */
+  untilLevel: number;
+  /** Closed by the blind level (the table is past untilLevel). */
+  closed: boolean;
+  /** Only at 0 chips (true for every new table); false on tables saved before v3, which allow top-ups. */
+  atZero: boolean;
+  /** The viewer's rebuys so far, and how many are left (null = no limit). */
+  used: number;
+  left: number | null;
+  /** The viewer may rebuy right now; otherwise why not (null when they may). */
+  can: boolean;
+  why: string | null;
+}
+
 /** What one seat (or a spectator) is allowed to see. Never contains another player's hidden cards or the deck. */
 export interface View {
   gameId: string;
   phase: Phase;
   handNo: number;
   level: Level;
-  cfg: Pick<GameConfig, 'startStack' | 'rebuys' | 'turnTime' | 'blindUpEvery' | 'timeBank' | 'dealItTwice' | 'straddle' | 'maxPlayers'>;
+  cfg: Pick<GameConfig, 'startStack' | 'rebuys' | 'turnTime' | 'blindUpEvery' | 'timeBank' | 'dealItTwice' | 'straddle' | 'maxPlayers' | 'maxRebuys' | 'rebuyUntilLevel'>;
+  /** The table's rebuy rules and where the viewer stands with them. */
+  rebuy: RebuyView;
+  /** The viewer's night so far (pots won, biggest pot); null for a spectator. */
+  stats: { won: number; biggest: number } | null;
   button: number;
   paused: boolean;
   players: PlayerView[];

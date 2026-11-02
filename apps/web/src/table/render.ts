@@ -6,6 +6,7 @@ import type { ScreenView } from '../net-table';
 import { describePartial, parseCard } from '@tp/engine';
 import { FEEL } from './motion';
 import { TIER_LABEL, bestOnBoard, chancesLine, handShort, handWords, nextLabel, runoutTitle, summarize, type ResStage, type Summary } from './results';
+import { heroRebuyHint } from './rebuy-hint';
 
 interface ThemeArt { fx: string; arena: string; dealer: string; rail: string; felt: string; pot: string }
 export interface Theme { name: string; css: string; sprite: string; phone: ThemeArt; lap: ThemeArt; avatars: string[] }
@@ -211,7 +212,12 @@ export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: num
   const partial = (cards: string[]) => { try { return cap(describePartial(cards.map(parseCard)).toLowerCase()); } catch { return ''; } };
   const hint = myEv && step === 'runout' && myCards ? partial([...myCards, ...(rs?.board ?? [])]) : myEv ? handWords(myEv) : R && myHp?.folded ? 'You folded this hand' : myCards ? (o.peek ? (handName(v) ?? 'Your cards') : (mode === 'lap' ? 'Hold cards or Space to look' : 'Hold your cards to look')) : '';
   const timer = myTurn && v.turnTotal ? `<div class="tbank"><span class="rg" style="background:conic-gradient(var(--acc) ${Math.round((100 * v.turnLeft) / v.turnTotal)}%,var(--line) 0)"><span>${Math.ceil(v.turnLeft / 1000)}</span></span>sec</div>` : '';
-  const heroMeta = `<div class="hmeta"><span class="hname">${esc(mine?.name ?? 'Watching')}${status ? ` · ${status}` : ''}</span><span class="hstack">${mine ? fmt(stackOf(mine)) : ''}</span><span class="hhint"><span class="s1">${esc(hint)}</span></span></div>`;
+  // rebuys left and their size, always under your stack (v3rebuys.py: the hero hint)
+  const rb = mine ? heroRebuyHint(v) : null;
+  const hintHtml = rb && !(o.peek && myCards)
+    ? `<span class="hhint rb" data-testid="rb-hint"><span class="s1">${esc(myCards ? hint : rb[0])}</span><span class="s2">${esc(myCards ? rb[0] : rb[1])}</span></span>`
+    : `<span class="hhint"><span class="s1">${esc(hint)}</span></span>`;
+  const heroMeta = `<div class="hmeta"><span class="hname">${esc(mine?.name ?? 'Watching')}${status ? ` · ${status}` : ''}</span><span class="hstack">${mine ? fmt(stackOf(mine)) : ''}</span>${hintHtml}</div>`;
   const hero = `<section class="hero" aria-label="Your seat">${hc}${heroMeta}${timer}</section>`;
   const actions = actionsHtml(v, mode, rs);
 
@@ -302,7 +308,9 @@ function actionsHtml(v: ScreenView, mode: Mode, rs: ResStage | null): string {
   if (wonIt && v.me && hand?.ps[v.me] && !hand.ps[v.me]!.revealed && hand.ps[v.me]!.cards) out.push(`<button class="act ghost" data-act="show"${rs?.next ? ' style="flex:0 0 auto;padding:0 18px"' : ''}>Show my cards</button>`);
   // (no rebuy before the winner is shown: it would give the result away)
   const early = rs?.step === 'runout' || rs?.step === 'scene';
-  if (!early && me?.busted && v.cfg.rebuys && v.phase !== 'hand') out.push(`<button class="act raise" data-act="rebuy">Rebuy<small>${fmt(v.cfg.startStack)}</small></button>`);
+  const rbv = v.rebuy;
+  if (!early && me && me.stack === 0 && rbv?.can) out.push(`<button class="act raise" data-act="rebuy">Rebuy<small>${fmt(rbv.amount)}</small></button>`);
+  else if (!early && me && me.stack === 0 && me.busted && v.phase !== 'ended') out.push('<button class="act ghost" data-act="bust" data-testid="out-of-chips">Out of chips</button>');
   if (me?.sittingOut && !me.busted) out.push('<button class="act call" data-act="sitin">Sit back in</button>');
   if (v.isHost && (v.phase === 'lobby' || (v.phase === 'between' && (v.paused || !v.nextIn)))) out.push(`<button class="act call" data-act="deal">${v.paused ? 'Resume dealing' : v.handNo ? 'Deal next hand' : 'Deal the first hand'}</button>`);
   // after the hand: the bar that drains to the next deal (tap or Space skips to the next step)

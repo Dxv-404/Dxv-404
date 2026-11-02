@@ -349,16 +349,16 @@ describe('rebuys', () => {
   it('closes after the set blind level, and is off when rebuys are off', () => {
     const e = table(2, { startStack: 100, rebuyUntilLevel: 1, blindUpEvery: 1 });
     start(e); foldOut(e); start(e); foldOut(e);
-    e.player('p0')!.stack = 1;
+    e.player('p0')!.stack = 0;
     expect(e.apply({ t: 'rebuy', pid: 'p0', now: T0 }).error).toBe('Rebuys have closed');
     const off = table(2, { rebuys: false });
-    off.player('p0')!.stack = 1;
+    off.player('p0')!.stack = 0;
     expect(off.apply({ t: 'rebuy', pid: 'p0', now: T0 }).error).toBe('Rebuys are off at this table');
   });
   it('not during your own live hand, and not after the game ends', () => {
     const e = table(2, { startStack: 100 });
     start(e);
-    e.player('p0')!.stack = 1;
+    e.player('p0')!.stack = 0;
     expect(e.apply({ t: 'rebuy', pid: 'p0', now: T0 }).error).toBe('Rebuy after this hand');
     e.apply({ t: 'host', cmd: 'end', now: T0 });
     expect(e.apply({ t: 'rebuy', pid: 'p0', now: T0 }).error).toBe('The game has ended');
@@ -661,7 +661,9 @@ describe('saved tables from the first app', () => {
 describe('defaults', () => {
   it('match the decisions: 20 s per action, 60 s bank, 15 players, straddle and Deal it twice off', () => {
     expect(TABLE_DEFAULTS).toMatchObject({ turnTime: 20, timeBank: 60, maxPlayers: 15, straddle: false, dealItTwice: false });
-    expect(makeConfig({ startStack: 500 }).rebuyBelow).toBe(500);
+    // new tables: a rebuy only at 0 chips (no top-ups), for the starting stack
+    expect(makeConfig({ startStack: 500 }).rebuyBelow).toBe(1);
+    expect(makeConfig({ startStack: 500 }).rebuyAmount).toBe(0);
   });
 });
 

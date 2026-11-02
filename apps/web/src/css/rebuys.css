@@ -1,0 +1,114 @@
+/* Rebuys (design: tools/design/gen/v3rebuys.py). The host's Rebuys block and the three-column laptop dialog of
+   "Open a table"; at the table: the hero hint, the bust-out sheets, the chips pouring in and the toast.
+   Only theme tokens; motion follows the theme's feel (--rb-k speed, --rb-ease) and the motion setting. */
+
+/* ---------- the Rebuys block (outlined, as the design's .rbp) ---------- */
+.tp.app .block.rbp{box-shadow:inset 0 0 0 1.5px var(--acc),var(--panelsh,inset 0 0 0 1px var(--line))}
+.tp.app .block.rbp.off{box-shadow:var(--panelsh,inset 0 0 0 1px var(--line))}
+.tp.app .rb-head .rb-t{font:var(--dspw,700) 17px var(--dsp);color:var(--tx)}
+.tp.app .rb-body{display:grid;gap:12px}
+.tp.app .rb-body[hidden],.tp.app .rb-custom[hidden],.tp.app .rbp .field[hidden]{display:none}
+.tp.app .rb-amt{display:grid;gap:8px}
+.tp.app .rb-custom{display:grid;gap:5px}
+.tp.app .rb-inp{position:relative;display:block}
+.tp.app .rb-inp input{font:var(--numw,700) 18px var(--num);padding-right:64px}
+.tp.app .rb-inp span{position:absolute;right:14px;top:50%;transform:translateY(-50%);font:600 12px var(--ui);color:var(--mut);pointer-events:none}
+.tp.app .rb-range{font-size:11.5px;color:var(--mut)}
+.tp.app .rb-range.bad{color:var(--tx);font-weight:700}
+.tp.app .rb-range.bad::before{content:"⚠ ";color:var(--acc)}
+.tp.app .rb-inp input[aria-invalid=true]{box-shadow:inset 0 0 0 1.5px var(--b-fold,var(--acc))}
+.tp.app .rb-sum{display:flex;gap:9px;align-items:flex-start;padding:10px 11px;border-radius:var(--r-btn,10px);background:color-mix(in srgb,var(--acc) 14%,var(--bg));color:var(--tx);font:500 12.5px/1.45 var(--ui)}
+.tp.app .rb-sum b{font-weight:800}
+.tp.app .rb-sum .ico{display:inline-grid;width:18px;height:18px;flex:none;color:var(--acc);margin-top:1px}.tp.app .rb-sum .ico svg{width:100%;height:100%}
+.tp.app .rbp .seg button{white-space:nowrap}
+/* every choice on Open a table is a 44 px target */
+.tp.app .setup3 .seg button{min-height:44px}
+.tp.app .setup3 .s3-head .icon-btn{width:44px;height:44px}
+
+/* ---------- Open a table: phone header and footer ---------- */
+.tp.app .s3-head .s3-title{flex:1;min-width:0;display:grid;gap:1px}
+.tp.app .s3-head .s3-title h1{font-size:23px}
+.tp.app .s3-head .s3-sub{font-size:12px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tp.app .s3-chip,.tp.app .s3-x,.tp.app .s3-hint{display:none}
+
+/* ---------- laptops: one dialog, three columns ---------- */
+@media (min-width:1100px){
+  .tp.app .screen.setup3:not(.tp-screen):not(.table-screen){
+    max-width:1180px;width:calc(100vw - 80px);min-height:0;margin:max(24px,calc(50vh - 380px)) auto 24px;padding:30px;
+    display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr) minmax(0,1fr);gap:18px 16px;align-items:start;
+    background:var(--bg);border-radius:var(--r-panel,20px);box-shadow:var(--panelsh,inset 0 0 0 1px var(--line)),0 30px 80px rgba(0,0,0,.6);position:relative}
+  .tp.app .screen.setup3::before{content:"";position:fixed;inset:0;z-index:-1;background:rgba(0,0,0,.5);backdrop-filter:blur(2px);pointer-events:none}
+  .tp.app .screen.setup3>*{grid-column:1/-1}
+  .tp.app .screen.setup3>.s3-c1{grid-column:1}
+  .tp.app .screen.setup3>.s3-c2{grid-column:2}
+  .tp.app .screen.setup3>.s3-c3{grid-column:3}
+  .tp.app .setup3 .s3-head{gap:12px}
+  .tp.app .setup3 .s3-head .s3-title{flex:none}
+  .tp.app .setup3 .s3-head h1{font-size:28px}
+  .tp.app .setup3 .s3-back,.tp.app .setup3 .s3-sub{display:none}
+  .tp.app .setup3 .s3-chip{display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:99px;font:800 10.5px var(--ui);letter-spacing:.05em;background:var(--chipbg);box-shadow:inset 0 0 0 1px var(--line);color:var(--tx);white-space:nowrap}
+  .tp.app .setup3 .s3-x{display:grid;margin-left:auto}
+  .tp.app .setup3 .block h2{font-size:18px}
+  .tp.app .setup3 .s3-foot{position:static;display:flex;align-items:center;gap:16px;padding:0;background:none;margin:0}
+  .tp.app .setup3 .s3-hint{display:block;flex:1;color:var(--mut);font-size:13px}
+  .tp.app .setup3 .s3-foot>.btn{width:260px;flex:none}
+  .tp.app .setup3 ol.steps{grid-column:1/-1}
+}
+
+/* ---------- at the table ---------- */
+/* under your stack: "Rebuys left 1 of 2" and "1,000 chips each" take turns, as in the design (hint1 / hint2) */
+.tp.live .hhint.rb .s1{animation:hint1 5s infinite}
+.tp.live .hhint.rb .s2{animation:hint2 5s infinite;position:absolute;left:0;top:0;opacity:0}
+.tp.live .hmeta .hhint.rb{position:relative}
+.tp.still .hhint.rb .s2{display:none}
+
+/* the layer over the table that holds the bust-out sheets, the pour and the toast (own theme tokens) */
+.rb-layer.rb-layer{background:none}
+.rb-layer{position:absolute;inset:0;z-index:60;pointer-events:none;font-family:var(--ui);color:var(--tx);--rb-k:1;--rb-ease:cubic-bezier(.2,.7,.2,1)}
+.rb-layer>*{pointer-events:auto}
+.rb-layer .rb-dim{position:absolute;inset:0;background:rgba(0,0,0,.5);backdrop-filter:blur(2px);animation:rbFade calc(.3s * var(--rb-k)) both}
+.rb-layer .rb-sheet{position:absolute;left:50%;bottom:0;width:min(520px,100%);transform:translateX(-50%);box-sizing:border-box;padding:10px 18px calc(22px + env(safe-area-inset-bottom));border-radius:var(--r-panel,20px) var(--r-panel,20px) 0 0;background:var(--bg);box-shadow:var(--panelsh,inset 0 0 0 1px var(--line)),0 -20px 50px rgba(0,0,0,.45);display:grid;gap:12px;justify-items:center;text-align:center;max-height:100%;overflow:auto;animation:rbRise calc(.45s * var(--rb-k)) var(--rb-ease) both}
+.rb-layer .grip{width:40px;height:4px;border-radius:2px;background:var(--line)}
+.rb-layer .bico{width:74px;height:74px;border-radius:50%;display:grid;place-items:center;align-content:center;font:var(--numw,700) 34px/1 var(--num);background:var(--chipbg);box-shadow:inset 0 0 0 2px var(--line);animation:rbPop calc(.5s * var(--rb-k)) var(--rb-ease) both}
+.rb-layer .bico small{font-size:13px;line-height:1}
+.rb-layer .bico svg{width:34px;height:34px}
+.rb-layer .bt{font:var(--dspw,700) 24px/1.15 var(--dsp);margin:0}
+.rb-layer .rb-sheet p{margin:0;font-size:13.5px;line-height:1.5;color:var(--mut)}
+.rb-layer .rb-sheet p b{color:var(--acc)}
+.rb-layer .two{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%}
+.rb-layer .two.one{grid-template-columns:1fr}
+.rb-layer .bb{width:100%;box-sizing:border-box;min-height:52px;border-radius:var(--r-btn,12px);display:flex;align-items:center;justify-content:center;gap:2px;font:800 15.5px var(--ui);padding:6px 16px;flex-direction:column;line-height:1.15;border:0;cursor:pointer;color:var(--tx)}
+.rb-layer .bb small{font:600 11.5px var(--ui);opacity:.85}
+.rb-layer .bb.p{background:var(--b-call);color:var(--b-calltx);box-shadow:var(--b-callsh,none)}
+.rb-layer .bb.r{background:var(--b-raise);color:var(--b-raisetx);box-shadow:var(--b-raisesh,none)}
+.rb-layer .bb.g{background:linear-gradient(var(--chipbg),var(--chipbg)),var(--bg);box-shadow:inset 0 0 0 1.5px var(--line)}
+.rb-layer .bb:disabled{opacity:.55;cursor:default}
+.rb-layer .bb:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.rb-layer .rb-night{width:100%;box-sizing:border-box;padding:6px 15px;border-radius:var(--r-panel,16px);background:linear-gradient(var(--panel,var(--chipbg)),var(--panel,var(--chipbg))),var(--bg);box-shadow:var(--panelsh,inset 0 0 0 1px var(--line));display:grid;font-size:12.5px}
+.rb-layer .rr{display:flex;justify-content:space-between;gap:12px;padding:8px 0;box-shadow:inset 0 -1px 0 var(--line)}
+.rb-layer .rr:last-child{box-shadow:none}
+.rb-layer .rr span{color:var(--mut)}.rb-layer .rr b{font-weight:700;text-align:right}
+.rb-layer .rb-tmr{width:100%;display:grid;gap:5px;font-size:11.5px;color:var(--mut)}
+.rb-layer .rb-fill{display:block;width:100%;height:4px;border-radius:2px;background:var(--acc);transform-origin:left center}
+.rb-layer .rb-tmr.done .rb-fill{opacity:.35}
+
+/* chips pour into my stack; the stack counts up */
+.rb-pour{position:absolute;inset:0;z-index:58;pointer-events:none;overflow:hidden}
+.rb-pour .chip{position:absolute;width:26px;height:26px;filter:drop-shadow(0 2px 3px rgba(0,0,0,.4))}
+.tp.live .hstack.rb-count{color:var(--acc)}
+
+/* the toast after a rebuy */
+.rb-toast{position:absolute;left:50%;top:calc(64px + env(safe-area-inset-top));width:min(460px,calc(100% - 36px));transform:translateX(-50%);box-sizing:border-box;z-index:62;display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:var(--r-btn,14px);background:var(--tx);color:var(--bg);font:700 13.5px/1.35 var(--ui);box-shadow:0 14px 30px rgba(0,0,0,.4);pointer-events:none}
+.rb-toast .ico{display:inline-grid;width:18px;height:18px;flex:none;color:var(--acc)}.rb-toast .ico svg{width:100%;height:100%}
+
+@keyframes rbFade{from{opacity:0}}
+@keyframes rbRise{from{transform:translate(-50%,40%);opacity:0}}
+@keyframes rbPop{from{transform:scale(.6);opacity:0}}
+.rb-layer.calm .bico{animation:none}
+.rb-layer.still *,.rb-layer.still *::before,.rb-layer.still *::after{animation:none!important;transition:none!important}
+
+/* the table menu: Table rules, and rebuys used on the host's player rows */
+.tp.app .rules-list{display:grid}
+.tp.app .rules-list .rr{display:flex;justify-content:space-between;gap:12px;padding:10px 0;box-shadow:inset 0 -1px 0 var(--line);font-size:13.5px}
+.tp.app .rules-list .rr span{color:var(--mut)}
+.tp.app .rules-list .rr b{font-weight:700;text-align:right}

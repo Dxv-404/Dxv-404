@@ -28,7 +28,12 @@ export const TableSettings = z.object({
   turnTime: z.number().int().min(0).max(300),
   timeBank: z.number().int().min(0).max(600),
   rebuys: z.boolean(),
+  /** Rebuys per player; 0 = no limit. */
   maxRebuys: z.number().int().min(0).max(100),
+  /** Chips per rebuy; 0 = the starting stack. The table keeps a custom amount between 20 and 500 big blinds. */
+  rebuyAmount: z.number().int().min(0).max(100_000_000),
+  /** Rebuys close after this blind level; 0 = never (only meaningful when blinds go up). */
+  rebuyUntilLevel: z.number().int().min(0).max(100),
   straddle: z.boolean(),
   dealItTwice: z.boolean(),
   maxPlayers: z.number().int().min(2).max(15),

@@ -12,6 +12,7 @@ import { onlineStart, routeOnline, playOnline, hostOnline } from '../online-scre
 import { initShell, loadingScreen, menuScreen, pickerScreen, leaveMenu } from '../ui/shell.ts';
 import { setTheme, currentTheme, TableScreen } from '../table/screen.ts';
 import { settingsScreen, installErrorReporting, noteScreen } from '../more-screens.ts';
+import { rebuyBlock, withRebuyDefaults, setupHead, setupFoot, blindsSeg, rulesContent, rebuysUsedText } from '../rebuys-setup.ts';
 
 // every screen sits inside the player's theme (its background, tokens and art); screens go in #view
 const appRoot = $('#app');
@@ -130,12 +131,13 @@ function setup(prefill) {
     };
     const addBtn = h('button', { class: 'btn ghost small', onclick: () => { names.push(''); renderNames(); list.lastChild.querySelector('input').focus(); } }, 'Add player');
 
-    const cfg = { startStack: last.startStack, sb: last.sb, bb: last.bb, blindUpEvery: last.blindUpEvery, turnTime: last.turnTime, rebuys: last.rebuys };
+    const cfg = withRebuyDefaults({ startStack: last.startStack, sb: last.sb, bb: last.bb, blindUpEvery: last.blindUpEvery, turnTime: last.turnTime, rebuys: last.rebuys, maxRebuys: last.maxRebuys, rebuyAmount: last.rebuyAmount, rebuyUntilLevel: last.rebuyUntilLevel });
+    const rb = rebuyBlock(cfg);
     const num = (key, label, opts = {}) => h('label', { class: 'field' }, h('span', {}, label),
-      h('input', { type: 'number', inputmode: 'numeric', min: 1, value: cfg[key], oninput: (e) => { cfg[key] = Math.max(1, Math.floor(Number(e.target.value) || 0)); opts.on && opts.on(); } }));
+      h('input', { type: 'number', inputmode: 'numeric', min: 1, value: cfg[key], 'data-testid': `cfg-${key}`, oninput: (e) => { cfg[key] = Math.max(1, Math.floor(Number(e.target.value) || 0)); opts.on && opts.on(); rb.refresh(); } }));
     const seg = (key, label, options) => {
       const wrap = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': label });
-      const draw = () => wrap.replaceChildren(...options.map(([v, t]) => h('button', { role: 'radio', 'aria-checked': cfg[key] === v ? 'true' : 'false', class: cfg[key] === v ? 'on' : '', onclick: () => { cfg[key] = v; draw(); } }, t)));
+      const draw = () => wrap.replaceChildren(...options.map(([v, t]) => h('button', { type: 'button', role: 'radio', 'aria-checked': cfg[key] === v ? 'true' : 'false', class: cfg[key] === v ? 'on' : '', onclick: () => { cfg[key] = v; draw(); rb.refresh(); } }, t)));
       draw();
       return h('div', { class: 'field' }, h('span', {}, label), wrap);
     };
@@ -144,8 +146,6 @@ function setup(prefill) {
     const stackInput = stackField.querySelector('input');
     const sbField = num('sb', 'Small blind', { on: () => { cfg.bb = cfg.sb * 2; bbField.querySelector('input').value = cfg.bb; } });
     const bbField = num('bb', 'Big blind');
-    const rebuy = h('label', { class: 'switch-row' }, h('span', {}, 'Allow rebuys', h('small', {}, 'Busted players can buy back in for the starting chips')),
-      h('input', { type: 'checkbox', role: 'switch', checked: cfg.rebuys ? true : null, onchange: (e) => (cfg.rebuys = e.target.checked) }));
 
     const go = h('button', { class: 'btn primary', onclick: () => {
       const clean = names.map((n, i) => n.trim() || (i === 0 ? 'Host' : `Player ${i + 1}`));
@@ -154,6 +154,7 @@ function setup(prefill) {
       if (unique.length < 2) return toast('Add at least two players.');
       if (cfg.bb < cfg.sb) return toast('The big blind must be at least the small blind.');
       if (cfg.startStack < cfg.bb * 2) return toast('Starting chips should be at least two big blinds.');
+      rb.finish();
       localStorage.setItem('tp-last-setup', JSON.stringify({ names: clean, ...cfg }));
       if (host) host.destroy();
       Host.clearSave();
@@ -162,13 +163,15 @@ function setup(prefill) {
       lobby();
     } }, 'Open the table');
 
+    el.className = 'screen setup setup3';
     el.append(
-      h('header', { class: 'page-head' }, h('button', { class: 'icon-btn', 'aria-label': 'Back', onclick: home }, '‹'), h('h1', {}, 'New table')),
-      h('section', { class: 'block' }, h('h2', {}, 'Who’s playing'), h('p', { class: 'hint' }, 'Seats go clockwise in this order. Up to nine players.'), list, addBtn),
-      h('section', { class: 'block' }, h('h2', {}, 'Chips and blinds'), stackField, stackChips, h('div', { class: 'two' }, sbField, bbField),
-        seg('blindUpEvery', 'Blinds go up', [[0, 'Never'], [10, 'Every 10 hands'], [20, 'Every 20']])),
-      h('section', { class: 'block' }, h('h2', {}, 'Table rules'), seg('turnTime', 'Time to act', [[0, 'No limit'], [20, '20 s'], [30, '30 s'], [45, '45 s']]), rebuy),
-      h('div', { class: 'sticky-go' }, go));
+      setupHead('New table', 'Pair by QR', 'Pair phones by QR · no internet', home),
+      h('section', { class: 'block s3-c1' }, h('h2', {}, 'Chips and blinds'), stackField, stackChips, h('div', { class: 'two' }, sbField, bbField),
+        blindsSeg(cfg, () => rb.refresh())),
+      rb.el,
+      h('section', { class: 'block s3-c3' }, h('h2', {}, 'Table'), h('h3', {}, 'Who’s playing'), h('p', { class: 'hint' }, 'Seats go clockwise in this order. Up to nine players.'), list, addBtn,
+        seg('turnTime', 'Time to act', [[0, 'No limit'], [20, '20 s'], [30, '30 s'], [45, '45 s']])),
+      setupFoot('Each phone scans this one to join', go));
     renderNames();
   });
 }
@@ -320,7 +323,8 @@ function playTable() {
       dealNow: () => { if (isHost) { host.e.s.paused = false; host.dealNext(); } },
       vote: () => {},
     };
-    table = new TableScreen(el, like, { code: 'QR', menu: () => (isHost ? hostMenu() : guestMenu()), info: () => showHands(), offline: true });
+    table = new TableScreen(el, like, { code: 'QR', menu: () => (isHost ? hostMenu() : guestMenu()), info: () => showHands(), offline: true,
+      leave: isHost ? null : async () => { if (await ask('Leave the table? Your chips leave with you.', { yes: 'Leave' })) { guest.leave(); guest = null; home(); } } });
     let done = false;
     const unsub = src.subscribe((events, view) => {
       if (done) return;
@@ -377,10 +381,10 @@ function hostMenu() {
       if (!me && p.connected) btns.push(h('button', { class: 'btn small ghost', onclick: () => { s.close(); pair(p.id); } }, 'Re-pair'));
       if (!me && !p.connected && S.hand && S.hand.toAct === p.id) btns.push(h('button', { class: 'btn small ghost', onclick: () => { host.foldFor(p.id); rerender(); } }, 'Check/fold for them'));
       btns.push(h('button', { class: 'btn small ghost', onclick: () => { host.sitOut(p.id, !p.sittingOut); rerender(); } }, p.sittingOut ? 'Sit in' : 'Sit out'));
-      if (S.cfg.rebuys && p.stack < S.cfg.startStack && !inHand) btns.push(h('button', { class: 'btn small ghost', onclick: () => { host.rebuyFor(p.id); rerender(); } }, 'Rebuy'));
+      if (host.e.viewFor(p.id).rebuy.can && !inHand) btns.push(h('button', { class: 'btn small ghost', onclick: () => { host.rebuyFor(p.id); rerender(); } }, 'Rebuy'));
       if (!me) btns.push(h('button', { class: 'btn small danger', onclick: async () => { if (await ask(`Remove ${p.name} from the table? Their chips leave with them.`, { yes: 'Remove', danger: true })) { host.removePlayer(p.id); rerender(); } } }, 'Remove'));
       return h('div', { class: 'p-row' },
-        h('div', { class: 'who' }, h('strong', {}, p.name), h('small', {}, `${fmt(p.stack)} chips${me ? ', this phone' : p.connected ? ', connected' : ', away'}${p.sittingOut ? ', sitting out' : ''}`)),
+        h('div', { class: 'who' }, h('strong', {}, p.name), h('small', { 'data-testid': 'p-row-sub' }, `${fmt(p.stack)} chips${rebuysUsedText(p.rebuysUsed)}${me ? ', this phone' : p.connected ? ', connected' : ', away'}${p.sittingOut ? ', sitting out' : ''}`)),
         h('div', { class: 'p-btns' }, btns));
     });
     const addInput = h('input', { type: 'text', placeholder: 'Name', maxlength: 14, 'aria-label': 'New player name' });
@@ -389,7 +393,8 @@ function hostMenu() {
       h('section', { class: 'block' },
         h('div', { class: 'menu-actions' },
           h('button', { class: 'btn ghost', disabled: v2.canUndo ? null : true, onclick: () => { host.undo(); s.close(); } }, 'Undo last action'),
-          h('button', { class: 'btn ghost', onclick: () => { host.setPaused(!S.paused); rerender(); } }, S.paused ? 'Resume dealing' : 'Pause after this hand'))),
+          h('button', { class: 'btn ghost', onclick: () => { host.setPaused(!S.paused); rerender(); } }, S.paused ? 'Resume dealing' : 'Pause after this hand'),
+          h('button', { class: 'btn ghost', 'data-testid': 'open-rules', onclick: () => { s.close(); const r = openSheet(rulesContent(host.currentView(), () => r.close()), { label: 'Table rules' }); } }, 'Table rules'))),
       h('section', { class: 'block' }, h('h3', {}, 'Players'), rows,
         h('div', { class: 'add-row' }, addInput, h('button', { class: 'btn small primary', onclick: () => { const n = addInput.value.trim(); if (!n) return; if (S.players.length >= 9) return toast('The table is full.'); const p = host.addPlayer(n); s.close(); pair(p.id); } }, 'Add and pair'))),
       logBlock(v2),
@@ -408,7 +413,8 @@ function guestMenu() {
     h('h2', {}, 'Table'),
     h('section', { class: 'block' }, h('div', { class: 'menu-actions' },
       me && h('button', { class: 'btn ghost', onclick: () => { guest.sitOut(!me.sittingOut); s.close(); } }, me.sittingOut ? 'Sit back in' : 'Sit out from next hand'),
-      me && v.cfg.rebuys && me.stack < v.cfg.startStack && h('button', { class: 'btn ghost', onclick: () => { guest.rebuy(); s.close(); } }, `Top up to ${fmt(v.cfg.startStack)}`))),
+      h('button', { class: 'btn ghost', 'data-testid': 'open-rules', onclick: () => { s.close(); const r = openSheet(rulesContent(guest.view, () => r.close()), { label: 'Table rules' }); } }, 'Table rules'),
+      me && v.rebuy && v.rebuy.can && h('button', { class: 'btn ghost', onclick: () => { guest.rebuy(); s.close(); } }, `Rebuy ${fmt(v.rebuy.amount)}`))),
     logBlock(v),
     settingsBlock(() => {}),
     h('section', { class: 'block' }, h('button', { class: 'btn danger', onclick: async () => { if (await ask('Leave the table? Your chips leave with you.', { yes: 'Leave', danger: true })) { s.close(); guest.leave(); guest = null; home(); } } }, 'Leave table')));

@@ -8,7 +8,7 @@
 // - each phone gets its own view (only its own hole cards), so nothing secret is ever broadcast;
 // - the table is saved after every change as "the table at the start of the hand + the inputs since",
 //   which is also exactly the hand's replay log.
-import { Engine, isSeed, randomSeed, seedCommit, sha256hex, toHex, type GameEvent, type GameState, type HandRecord, type Input, type PlayerId } from '@tp/engine';
+import { Engine, TABLE_DEFAULTS, clampRebuyAmount, isSeed, randomSeed, seedCommit, sha256hex, toHex, type GameEvent, type GameState, type HandRecord, type Input, type PlayerId } from '@tp/engine';
 import { PROTOCOL_VERSION, encode, parseClient, versionOk, type ClientMessage, type ServerMessage, type TableSettings } from '@tp/protocol';
 import { handPlayers, publicReplay, slimRecord, type EndPlayerRow, type GameInfo } from './record';
 import { FOLD_PAUSE_MS, resultsPauseMs, runoutStreets } from './pause';
@@ -407,6 +407,11 @@ export class TableRoom {
     delete rules.crew; // the crew belongs to the room, not the rules
     delete rules.casual;
     if (this.opt.offline) rules.maxPlayers = Math.min(rules.maxPlayers ?? OFFLINE_MAX_PLAYERS, OFFLINE_MAX_PLAYERS);
+    // rebuys: only at 0 chips; a custom size within 20 to 500 big blinds; closing after a level only when blinds go up
+    const bb = rules.bb ?? TABLE_DEFAULTS.bb;
+    if (rules.rebuyAmount !== undefined) rules.rebuyAmount = clampRebuyAmount(rules.rebuyAmount, bb);
+    if (!rules.blindUpEvery) rules.rebuyUntilLevel = 0;
+    if (rules.rebuys === false) { rules.maxRebuys = 0; rules.rebuyAmount = 0; rules.rebuyUntilLevel = 0; }
     this.engine = Engine.create(this.code, rules, now);
     const c = this.engine.s.cfg;
     this.game = { id: newGameId(), startedAt: new Date(now).toISOString(), casual: !!settings?.casual, bigBlind: c.bb, startStack: c.startStack, ended: false };
@@ -701,7 +706,10 @@ export class TableRoom {
   private view(pid: PlayerId | null): Record<string, unknown> {
     const v = this.engine!.viewFor(pid);
     if (v.hand) v.hand = { ...v.hand, proof: null }; // see apply(): the seed never goes to phones
-    return v as unknown as Record<string, unknown>;
+    // when the next hand will be dealt (server clock): a busted player's rebuy sheet drains a bar to it
+    const e = this.engine!;
+    const dealing = this.running && v.phase === 'between' && !e.s.paused && e.canStartHand();
+    return { ...v, nextDealAt: dealing ? this.nextDealAt : null } as unknown as Record<string, unknown>;
   }
 
   private welcome(conn: Conn, pid: PlayerId | null, lastSeq: number): void {

@@ -52,6 +52,7 @@ export class Guest {
     if (m.t === 'state') {
       // turn timers are sent as "ms left", convert to our own clock
       m.view.receivedAt = performance.now();
+      m.view.nextDealAt = m.view.nextIn ? Date.now() + m.view.nextIn : null; // on this phone's clock
       this.view = m.view;
       for (const fn of this.listeners) fn(m.events, m.view);
     } else if (m.t === 'kicked') {
