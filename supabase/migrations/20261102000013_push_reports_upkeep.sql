@@ -196,7 +196,7 @@ $$;
 
 create or replace function public.daily_upkeep(p_body text, p_sig text) returns jsonb
 language plpgsql security definer set search_path = '' as $$
-declare closed int; pruned int; q record; finished int := 0; emptied int := 0; bytes bigint; logins uuid[];
+declare closed int; pruned int; q record; finished int := 0; emptied int := 0; bytes bigint;
 begin
   if not private.recorder_ok(p_body, p_sig) then raise exception 'Not a table server' using errcode = '42501'; end if;
   closed := public.close_due_seasons(p_body, p_sig);
@@ -216,8 +216,7 @@ begin
   delete from private.recovery_attempts where at < now() - interval '1 day';
   delete from private.push_outbox where at < now() - interval '7 days';
   delete from private.problem_reports where first_at < now() - interval '180 days';
-  -- accounts nobody ever used (no games, no crews, no rescue) and not opened for 90 days are removed,
-  -- with their anonymous logins
+  -- accounts nobody ever used (no games, no crews, no rescue) and not opened for 90 days are removed
   for q in select a.id from public.accounts a
     where a.created_at < now() - interval '90 days'
       and not exists (select 1 from public.game_players g where g.account_id = a.id)
@@ -227,12 +226,8 @@ begin
       and not exists (select 1 from public.account_logins l where l.account_id = a.id and l.last_seen > now() - interval '90 days')
     limit 500 loop
     begin
-      logins := array(select auth_user from public.account_logins where account_id = q.id);
+      -- (its anonymous sign-in stays with Supabase; opened again, it simply makes a new empty account)
       delete from public.accounts where id = q.id;
-      begin
-        delete from auth.users u where u.id = any(logins) and coalesce(u.is_anonymous, false);
-      exception when others then null; -- (no auth schema in local tests)
-      end;
       emptied := emptied + 1;
     exception when others then null; -- something still points at it: keep it
     end;
