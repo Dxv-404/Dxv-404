@@ -164,6 +164,18 @@ importers:
         specifier: workspace:*
         version: link:../../packages/engine
 
+  tools/load:
+    dependencies:
+      '@tp/bots':
+        specifier: workspace:*
+        version: link:../bots
+      '@tp/engine':
+        specifier: workspace:*
+        version: link:../../packages/engine
+      '@tp/table':
+        specifier: workspace:*
+        version: link:../../packages/table
+
 packages:
 
   '@ampproject/remapping@2.3.0':

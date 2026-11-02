@@ -1,0 +1,11 @@
+{
+  "name": "@tp/load",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "../../apps/server/node_modules/.bin/esbuild src/load.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/load.mjs",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": { "@tp/table": "workspace:*", "@tp/bots": "workspace:*", "@tp/engine": "workspace:*" }
+}

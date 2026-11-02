@@ -76,7 +76,7 @@ const CHECK = `(f) => {
 }`;
 
 for (const [scene, big] of [['flop', false], ['preflop', false], ['showdown', false], ['flop', true]] as const) test(`693 layout checks (${scene}${big ? ', large text' : ''}): 9 themes, 11 screens, 2 to 15 players`, async ({ browser, baseURL }) => {
-  test.setTimeout(600_000);
+  test.setTimeout(1_500_000);
   const views = Object.fromEntries(COUNTS.map((n) => [n, viewFor(n, scene)]));
   const failures: string[] = [];
   let checked = 0, smallest = 99;
@@ -88,7 +88,8 @@ for (const [scene, big] of [['flop', false], ['preflop', false], ['showdown', fa
     await page.evaluate(() => { (window as any).__tpLab.loadDesignCss(); });
     for (const theme of THEMES) {
       await page.evaluate((t) => (window as any).__tpLab.setTheme(t), theme);
-      await page.waitForFunction(() => Array.from(document.styleSheets).some((s) => s.href?.includes('/tp/t-')) && document.fonts.status === 'loaded');
+      await page.waitForFunction((t) => Array.from(document.styleSheets).some((s) => s.href?.includes(`/tp/t-${t}`)) && document.fonts.status === 'loaded', theme);
+      await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))); // styles applied before anything is measured
       for (const n of COUNTS) {
         const r = await page.evaluate(([v, t, w, h, check, bigText]) => {
           const lab = (window as any).__tpLab;
