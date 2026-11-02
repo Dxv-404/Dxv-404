@@ -95,7 +95,7 @@ for (const [scene, big] of [['flop', false], ['preflop', false], ['showdown', fa
           let host = document.getElementById('lab');
           if (!host) { host = document.createElement('div'); host.id = 'lab'; host.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#000'; document.body.append(host); }
           host.innerHTML = lab.sprite(t) + lab.renderTable(v, t, w, h, { peek: false, bubble: 'Riya bets 60.', code: 'QK7P', net: 'good' }).html;
-          if (bigText) host.querySelector('.tp').classList.add('bigtext', 'still');
+          if (bigText) host.querySelector('.tp')!.classList.add('bigtext', 'still');
           return (0, eval)(check)(host.querySelector('.tp'));
         }, [views[n], theme, W, H, CHECK, big] as const);
         checked++;
