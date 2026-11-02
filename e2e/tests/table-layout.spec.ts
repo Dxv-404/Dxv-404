@@ -75,7 +75,7 @@ const CHECK = `(f) => {
   return { issues: [...new Set(out)], minFont: Math.round(minFont * 10) / 10 };
 }`;
 
-for (const [scene, big] of [['flop', false], ['preflop', false], ['showdown', false], ['flop', true]] as const) test(`693 layout checks (${scene}${big ? ', large text' : ''}): 9 themes, 11 screens, 2 to 15 players`, async ({ browser, baseURL }) => {
+for (const [scene, big] of [['flop', false], ['preflop', false], ['showdown', false], ['flop', true]] as const) test(`693 layout checks (${scene}${big ? ', large text' : ''}) @layout: 9 themes, 11 screens, 2 to 15 players`, async ({ browser, baseURL }) => {
   test.setTimeout(1_500_000);
   const views = Object.fromEntries(COUNTS.map((n) => [n, viewFor(n, scene)]));
   const failures: string[] = [];
