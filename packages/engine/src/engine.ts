@@ -232,6 +232,14 @@ export class Engine {
         return r.error ? r : ok(r.events!);
       }
       case 'tick': return ok(this.tick(i.now));
+      case 'hold': {
+        const h = this.s.hand;
+        if (this.s.phase !== 'hand' || !h?.toAct || this.s.paused) return { error: 'Nobody to hold for' };
+        if (!(i.ms > 0) || i.ms > 30_000) return { error: 'Bad hold' };
+        // the turn starts once the scene is over (holds in a row add up)
+        h.turnStartedAt = Math.max(h.turnStartedAt, i.now) + Math.round(i.ms);
+        return ok([{ t: 'turn', pid: h.toAct, deadline: this.deadline() }]);
+      }
       case 'presence': {
         const p = this.player(i.pid);
         if (!p) return { error: 'Unknown player' };

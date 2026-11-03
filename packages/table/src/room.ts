@@ -12,6 +12,7 @@ import { Engine, TABLE_DEFAULTS, clampRebuyAmount, isSeed, randomSeed, seedCommi
 import { PROTOCOL_VERSION, encode, isAvatarId, parseClient, versionOk, type ClientMessage, type DeviceInfo, type ServerMessage, type TableSettings } from '@tp/protocol';
 import { handPlayers, publicReplay, slimRecord, type EndPlayerRow, type GameInfo } from './record';
 import { FOLD_PAUSE_MS, resultsPauseMs, runoutStreets } from './pause';
+import { DramaTracker, holdMs } from './drama';
 
 export interface Conn {
   send(text: string): void;
@@ -75,6 +76,8 @@ export interface RoomOptions {
    * result (pause.ts): about 8 s after a showdown, 3 s when everyone folded, longer when the board ran out.
    */
   handPauseMs?: number;
+  /** Table drama: hold the turn timer (and the next deal) while phones play a scene. On by default. */
+  drama?: boolean;
   /** Most messages one connection may send in `rateWindowMs`. */
   rateLimit?: number;
   rateWindowMs?: number;
@@ -132,6 +135,8 @@ const REACT_GAP_MS = 800;
 export const OFFLINE_MAX_PLAYERS = 10;
 /** Watchers a table takes (players do not count). */
 export const MAX_WATCHERS = 20;
+/** Events that can start a drama moment (others are not worth building a view for). */
+const DRAMA_EVENTS = new Set<string>(['handStart', 'act', 'win', 'rebuy', 'reveal', 'street']);
 const OFFLINE_FULL = 'This offline table is full. For more than 10 players, play online.';
 
 export class TableRoom {
@@ -170,6 +175,8 @@ export class TableRoom {
   private conns = new Map<Conn, ConnState>();
   private acks = new Map<PlayerId, Map<string, Ack>>();
   private recent: { seq: number; events: GameEvent[] }[] = [];
+  /** Table drama: the moments each update produces, as the phones see them (to hold the clock for scenes). */
+  private drama = new DramaTracker();
   private lastRecord: HandRecord | null = null;
   /** Players whose last connection dropped, and when they will be shown as gone. */
   private goingOffline = new Map<PlayerId, number>();
@@ -180,7 +187,7 @@ export class TableRoom {
 
   constructor(code: string, private clock: RoomClock, private store: RoomStore, saved?: Persisted | null, opt: RoomOptions = {}) {
     this.code = code;
-    this.opt = { rateLimit: 40, rateWindowMs: 2000, keepUpdates: 200, offlineAfterMs: 3000, seed: randomSeed, identify: async () => null, server: 'test', turnPushMs: 3000, autoEndAfterMs: 20 * 60_000, hostHandoverMs: 60_000, maxConnections: 60, silentCloseMs: 30_000, helloWithinMs: 15_000, offline: false, sharedShuffle: !!opt.offline, shuffleWaitMs: 1500, ...opt };
+    this.opt = { rateLimit: 40, rateWindowMs: 2000, keepUpdates: 200, offlineAfterMs: 3000, seed: randomSeed, identify: async () => null, server: 'test', turnPushMs: 3000, autoEndAfterMs: 20 * 60_000, hostHandoverMs: 60_000, maxConnections: 60, silentCloseMs: 30_000, helloWithinMs: 15_000, offline: false, sharedShuffle: !!opt.offline, shuffleWaitMs: 1500, drama: true, ...opt };
     if (this.opt.offline) this.opt.maxConnections = Math.min(this.opt.maxConnections, OFFLINE_MAX_PLAYERS + 4);
     this.createdAt = clock.now();
     if (saved) this.restore(saved);
@@ -478,9 +485,21 @@ export class TableRoom {
     if (r.error !== undefined) return r.error;
     // the shuffle seed stays on the server (it would let any phone work out folded hands); the database keeps it
     // for a fairness check on request
-    const events = r.events.filter((ev) => ev.t !== 'deckReveal');
+    let events: GameEvent[] = r.events.filter((ev) => ev.t !== 'deckReveal');
     if (e.s.phase === 'hand') this.inputs.push(input);
     else { this.base = e.snapshot(); this.inputs = []; }
+    // table drama (drama.ts): phones play a scene for this update; the clock gives its length back to the player
+    // to act (their turn starts after it), or the next hand comes that much later
+    let dramaHold = 0;
+    if (this.opt.drama && events.some((ev) => DRAMA_EVENTS.has(ev.t))) {
+      dramaHold = holdMs(this.drama.feed(events, e.viewFor(null)));
+      if (dramaHold > 0 && e.s.phase === 'hand' && e.s.hand?.toAct && !e.s.paused) {
+        const hold: Input = { t: 'hold', ms: dramaHold, now: input.now };
+        const r2 = e.apply(hold);
+        if (!r2.error) { this.inputs.push(hold); events = events.concat(r2.events ?? []); }
+        dramaHold = 0;
+      }
+    }
     this.seq++;
     this.recent.push({ seq: this.seq, events });
     if (this.recent.length > this.opt.keepUpdates) this.recent.shift();
@@ -492,10 +511,13 @@ export class TableRoom {
       this.toLeague(rec);
       if (this.running && e.s.phase !== 'ended') {
         const res = e.s.hand?.results;
-        this.nextDealAt = input.now + (this.opt.handPauseMs ?? (res ? resultsPauseMs(res, runoutStreets(r.events, !!e.s.hand?.runout)) : FOLD_PAUSE_MS));
+        this.nextDealAt = input.now + dramaHold + (this.opt.handPauseMs ?? (res ? resultsPauseMs(res, runoutStreets(r.events, !!e.s.hand?.runout)) : FOLD_PAUSE_MS));
+        dramaHold = 0;
       }
       if (this.opt.offline) this.checkpointLater = true;
     }
+    // a scene between hands (a rebuy): the deal waits for it
+    if (dramaHold > 0 && this.nextDealAt !== null) this.nextDealAt = Math.max(this.nextDealAt, input.now + dramaHold);
     for (const [c, st] of this.conns) if (st.hello) this.send(c, { t: 'update', seq: this.seq, events: events as unknown as Record<string, unknown>[], view: this.view(st.pid), host: this.host, at: input.now });
     this.persist();
     if (this.checkpointLater) { this.checkpointLater = false; for (const c of this.conns.keys()) this.sendCheckpoint(c); }

@@ -286,6 +286,8 @@ export type Input =
   | { t: 'start'; now: number; seed: string; contributions?: string[] }
   | { t: 'act'; pid: PlayerId; action: Action; now: number }
   | { t: 'tick'; now: number }
+  /** The table server gives the player to act extra time (a drama scene is playing): their turn starts `ms` later. */
+  | { t: 'hold'; ms: number; now: number }
   | { t: 'presence'; pid: PlayerId; connected: boolean; now: number }
   | { t: 'sitOut'; pid: PlayerId; now: number }
   | { t: 'sitIn'; pid: PlayerId; postNow: boolean; now: number }
