@@ -109,7 +109,9 @@ export class Director {
   /** Every update: the moments it produced, played in order (results wait for the reveal: see playResult). */
   feed(events: readonly GameEvent[], v: DirectorView): Moment[] {
     this.view = v;
-    const ms = this.tracker.feed(events, v as never);
+    // drama must never break the table: a moment that cannot be worked out is simply not played
+    let ms: Moment[] = [];
+    try { ms = this.tracker.feed(events, v as never); } catch (e) { console.warn('drama', e); }
     for (const m of ms) {
       const ok = this.shows(m);
       this.log.push({ kind: m.kind, pid: m.pid, played: ok, at: Date.now() });

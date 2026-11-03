@@ -193,7 +193,8 @@ export class TableScreen {
     if (events.some((e) => e.t === 'handStart')) { this.drama.clear(); this.resultMoment = null; }
     const moments = this.drama.feed(events, v);
     // the server deals the next hand that much later when in-hand scenes end a hand (whether or not they play here)
-    this.dramaHold = holdMs(moments);
+    // (a table without drama, like the lab table with no server, holds nothing)
+    this.dramaHold = this.o.drama === false ? 0 : holdMs(moments);
     const res = moments.find((m) => m.kind !== 'rebuy' && !!m.cast);
     if (res) this.resultMoment = res;
     for (const e of events) {
