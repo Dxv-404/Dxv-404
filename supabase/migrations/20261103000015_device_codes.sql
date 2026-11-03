@@ -18,7 +18,7 @@
 
 -- ---------------------------------------------------------------- devices
 alter table public.account_logins
-  add column device_name text check (device_name is null or (char_length(device_name) between 1 and 30 and device_name = btrim(device_name) and device_name !~ '[[:cntrl:]​-‏‪-‮⁠-⁤﻿]')),
+  add column device_name text check (device_name is null or (char_length(device_name) between 1 and 30 and device_name = btrim(device_name) and device_name !~ '[[:cntrl:]\u200B-\u200F\u202A-\u202E\u2060-\u2064\uFEFF]')),
   add column device_kind text not null default 'phone' check (device_kind in ('phone', 'tablet', 'laptop')),
   add column device_detail text check (device_detail is null or char_length(device_detail) <= 60);
 
@@ -93,7 +93,7 @@ create index on private.device_notices (account_id, at);
 alter table private.push_outbox drop constraint push_outbox_kind_check;
 alter table private.push_outbox add constraint push_outbox_kind_check check (kind in ('crew', 'trophies', 'crewTable', 'devices'));
 
-create function private.code_life() returns interval language sql immutable as $$ select interval '5 minutes' $$;
+create function private.code_life() returns interval language sql immutable set search_path = '' as $$ select interval '5 minutes' $$;
 
 -- 6 digits, leading zeros allowed (always written as 6)
 create function private.six_digits() returns text
