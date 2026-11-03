@@ -405,6 +405,15 @@ for (const [W, H, cls, label] of SIZES) {
           if (touch && e.tagName === 'BUTTON' && (r.height < 43.5 || r.width < 43.5)) out.push(`${e.className || e.textContent} is ${Math.round(r.width)}x${Math.round(r.height)}`);
           if (e.scrollWidth > e.clientWidth + 1 && e.tagName !== 'DIV') out.push(`${e.className} text cut: ${e.textContent}`);
         }
+        // the slider's thumb never sits on its end labels (at the minimum it is over Min, at all-in over All)
+        const u = document.querySelector<HTMLElement>('.tp-raise .trk u');
+        if (u?.offsetParent) {
+          const t = u.getBoundingClientRect();
+          for (const l of Array.from(document.querySelectorAll<HTMLElement>('.tp-raise .tlab span'))) {
+            const q = l.getBoundingClientRect();
+            if (q.width && !(t.right <= q.left || q.right <= t.left || t.bottom <= q.top || q.bottom <= t.top)) out.push(`the thumb covers "${l.textContent}"`);
+          }
+        }
         const box = document.querySelector('.tp-raise .rbox') as HTMLElement;
         if (getComputedStyle(box).overflowY !== 'visible' && box.scrollHeight > box.clientHeight + 1) out.push('the panel scrolls');
         // nothing overlaps inside the sheet: the rows follow each other

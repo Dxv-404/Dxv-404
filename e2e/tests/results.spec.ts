@@ -4,6 +4,7 @@
 // screens: the winner card has the real winner, hand and cards; the right seats turn over at the right step;
 // folded hands stay hidden; nothing is off screen; tapping (or Space) skips; reduced motion shows the steps still.
 import { test, expect, type Page } from '@playwright/test';
+import { avatarLetters } from '../avatars';
 
 const THEMES = ['classic', 'noir', 'ivory', 'velvet', 'cyber', 'ink', 'pixel', 'train', 'edo'];
 const NAMES = ['Dev', 'Riya', 'Arjun', 'Meera', 'Kabir', 'Zoya'];
@@ -72,6 +73,34 @@ async function onScreen(page: Page): Promise<void> {
   expect(out, 'off screen').toEqual([]);
 }
 
+/**
+ * The result pill is clear of every seat (avatar, name plate, tag), every hand shown and the board (read with the
+ * table's animations at rest: a card mid-turn is narrower than it will be).
+ */
+async function pillClear(page: Page): Promise<void> {
+  const out = await page.evaluate(() => {
+    const tp = document.querySelector('.tp.live') as HTMLElement;
+    const pill = tp.querySelector('.wpill');
+    if (!pill) return ['no pill'];
+    for (const a of tp.getAnimations({ subtree: true })) { const end = Number(a.effect?.getComputedTiming().endTime); if (Number.isFinite(end)) a.finish(); else a.cancel(); }
+    const P = pill.getBoundingClientRect(), bad: string[] = [];
+    const hit = (q: DOMRect) => !(P.right <= q.left || q.right <= P.left || P.bottom <= q.top || q.bottom <= P.top);
+    for (const e of Array.from(tp.querySelectorAll<HTMLElement>('.seat > .av, .seat > .plate, .seat > .tag, .seat .shown .cd, .seat .backs .cd, .board .cd'))) {
+      const q = e.getBoundingClientRect();
+      if (q.width && hit(q)) bad.push(`${(e.closest('.seat') as HTMLElement | null)?.dataset.n ?? 'board'} ${e.className.split(' ')[0]}`);
+    }
+    return bad;
+  });
+  expect(out, 'result pill on top of a seat or cards').toEqual([]);
+}
+
+/** Every seat's avatar (and the winner card's) shows the letters of that player's name. */
+async function lettersOk(page: Page, where: string): Promise<void> {
+  const seats = await page.evaluate(avatarLetters, { rows: '.tp.live .seat[data-n]', attr: 'data-n' });
+  expect(seats.bad, `${where}: seat avatars`).toEqual([]);
+  expect(seats.read).toBe(NAMES.length - 1);
+}
+
 interface Snap { shown: Record<string, number>; tags: Record<string, string>; win: string[]; pill: string[]; board: number; stack: string }
 /** What the seats show the moment a step begins (the steps move on by themselves, so it is read right then). */
 function snapAt(page: Page, s: string): Promise<Snap> {
@@ -94,13 +123,27 @@ function snapAt(page: Page, s: string): Promise<Snap> {
   }), s);
 }
 
-interface CardSnap { b: string[]; span: string[]; klbl: string; wcards: string[]; best: number; rows: number; rect: { left: number; top: number; right: number; bottom: number }; out: string[]; shown: number }
+interface CardSnap { b: string[]; span: string[]; klbl: string; wcards: string[]; best: number; rows: number; rect: { left: number; top: number; right: number; bottom: number }; out: string[]; shown: number; clip: string[]; letters: { bad: string[]; read: number } }
 /**
  * The winner card the moment it is on screen, read at once (on a busy machine a short scene could end before a
  * slow check): its words and cards, and where it sits once it has risen (its rise is finished first).
  */
 function cardAt(page: Page): Promise<CardSnap> {
-  return page.evaluate(() => new Promise<CardSnap>((resolve) => {
+  return page.evaluate((lettersSrc) => new Promise<CardSnap>((resolve) => {
+    // words cut off: wider than their box, or (the amount) outside the card or its line
+    const clipped = (c: HTMLElement): string[] => {
+      const bad: string[] = [], cr = c.getBoundingClientRect();
+      for (const e of Array.from(c.querySelectorAll<HTMLElement>('.txt b, .txt > span, .klbl, .wa, .wn'))) {
+        const q = e.getBoundingClientRect();
+        if (e.scrollWidth > e.clientWidth + 1 && getComputedStyle(e).display !== 'inline') bad.push(`${e.className || e.tagName} overflows: "${e.textContent}"`);
+        if (q.left < cr.left - 0.5 || q.right > cr.right + 0.5 || q.bottom > cr.bottom + 0.5) bad.push(`${e.className || e.tagName} outside the card: "${e.textContent}"`);
+        const txt = e.closest('.txt')!.getBoundingClientRect();
+        if (q.right > txt.right + 0.5 || q.left < txt.left - 0.5) bad.push(`${e.className || e.tagName} outside its line: "${e.textContent}"`);
+        const ov = e.closest('.hrow')!.querySelector('.wcards')!.getBoundingClientRect();
+        if (q.right > ov.left && q.left < ov.right && q.bottom > ov.top && q.top < ov.bottom) bad.push(`${e.className || e.tagName} under the cards`);
+      }
+      return bad;
+    };
     const read = (c: HTMLElement): CardSnap => {
       for (const a of c.getAnimations({ subtree: true })) if (Number.isFinite(Number(a.effect?.getComputedTiming().endTime))) a.finish(); // (the theme's own loops run on)
       const r = c.getBoundingClientRect();
@@ -111,11 +154,12 @@ function cardAt(page: Page): Promise<CardSnap> {
       }
       const t = (sel: string) => Array.from(c.querySelectorAll(sel)).map((e) => e.textContent ?? '');
       return {
-        b: t('.txt b'), span: t('.txt span'), klbl: c.querySelector('.klbl')?.textContent ?? '',
+        b: t('.txt b'), span: t('.txt > span'), klbl: c.querySelector('.klbl')?.textContent ?? '',
         wcards: Array.from(c.querySelectorAll('.wcards .cd')).map((e) => e.getAttribute('aria-label') ?? ''),
         best: c.querySelectorAll('.best .cd').length, rows: c.querySelectorAll('.hrow').length,
         rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom }, out,
         shown: document.querySelectorAll('.tp.live .seat .shown').length,
+        clip: clipped(c), letters: (0, eval)(`(${lettersSrc})`)({ rows: '.tp-wcard .hrow', nameSel: '.txt b' }),
       };
     };
     const over = document.querySelector('.tp-over') as HTMLElement;
@@ -123,7 +167,7 @@ function cardAt(page: Page): Promise<CardSnap> {
     if (now) { resolve(read(now)); return; }
     const mo = new MutationObserver(() => { const c = over.querySelector<HTMLElement>('.tp-wcard'); if (c) { mo.disconnect(); resolve(read(c)); } });
     mo.observe(over, { childList: true });
-  }));
+  }), avatarLetters.toString());
 }
 
 /** Tap an empty part of the table (top left of the arena, away from buttons). */
@@ -133,10 +177,14 @@ async function tap(page: Page): Promise<void> {
 }
 
 async function showdown(page: Page, W: number): Promise<void> {
+  await lettersOk(page, 'before the hand');
   const shot = cardAt(page);
   await play(page, 'showdown');
   // the scene, then the winner card rises in at 1 s with the real result
   const c = await shot;
+  expect(c.letters.bad, 'winner card avatar').toEqual([]);
+  expect(c.letters.read).toBe(1);
+  expect(c.clip, 'winner card words cut off').toEqual([]);
   expect(c.b).toHaveLength(1);
   expect(c.b[0]).toMatch(/^Riya wins \d+$/);
   expect(c.span).toEqual(['Full house, kings full of sevens']);
@@ -171,6 +219,8 @@ async function showdown(page: Page, W: number): Promise<void> {
   await expect(seat(page, 'Zoya').locator('.tag')).toHaveText('Three kings');
   for (const n of ['Arjun', 'Kabir']) await expect(seat(page, n).locator('.shown')).toHaveCount(0);
   await onScreen(page);
+  await pillClear(page);
+  await lettersOk(page, 'after the showdown');
   // Space skips to the end state
   await page.keyboard.press('Space');
   await expect.poll(() => step(page)).toBe('hold');
@@ -184,6 +234,9 @@ for (const theme of THEMES) {
     test('showdown: scene with the winner card, the winner, then everyone else', async ({ page }) => {
       await open(page, theme);
       await showdown(page, 390);
+      // the next hand: the same letters on the same people
+      await page.evaluate(() => (window as unknown as { __lab: { start(): void } }).__lab.start());
+      await lettersOk(page, 'the next hand');
     });
 
     test('split pot: both winners', async ({ page }) => {
@@ -197,6 +250,8 @@ for (const theme of THEMES) {
       expect(names[0]).toMatch(/^Meera wins \d+$/); expect(names[1]).toMatch(/^Riya wins \d+$/);
       expect(c.wcards).toHaveLength(4);
       expect(c.out, 'winner card off screen').toEqual([]);
+      expect(c.clip, 'winner card words cut off').toEqual([]);
+      expect(c.letters.bad, 'winner card avatars').toEqual([]);
       const w = snapAt(page, 'winner');
       if ((await step(page)) === 'scene') await tap(page);
       const snap = await w;
@@ -207,6 +262,7 @@ for (const theme of THEMES) {
       await reached(page, 'all');
       await expect(seat(page, 'Arjun').locator('.shown')).toHaveCount(0);
       await onScreen(page);
+      await pillClear(page);
     });
 
     test('everyone folded: no scene, no cards, a short line', async ({ page }) => {
@@ -237,6 +293,7 @@ for (const theme of THEMES) {
       expect(snap.stack).toBe('0');
       await expect(page.locator('.tp.live .hc.open .cd')).toHaveCount(2);
       await onScreen(page);
+      await pillClear(page);
       // the board comes slowly: the flop, then the turn (a tap skips ahead)
       await expect.poll(async () => page.locator('.tp.live .board .cd').count(), { timeout: 4000 }).toBeGreaterThanOrEqual(3);
       await expect.poll(async () => page.locator('.tp.live .board .cd').count(), { timeout: 4000 }).toBeGreaterThanOrEqual(4);
@@ -257,6 +314,33 @@ for (const [W, H, theme] of [[360, 740, 'velvet'], [360, 740, 'pixel'], [844, 39
     await showdown(page, W);
     // the laptop's side panel writes out each hand that was shown
     if (W >= 1200) await expect(page.locator('.tp.live .side .log')).toContainText('Meera showed Queen of hearts, Queen of diamonds: two pair, kings and queens');
+  });
+}
+
+// the winner card never cuts off the amount or the hand: phones from 320 wide, every theme, one and two winners
+for (const theme of THEMES) {
+  test(`winner card words whole at 320×568, 360×740 and 390×844 · ${theme}`, async ({ page }) => {
+    for (const [W, H] of [[320, 568], [360, 740], [390, 844]] as const) {
+      await page.setViewportSize({ width: W, height: H });
+      await open(page, theme);
+      for (const kind of ['showdown', 'split'] as const) {
+        const shot = cardAt(page);
+        await play(page, kind);
+        const c = await shot;
+        expect(c.rows, `${W}×${H} ${kind}`).toBe(kind === 'split' ? 2 : 1);
+        expect(c.b.every((b) => /^(Riya|Meera) wins \d[\d,]*$/.test(b)), `${W}×${H} ${kind}: ${c.b.join(' / ')}`).toBe(true);
+        expect(c.clip, `${W}×${H} ${kind}: words cut off`).toEqual([]);
+        expect(c.out, `${W}×${H} ${kind}: off screen`).toEqual([]);
+        expect(c.rect.right - c.rect.left).toBeLessThanOrEqual(W);
+        // on past the scene (the next deal starts from a table without a winner card)
+        for (let i = 0; i < 5 && (await page.locator('.tp-wcard').count()); i++) await tap(page);
+        await expect(page.locator('.tp-wcard')).toHaveCount(0);
+        if (kind === 'split') { // and the pill clear of the seats once everyone has shown
+          await reached(page, 'all');
+          await pillClear(page);
+        }
+      }
+    }
   });
 }
 

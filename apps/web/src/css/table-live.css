@@ -95,8 +95,10 @@ body[data-playing] #info-btn{display:none}
 /* who won, and with what (table/results.ts; design tools/design/gen/v3results.py, v3motion.py). Moves use the
    theme's easing (--re) and speed (--rk), set on the table; motion off shows every end state at once. */
 .tp.live .wpill{position:absolute;left:50%;top:calc(50% + 34px);transform:translateX(-50%);display:grid;justify-items:center;gap:1px;padding:7px 14px;border-radius:12px;background:color-mix(in srgb,var(--bg) 82%,transparent);box-shadow:0 0 0 1.5px var(--acc),0 8px 20px rgba(0,0,0,.35);z-index:3;width:max-content;max-width:calc(100% - 10px);text-align:center;box-sizing:border-box}
-.tp.live .wpill b{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tp.live .wpill span{line-height:1.25}
+.tp.live .wpill b{max-width:100%;overflow-wrap:anywhere;line-height:1.15}.tp.live .wpill span{line-height:1.25}
 .tp.live .wpill b{font:var(--dspw,700) 15px var(--dsp);color:var(--acc)}.tp.live .wpill span{font:600 11px var(--ui);color:var(--tx)}
+/* (pill.ts: on a crowded table, when nowhere else is clear) */
+.tp.live .wpill.tight.tight{padding:5px 10px}.tp.live .wpill.tight.tight b{font-size:12.5px}.tp.live .wpill.tight.tight span{font-size:10px}.tp.live .wpill.bare span{display:none}
 .tp.live .wpill.fold{box-shadow:0 0 0 1px var(--line),0 8px 20px rgba(0,0,0,.35)}
 .tp.live .wpill.in{animation:rvpill calc(.5s * var(--rk,1)) cubic-bezier(.2,1.3,.4,1) both}
 @keyframes rvpill{from{transform:translateX(-50%) scale(.8);opacity:0}}
@@ -130,8 +132,17 @@ body[data-playing] #info-btn{display:none}
 .tp-wcard .av{position:relative;width:var(--av);height:var(--av);flex:none;display:block}.tp-wcard .av>:first-child{width:100%;height:100%;display:block}
 .tp-wcard .txt{flex:1;display:grid;gap:2px;min-width:0}
 .tp-wcard .klbl{font:800 10.5px var(--ui);letter-spacing:.2em;text-transform:uppercase;color:var(--mut)}
-.tp-wcard .txt b{font:var(--dspw,700) 20px/1.15 var(--dsp);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tp-wcard .txt span{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* "Riya wins 1,300" and the hand in words are never cut: they wrap (the amount stays whole, on the next line
+   if it has to), and on a narrow card the type, the avatar and the two cards get smaller */
+.tp-wcard .txt b{font:var(--dspw,700) 20px/1.15 var(--dsp);overflow-wrap:anywhere}
+.tp-wcard .txt b .wa{white-space:nowrap}
+.tp-wcard .txt>span{font-size:12.5px;overflow-wrap:anywhere}
+.tp-over>.tp-wcard{container-type:inline-size}
+@container (max-width:340px){
+  .tp-wcard .txt b{font-size:16px}.tp-wcard .txt>span{font-size:11.5px}.tp-wcard .klbl{font-size:9.5px;letter-spacing:.14em}
+  .tp-wcard .hrow{gap:8px}.tp-wcard .hrow>.av{--av:38px!important}
+  .tp-wcard .wcards .cd{--w:32px!important}.tp-wcard .best .cd{--w:26px!important}
+}
 .tp-wcard .wcards{display:flex;gap:4px;flex:none;padding-top:5px}
 .tp-wcard .best{display:flex;align-items:center;gap:4px;padding-top:5px}.tp-wcard .best small{margin-left:6px;font-size:11px;color:var(--mut)}
 @media (prefers-reduced-motion:reduce){.tp-over>.tp-wcard{animation:none}}
@@ -196,7 +207,8 @@ html .th-edo{--b-raise:#bf3b27}
 .tp-raise .trk u{position:absolute;top:50%;width:28px;height:28px;margin:-14px 0 0 -14px;border-radius:50%;background:var(--tx);box-shadow:0 0 0 4px color-mix(in srgb,var(--acc) 45%,transparent),0 4px 10px rgba(0,0,0,.35)}
 .tp-raise .rsl.snap .trk b{transition:width calc(.3s * var(--k)) var(--ease)}
 .tp-raise .rsl.snap .trk u{transition:left calc(.3s * var(--k)) var(--ease)}
-.tp-raise .tlab{position:relative;height:14px}.tp-raise .tlab span{position:absolute;transform:translateX(-50%);font:600 10px var(--ui);color:var(--mut);white-space:nowrap}
+/* the labels sit below the thumb (28 px on an 8 px track: 10 px over its bottom edge), so Min and All stay readable */
+.tp-raise .tlab{position:relative;height:14px;margin-top:8px}.tp-raise .tlab span{position:absolute;transform:translateX(-50%);font:600 10px var(--ui);color:var(--mut);white-space:nowrap}
 .tp-raise .tlab span:first-child{transform:none}.tp-raise .tlab span:last-child{transform:translateX(-100%)}
 .tp-raise .rpre{display:flex;gap:6px}
 .tp-raise .rpre button{flex:1;min-width:0;min-height:44px;text-align:center;padding:6px 2px;border-radius:var(--r-btn,10px);background:var(--chipbg);box-shadow:inset 0 0 0 1px var(--line);font:700 12.5px var(--ui);color:var(--tx);white-space:nowrap}

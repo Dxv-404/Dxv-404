@@ -39,15 +39,31 @@ const slot = (w: number): string => `<div class="slot" style="--w:${w}px"></div>
 const chip = (kind = 'a'): string => `<svg class="chip" viewBox="0 0 24 24" aria-hidden="true"><use href="#ch-${kind}"/></svg>`;
 
 const hash = (s: string): number => { let h = 0; for (const c of s) h = (h * 31 + c.codePointAt(0)!) >>> 0; return h; };
-export const initials = (name: string): string => {
-  const parts = name.trim().split(/\s+/);
-  const t = parts.length > 1 ? parts[0]![0]! + parts[1]![0]! : name.trim().slice(0, 2);
-  return esc(t.toUpperCase());
-};
-/** A player's avatar in this theme: one of the theme's 14 looks, chosen by name, with their initials. */
+/** Two letters for a name, unescaped: the first letters of the first two words, or the first two letters of one word. */
+function initialsRaw(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const first = (s: string) => Array.from(s)[0] ?? '';
+  const t = parts.length > 1 ? first(parts[0]!) + first(parts[1]!) : Array.from(parts[0] ?? '').slice(0, 2).join('');
+  return t.toUpperCase();
+}
+export const initials = (name: string): string => esc(initialsRaw(name));
+/**
+ * The letters each lettered avatar style shows (design gen/classic.py and minimal.py): classic `ini` two capitals
+ * ("RI"), noir `mono` a capital and a small letter ("Ri"), ivory `emb` and velvet `cam` one capital ("R"). The
+ * other five themes draw a face and show no letters.
+ */
+export function avatarLetters(style: string, name: string): string {
+  const t = Array.from(initialsRaw(name));
+  if (style === 'mono') return (t[0] ?? '') + t.slice(1).join('').toLowerCase();
+  if (style === 'emb' || style === 'cam') return t[0] ?? '';
+  return t.join('');
+}
+// the span that carries the letters in a lettered avatar (any extra classes: hue, photo)
+const LETTERED = /(<span class="(ini|mono|emb|cam)(?: [^"]*)?">)[^<]*(<\/span>)/;
+/** A player's avatar in this theme: one of the theme's 14 looks, chosen by id, with the letters of their name. */
 export function avatar(th: Theme, id: string, name: string): string {
   const art = th.avatars[hash(id) % th.avatars.length] ?? '';
-  return art.replace(/(<span class="ini h\d">)[^<]*(<\/span>)/, `$1${initials(name)}$2`);
+  return art.replace(LETTERED, (_m, open: string, style: string, close: string) => `${open}${esc(avatarLetters(style, name))}${close}`);
 }
 
 const ACTION: Record<string, string> = { fold: 'Fold', check: 'Check', call: 'Call', bet: 'Bet', raise: 'Raise', allin: 'All-in' };
@@ -125,15 +141,19 @@ export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: num
     if (winners.has(p.id) && R && step !== 'scene' && step !== 'runout') cls.push('win');
     else if (reveal && !winners.has(p.id) && (step === 'all' || step === 'hold')) cls.push('lose');
     let inner = '';
+    let sd = ''; // a hand this seat turns over at a later step (the result pill keeps clear of it: pill.ts)
     if (reveal && hp?.cards?.length && !s.mini) {
+      const w = (winners.has(p.id) || step === 'runout' ? 26 : 24) + big;
+      const shl = pos.x + 8 + w * 2 + 4 > aw ? ' shl' : ''; // no room on the right of the seat: the cards sit on its left
       if (showNow(p.id)) {
         // the reveal flip: the winner when the table comes back, the others 0.6 s later, 80 ms apart
         const j = losers.indexOf(p.id);
         const flip = (step === 'winner' && winners.has(p.id)) || (step === 'all' && j >= 0) || step === 'runout';
-        const w = (winners.has(p.id) || step === 'runout' ? 26 : 24) + big;
-        const shl = pos.x + 8 + w * 2 + 4 > aw ? ' shl' : ''; // no room on the right of the seat: the cards sit on its left
         inner += `<div class="shown${flip ? ' rv' : ''}${shl}" style="--rd:${Math.max(0, j) * 80}ms">${hp.cards.map((c) => card(c, w)).join('')}</div>`;
-      } else inner += `<div class="backs">${back(17)}${back(17)}</div>`;
+      } else {
+        inner += `<div class="backs">${back(17)}${back(17)}</div>`;
+        if (step === 'winner' || step === 'scene') sd = ` data-sd="${w}${shl ? 'l' : ''}"`;
+      }
     } else if (hp?.cards && hp.cards.length && !s.mini) inner += `<div class="shown">${hp.cards.map((c) => card(c, 22, winners.has(p.id) ? 'win' : '')).join('')}</div>`;
     else if (hp && !hp.folded) inner += `<div class="backs">${back(17)}${back(17)}</div>`;
     const status = !p.connected ? '<span class="status off" title="Connection lost">⏻</span>' : '';
@@ -152,7 +172,7 @@ export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: num
     else if (p.sittingOut) tag = ['away', p.away ? 'Away' : 'Sitting out'];
     else if (p.busted) tag = ['away', 'Out of chips'];
     if (tag) inner += `<div class="tag ${tag[0]}">${tag[1]}</div>`;
-    return `<div class="${cls.join(' ')}" style="left:${pos.x.toFixed(0)}px;top:${pos.y.toFixed(0)}px" data-n="${esc(p.name)}" data-pid="${esc(p.id)}">${inner}</div>`;
+    return `<div class="${cls.join(' ')}" style="left:${pos.x.toFixed(0)}px;top:${pos.y.toFixed(0)}px" data-n="${esc(p.name)}" data-pid="${esc(p.id)}"${sd}>${inner}</div>`;
   }).join('');
   const betsHtml = st.map((s, i) => {
     const pos = placed.seats[i]!;
@@ -252,7 +272,7 @@ export function winnerCardHtml(v: ScreenView, themeKey: ThemeKey, s: Summary, ti
   const rows = s.winners.map((w, i) => {
     const cards = v.hand?.ps[w.pid]?.cards ?? [];
     return `<div class="hrow"><span class="av" style="--av:${s.winners.length > 1 ? 40 : 46}px">${avatar(th, w.pid, w.name)}</span>`
-      + `<div class="txt">${i === 0 ? `<small class="klbl">${TIER_LABEL[tier] ?? ''}</small>` : ''}<b>${esc(w.name)} wins ${fmt(w.amount)}</b>`
+      + `<div class="txt">${i === 0 ? `<small class="klbl">${TIER_LABEL[tier] ?? ''}</small>` : ''}<b><span class="wn">${esc(w.name)} wins</span> <span class="wa">${fmt(w.amount)}</span></b>`
       + `<span>${esc(w.ev ? handWords(w.ev) : s.line)}</span></div><div class="wcards">${cards.map((c) => card(c, 40, 'win')).join('')}</div></div>`;
   }).join('');
   const five = s.best ? `<div class="best">${orderFive(s.best.best).map((c) => card(c, 30, 'win')).join('')}<small>best five</small></div>` : '';

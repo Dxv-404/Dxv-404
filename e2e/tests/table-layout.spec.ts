@@ -48,6 +48,7 @@ const CHECK = `(f) => {
   const R = e => e.getBoundingClientRect();
   const hit = (a, b, pad=1) => !(a.right-pad <= b.left || b.right-pad <= a.left || a.bottom-pad <= b.top || b.bottom-pad <= a.top);
   const inside = (a, b, tol=1) => a.left >= b.left - tol && a.right <= b.right + tol && a.top >= b.top - tol && a.bottom <= b.bottom + tol;
+  for (const a of f.getAnimations({ subtree: true })) { const end = Number(a.effect?.getComputedTiming().endTime); if (Number.isFinite(end)) a.finish(); else a.cancel(); }
   const s = R(f).width / parseFloat(f.style.width), out = [];
   const seats = [...f.querySelectorAll('.seat')];
   const parts = st => [...st.querySelectorAll(':scope > .av, :scope > .plate, :scope > .tag')].filter(e => getComputedStyle(e).display != 'none').map(R);
@@ -56,7 +57,12 @@ const CHECK = `(f) => {
   const bets = [...f.querySelectorAll('.bet, .dbtn')];
   for (let i = 0; i < bets.length; i++) for (let j = i + 1; j < bets.length; j++) if (hit(R(bets[i]), R(bets[j]))) out.push('bet overlap');
   const felt = f.querySelector('.felt');
-  const fixed = [...f.querySelectorAll('.board, .pot, .sidepot, .bet, .dbtn, .dealer, .bubble')];
+  const fixed = [...f.querySelectorAll('.board, .pot, .wpill, .sidepot, .bet, .dbtn, .dealer, .bubble')];
+  // after a showdown: the result pill clear of every hand shown and of the board
+  for (const p of f.querySelectorAll('.wpill')) {
+    for (const c of f.querySelectorAll('.seat .shown .cd, .board .cd')) if (hit(R(p), R(c), 1)) out.push('pill x ' + (c.closest('.seat') ? 'shown cards of ' + c.closest('.seat').dataset.n : 'board'));
+    if (!inside(R(p), R(felt), 2)) out.push('pill outside felt');
+  }
   for (const st of seats) for (const a of parts(st)) for (const x of fixed) if (hit(a, R(x), 2)) out.push('seat ' + st.dataset.n + ' x ' + String(x.className.baseVal ?? x.className).split(' ')[0]);
   for (const b of f.querySelectorAll('.bet')) for (const x of f.querySelectorAll('.board, .pot, .sidepot')) if (hit(R(b), R(x))) out.push('bet x ' + x.className.split(' ')[0]);
   const arena = R(f.querySelector('.arena'));
@@ -97,10 +103,12 @@ for (const [scene, big] of [['flop', false], ['preflop', false], ['showdown', fa
           if (!host) { host = document.createElement('div'); host.id = 'lab'; host.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#000'; document.body.append(host); }
           host.innerHTML = lab.sprite(t) + lab.renderTable(v, t, w, h, { peek: false, bubble: 'Riya bets 60.', code: 'QK7P', net: 'good' }).html;
           if (bigText) host.querySelector('.tp')!.classList.add('bigtext', 'still');
+          lab.fitPill(host.querySelector('.tp')); // the result pill finds its place, as the table screen does
           return (0, eval)(check)(host.querySelector('.tp'));
         }, [views[n], theme, W, H, CHECK, big] as const);
         checked++;
         smallest = Math.min(smallest, r.minFont);
+        if (r.issues.length && process.env.TL_SHOTS) await page.screenshot({ path: `${process.env.TL_SHOTS}/${scene}-${theme}-${W}x${H}-${n}.png` });
         if (r.issues.length) failures.push(`${theme} ${label} ${W}x${H} ${n} players: ${r.issues.join(', ')}`);
         if (r.minFont < 9) failures.push(`${theme} ${label} ${n} players: text ${r.minFont}px`);
         if ((W === 390 || W === 1440 || W === 844) && (n === 6 || n === 15)) await page.screenshot({ path: `test-results/tables/${scene}${big ? '-big' : ''}-${theme}-${W}x${H}-${n}.png` });
@@ -110,5 +118,46 @@ for (const [scene, big] of [['flop', false], ['preflop', false], ['showdown', fa
   }
   console.log(`layout checks (${scene}${big ? ', large text' : ''}): ${checked}, failures ${failures.length}, smallest text ${smallest}px`);
   expect(checked).toBe(693);
+  expect(failures).toEqual([]);
+});
+
+// The result pill after a showdown at every size of the brief (2 to 15 players, every theme): it finds a place
+// clear of every seat, every hand shown and the board, inside the felt (table/pill.ts).
+const BRIEF: [number, number][] = [[320, 568], [360, 740], [375, 667], [390, 844], [412, 915], [430, 932], [667, 375], [844, 390], [768, 1024], [820, 1180], [1180, 820], [1280, 720], [1440, 900], [1920, 1080]];
+test('the result pill clear of seats and shown cards @layout: 9 themes, 14 sizes, 2 to 15 players', async ({ browser, baseURL }) => {
+  test.setTimeout(1_500_000);
+  const views = Object.fromEntries(COUNTS.map((n) => [n, viewFor(n, 'showdown')]));
+  const failures: string[] = [];
+  let checked = 0;
+  for (const [W, H] of BRIEF) {
+    const ctx = await browser.newContext({ viewport: { width: W, height: H }, baseURL });
+    const page = await ctx.newPage();
+    await page.goto('/');
+    await page.evaluate(() => { (window as any).__tpLab.loadDesignCss(); });
+    for (const theme of THEMES) {
+      await page.evaluate((t) => (window as any).__tpLab.setTheme(t), theme);
+      await page.waitForFunction((t) => Array.from(document.styleSheets).some((s) => s.href?.includes(`/tp/t-${t}`)) && document.fonts.status === 'loaded', theme);
+      await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+      for (const n of COUNTS) {
+        const r = await page.evaluate(([v, t, w, h, check]) => {
+          const lab = (window as any).__tpLab;
+          let host = document.getElementById('lab');
+          if (!host) { host = document.createElement('div'); host.id = 'lab'; host.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#000'; document.body.append(host); }
+          host.innerHTML = lab.sprite(t) + lab.renderTable(v, t, w, h, { peek: false, bubble: null, code: 'QK7P', net: 'good' }).html;
+          const tp = host.querySelector('.tp') as HTMLElement;
+          lab.fitPill(tp);
+          const res = (0, eval)(check)(tp) as { issues: string[] };
+          return { pill: !!tp.querySelector('.wpill'), issues: res.issues.filter((x) => /pill/.test(x)) };
+        }, [views[n], theme, W, H, CHECK] as const);
+        checked++;
+        if (!r.pill) failures.push(`${theme} ${W}x${H} ${n} players: no pill`);
+        if (r.issues.length && process.env.TL_SHOTS) await page.screenshot({ path: `${process.env.TL_SHOTS}/pill-${theme}-${W}x${H}-${n}.png` });
+        if (r.issues.length) failures.push(`${theme} ${W}x${H} ${n} players: ${r.issues.join(', ')}`);
+      }
+    }
+    await ctx.close();
+  }
+  console.log(`result pill checks: ${checked}, failures ${failures.length}`);
+  expect(checked).toBe(9 * 14 * COUNTS.length);
   expect(failures).toEqual([]);
 });
