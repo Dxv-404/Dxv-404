@@ -1,7 +1,7 @@
 // Draws a live table in the signed-off design: the same markup the design pages used (base2.css and the
 // theme's CSS style it), filled from the engine's view of this seat, laid out by layout.ts.
 import themesJson from './themes.json';
-import { arenaSize, fitCard, isCompact, makeGeo, modeFor, place, type Mode } from './layout';
+import { arenaSize, dealerSpot, fitCard, isCompact, makeGeo, modeFor, place, type Mode } from './layout';
 import type { ScreenView } from '../net-table';
 import { describePartial, parseCard } from '@tp/engine';
 import { FEEL } from './motion';
@@ -82,7 +82,7 @@ export interface Frame { html: string; mode: Mode; u: number; lw: number; lh: nu
  * The whole table as HTML for a W x H screen. `peek`: the player is holding their cards up. `bubble`: what
  * the dealer last said. `code`: the table's code (shown in the top bar).
  */
-export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: number, o: { peek: boolean; bubble: string | null; code: string; net: 'good' | 'weak' | 'lost'; title?: string; res?: ResStage | null; elsewhere?: { pid: string; where: string } | null }): Frame {
+export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: number, o: { peek: boolean; bubble: string | null; code: string; net: 'good' | 'weak' | 'lost'; title?: string; res?: ResStage | null; elsewhere?: { pid: string; where: string } | null; /** false: leave the dealer out (layout checks) */ dealer?: boolean }): Frame {
   const th = THEMES[themeKey] ?? THEMES.classic!;
   const me = v.me;
   const players = v.players;
@@ -116,6 +116,10 @@ export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: num
     st = seatsFor(true);
     placed = place(g, st.map((s) => ({ mini: s.mini, bet: s.bet })), dealerIdx >= 0 ? dealerIdx : null);
   }
+  // phones: the dealer stands above the table only where it fits, taking no space from the game (layout.ts
+  // dealerSpot); the table is laid out the same with or without it, and the dealer button keeps clear of it
+  const dspot = art.dealer && o.dealer !== false ? dealerSpot(g, placed, st.map((s) => ({ mini: s.mini, bet: s.bet }))) : null;
+  if (dspot) placed = place(g, st.map((s) => ({ mini: s.mini, bet: s.bet })), dealerIdx >= 0 ? dealerIdx : null, dspot.box);
   const cw = fitCard(g, placed, st.map((s) => ({ mini: s.mini, bet: s.bet })), Math.max(n, 2));
   const winners = new Set<string>();
   for (const pot of hand?.results?.pots ?? []) for (const a of pot.awards) winners.add(a.pid);
@@ -207,9 +211,11 @@ export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: num
   const feltDyn = `<div class="board" style="gap:${gap}px">${boardHtml}</div>${board2}${potHtml}${mode !== 'land' ? side : ''}`;
   const felt = `<div class="felt">${art.felt}${dyn('felt', feltDyn)}</div>`;
   const table = `<div class="table" style="left:${g.tl}px;top:${g.tt}px;width:${g.tw}px;height:${g.th}px">${art.rail}${felt}</div>`;
-  const dealer = !compact && art.dealer ? art.dealer : '';
-  // what the dealer says: beside the dealer on phones and big screens (sideways phones have no room for it)
-  const bubble = o.bubble && art.dealer && !compact && mode !== 'land'
+  const centred = !!dspot && dspot.x === g.tl + g.tw / 2;
+  const dealer = !art.dealer || o.dealer === false ? '' : mode === 'lap' ? art.dealer : !dspot ? ''
+    : dspot.size === 'lg' && centred ? art.dealer : art.dealer.replace('class="dealer"', `class="dealer${dspot.size === 'sm' ? ' sm' : ''}" style="left:${dspot.x.toFixed(0)}px"`);
+  // what the dealer says: beside the full-size dealer on phones and big screens (no room beside the small one)
+  const bubble = o.bubble && dealer && (mode === 'lap' || (dspot?.size === 'lg' && centred))
     ? `<div class="bubble live" style="${mode === 'lap' ? 'left:calc(50% + 66px);top:18px' : 'top:8px;left:calc(50% + 48px)'}">${esc(o.bubble)}</div>` : '';
   const arenaDyn = `${bubble}${betsHtml}${dbtn}${seatsHtml}`;
   const arena = `<div class="arena">${art.arena}${dealer}${table}${dyn('arena', arenaDyn)}</div>`;
@@ -270,7 +276,7 @@ export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: num
   const dens = mode === 'phone' ? `dense${n > 10 || (compact && n > 6) ? ' xdense' : ''}${compact ? ' compact' : ''}${lw < 380 ? ' narrow' : ''}` : mode === 'land' ? `xdense${lh < 400 ? ' short' : ''}` : '';
   const html = `<div class="tp live ${mode} ${dens} th-${themeKey}" style="${style}" data-n="${n}">${body}</div>`;
   // what stays the same while the hand goes on: the theme, the screen, the table's shape
-  const shell = [themeKey, mode, dens, style, n, g.tl, g.tt, g.tw, g.th, dealer ? 1 : 0].join('|');
+  const shell = [themeKey, mode, dens, style, n, g.tl, g.tt, g.tw, g.th, dealer ? (dspot ? `${dspot.size}${dspot.x.toFixed(0)}` : 1) : 0].join('|');
   return { html, mode, u, lw, lh, compact, heroCardW: heroW, shell, parts };
 }
 

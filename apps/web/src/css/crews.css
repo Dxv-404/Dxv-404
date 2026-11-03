@@ -324,3 +324,11 @@
 
 /* the crews column redrawn beside a tab change: no arrival animations (they made the cards shake) */
 .tp.app .cw .clist.again .ccard,.tp.app .cw .clist.again .row{animation:none}
+/* "Turn on notifications?" after joining or making a crew (crews/push-prompt.ts) */
+.tp.app .cw .pushp p{margin:0;font-size:13.5px;line-height:1.45}
+.tp.app .cw .pushp .pbell{display:inline-grid;width:22px;height:22px}.tp.app .cw .pushp .pbell svg{width:22px;height:22px}
+.tp.app .cw .pushp .psteps{margin:0;padding-left:22px;display:grid;gap:6px;font-size:13.5px;line-height:1.4}
+.tp.app .cw .pushp .psteps li::marker{color:var(--acc);font-weight:800}
+.tp.app .cw .pushp .ttl{white-space:normal}
+@media (prefers-reduced-motion:no-preference){.tp.app .cw .pushp{animation:pushp-in .3s ease-out both}}
+@keyframes pushp-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}

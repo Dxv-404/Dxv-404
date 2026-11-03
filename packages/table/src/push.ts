@@ -40,7 +40,7 @@ async function sendAll(list: (PushSubscriptionKeys & { msg: PushMessage })[], d:
 export async function deliver(req: PushRequest, d: PushDeps): Promise<Delivery> {
   const body = JSON.stringify({ kind: req.kind, accounts: req.accounts ?? [], crew: req.crew ?? null, except: req.except ?? [], n: nonce() });
   const targets = (await d.rpc('push_targets', body, await d.sign(body))) as PushSubscriptionKeys[] | null;
-  const msg: PushMessage = { title: req.title, body: req.body, url: req.url, tag: req.tag };
+  const msg: PushMessage = { title: req.title, body: req.body, url: req.url, tag: req.tag, kind: req.kind };
   return sendAll((targets ?? []).slice(0, 200).map((t) => ({ ...t, msg })), d);
 }
 

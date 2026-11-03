@@ -488,6 +488,15 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
     const go = () => { if (reloading) return; if (document.body.dataset.playing) { setTimeout(go, 5000); return; } reloading = true; location.reload(); };
     go();
   });
+  // a notification was tapped while the app was open (sw.js openAt): go to its page, a table to join
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    const d = e.data;
+    if (!d || d.t !== 'open' || typeof d.url !== 'string') return;
+    try {
+      const u = new URL(d.url, location.href);
+      if (u.origin === location.origin && u.hash && u.hash !== location.hash) location.hash = u.hash;
+    } catch { /* not a page of ours */ }
+  });
 }
 
 // test hooks

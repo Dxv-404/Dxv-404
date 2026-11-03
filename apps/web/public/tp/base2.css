@@ -288,6 +288,10 @@ kbd{font:600 10.5px/1 var(--num);opacity:.8;padding:3px 6px;border-radius:5px;ba
 /* compact phones (short screens, or narrow screens with a crowded table) */
 .phone.compact{grid-template-rows:52px minmax(0,1fr) 86px 66px}
 .compact .arena .dealer{display:none}
+/* the small dealer: on phones where the full-size one would not fit above the felt (layout.ts dealerSpot, 64 x 64) */
+.compact .arena .dealer.sm{display:flex}
+.dealer.sm .dv,.dealer.sm .bram{width:48px!important;height:48px!important}
+.dealer.sm .dn{font-size:9.5px!important;margin-top:1px;line-height:12px}
 .compact .hc{height:88px;margin-top:-14px;width:104px}.compact .hc .flip{--w:58px}.compact .hc .flip:nth-child(2){left:40px}
 .compact .actions{padding:5px 12px 9px}.compact .act{min-height:50px;font-size:15.5px}
 .compact .hero{padding:6px 14px 4px}.compact .hstack{font-size:24px}

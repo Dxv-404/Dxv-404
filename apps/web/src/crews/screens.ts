@@ -15,6 +15,7 @@ import { currentTheme } from '../table/screen';
 import { ask, toast } from '../legacy/ui.js';
 import { qrSvg, Scanner } from '../legacy/qr.js';
 import { enablePush, pushSupported } from '../more-screens';
+import { mountPushPrompt } from './push-prompt';
 import { BADGES, COLORS, COLOR_NAMES, ICON, applyFeel, ago, av, bbText, btn, cardImg, clock, cwToast, dayMonth, duration, el, emblem, endsIn, esc, fmtN, ic, level, monthDay, monthName, ms, ordinal, spark, stack, upDown, usualText, weekGroup } from './kit';
 import { DEFAULT_RULES, rulesText, sizeOf, type Size } from './format';
 export { rulesText, sizeOf };
@@ -70,6 +71,7 @@ export function crewsUi(deps: CrewsDeps) {
   const pages = new Map<string, CrewPage>();
   let stopPoll: (() => void) | null = null;
   let shown: View | null = null; // the view last painted: a new one opens at the top
+  let pushFor: string | null = null; // the crew just joined or made: its page offers to turn notifications on
 
   const top = (): View => views[views.length - 1]!;
   const wide = (): boolean => size !== 'phone';
@@ -337,6 +339,7 @@ export function crewsUi(deps: CrewsDeps) {
           if (!a) { (b as HTMLButtonElement).disabled = false; return; }
           const c = await a.createCrewV3(n, badge, color, seasons);
           forget();
+          pushFor = c.id;
           replace({ k: 'made', id: c.id, name: c.name, color: c.color, badge: c.badge, code: c.code, autoAdmit: c.auto_admit });
         } catch (err) { (b as HTMLButtonElement).disabled = false; toast(msgOf(err)); }
       }
@@ -363,6 +366,7 @@ export function crewsUi(deps: CrewsDeps) {
       if (b.dataset.x === 'done') { selected = v.id; views = [{ k: 'list' }, { k: 'crew', id: v.id, tab: wide() && size !== 'tab' && size !== 'side' ? 'overview' : 'home' }]; paint(); return; }
       shareAction(b.dataset.x!, v.code, v.name);
     };
+    if (pushFor === v.id) void mountPushPrompt(pane, pane.querySelector('[data-testid=made-go]'), ensure, () => { pushFor = null; });
     const c = pane.querySelector('.conf');
     if (c) setTimeout(() => c.remove(), ms(2.6) + 600);
   }
@@ -551,7 +555,7 @@ export function crewsUi(deps: CrewsDeps) {
           const st = await a.askToJoin(p.code, true, from);
           forget();
           if (st === 'wrong') { toast('That code was just changed. Ask for the new one.'); home(); return; }
-          if (st === 'active' || st === 'member') { cwToast(`You’re in! Welcome to ${p.name}`); openCrew(p.id); return; }
+          if (st === 'active' || st === 'member') { cwToast(`You’re in! Welcome to ${p.name}`); pushFor = p.id; openCrew(p.id); return; }
           replace({ k: 'waiting', crewId: p.id });
         } catch (err) { (b as HTMLButtonElement).disabled = false; toast(msgOf(err)); }
       }
@@ -604,7 +608,7 @@ export function crewsUi(deps: CrewsDeps) {
     stopPoll = () => { stop = true; };
     function settle(x: JoinRequest): void {
       forget();
-      if (x.status === 'approved') { cwToast(`You’re in! Welcome to ${x.name}`); openCrew(x.crew_id); return; }
+      if (x.status === 'approved') { cwToast(`You’re in! Welcome to ${x.name}`); pushFor = x.crew_id; openCrew(x.crew_id); return; }
       const m = pane.querySelector('.made p');
       if (m) m.textContent = `${who} said no this time. You can ask again later.`;
       pane.querySelector('.wait')?.remove();
@@ -661,6 +665,7 @@ export function crewsUi(deps: CrewsDeps) {
     }
     pane.innerHTML = header + tabsHtml + '<div class="tabbody" data-slot="body"></div>';
     const body = pane.querySelector('[data-slot=body]') as HTMLElement;
+    if (pushFor === v.id) void mountPushPrompt(pane, body, ensure, () => { pushFor = null; });
     // (on big screens the crew shown beside the list may be the list's own pick, not a crew view: its tab is kept
     // apart, or every tab would open on Overview again)
     const setTab = (t: Tab): void => { const cur = top(); if (cur.k === 'crew') cur.tab = t; else selTab = t; paint(); };

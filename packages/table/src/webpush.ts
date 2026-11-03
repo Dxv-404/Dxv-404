@@ -4,7 +4,9 @@
 
 export interface PushSubscriptionKeys { endpoint: string; p256dh: string; auth: string }
 export interface Vapid { publicKey: string; privateKey: string; subject: string }
-export interface PushMessage { title: string; body: string; url: string; tag: string }
+/** What a phone's service worker gets (apps/web/sw.template.js). `kind` (optional, newer servers): a crew table
+ *  that started gets a "Join now" button; without it the phone goes by the tag, as before. */
+export interface PushMessage { title: string; body: string; url: string; tag: string; kind?: 'turn' | 'crewTable' }
 export type PushResult = 'sent' | 'gone' | 'failed';
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- WebCrypto types differ between Node and Workers */

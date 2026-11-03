@@ -21,7 +21,7 @@ export function modeFor(W: number, H: number): { mode: Mode; u: number; lw: numb
   return { mode: 'lap', u, lw: Math.round(W / u), lh: Math.round(H / u), dock: 0 };
 }
 
-/** short or narrow phones with a crowded table: slimmer hero and buttons, dealer moves into the top bar */
+/** short or narrow phones with a crowded table: slimmer hero and buttons (the dealer shows only where it fits: dealerSpot) */
 export const isCompact = (mode: Mode, lw: number, lh: number, n: number): boolean => mode === 'phone' && (lh < 760 || (lw < 380 && n > 6));
 
 export function arenaSize(mode: Mode, lw: number, lh: number, dock: number, compact: boolean): [number, number] {
@@ -77,22 +77,22 @@ function ellipseSlots(cx: number, cy: number, rx: number, ry: number, n: number,
   return out;
 }
 
-type R = [number, number, number, number];
+export type R = [number, number, number, number];
 const hit = (r: R, q: R): boolean => !(r[2] <= q[0] || q[2] <= r[0] || r[3] <= q[1] || q[3] <= r[1]);
 
 /** The same table drawn again (every tap redraws it) costs nothing: placements are remembered. */
 const placedCache = new Map<string, Placed>();
-export function place(g: Geo, states: SeatIn[], dealerAt: number | null): Placed {
-  const key = JSON.stringify([g, states.map((s) => (s.mini ? 1 : 0) + (s.bet ? 2 : 0)), dealerAt]);
+export function place(g: Geo, states: SeatIn[], dealerAt: number | null, avoid: R | null = null): Placed {
+  const key = JSON.stringify([g, states.map((s) => (s.mini ? 1 : 0) + (s.bet ? 2 : 0)), dealerAt, avoid]);
   const hit0 = placedCache.get(key);
   if (hit0) return { ...hit0, seats: hit0.seats.map((x) => ({ ...x })) };
-  const out = placeNow(g, states, dealerAt);
+  const out = placeNow(g, states, dealerAt, avoid);
   if (placedCache.size > 300) placedCache.clear();
   placedCache.set(key, out);
   return { ...out, seats: out.seats.map((x) => ({ ...x })) };
 }
 
-function placeNow(g: Geo, states: SeatIn[], dealerAt: number | null): Placed {
+function placeNow(g: Geo, states: SeatIn[], dealerAt: number | null, avoid: R | null): Placed {
   const cx = g.tl + g.tw / 2, cy = g.tt + g.th / 2;
   const wts = states.map((s) => (s.mini ? 0.5 : 1));
   const fp = { lap: [52, 32, 78], land: [31, 18, 46], phone: [37, 24, 56] }[g.mode] as [number, number, number];
@@ -146,6 +146,7 @@ function placeNow(g: Geo, states: SeatIn[], dealerAt: number | null): Placed {
       if (!(dx >= 16 && dx <= g.W - 16 && dy >= 16 && dy <= g.H - 16)) continue;
       const [bxw, byh] = g.mode !== 'lap' ? [44, 22] : [60, 28];
       if (!bets.every((b) => Math.abs(dx - b.bx) > bxw || Math.abs(dy - b.by) > byh)) continue;
+      if (avoid && dx > avoid[0] - 14 && dx < avoid[2] + 14 && dy > avoid[1] - 14 && dy < avoid[3] + 14) continue; // clear of the dealer
       if (!states.every((s, k) => { const F = s.mini ? [18, 18, 18] : FP; const q = seats[k]!; return !(q.x - F[0]! - 14 < dx && dx < q.x + F[0]! + 14 && q.y - F[1]! - 14 < dy && dy < q.y + F[2]! + 14); })) continue;
       dbtn = { x: dx, y: dy }; break;
     }
@@ -167,4 +168,51 @@ export function fitCard(g: Geo, placed: Placed, states: SeatIn[], n: number): nu
     w -= 2;
   }
   return w;
+}
+
+export type DealerSize = 'lg' | 'sm';
+/** Where the dealer stands on a phone: its size, its centre x in the arena, and the box it takes (arena px). */
+export interface DealerSpot { size: DealerSize; x: number; box: R }
+/** The box each dealer size takes, art and name together (base2.css: .dealer, .dealer.sm), width x height. */
+export const DEALER_BOX: Record<DealerSize, [number, number]> = { lg: [96, 108], sm: [66, 64] };
+/** The thinnest table rim of any theme (--rimw): the felt starts at least this far inside the table's box. */
+const MIN_RIM = 7;
+
+/** How far down the felt starts at x (the felt is a stadium inside the table's box). */
+function feltTopAt(g: Geo, x: number): number {
+  const fl = g.tl + MIN_RIM, fw = g.tw - 2 * MIN_RIM, ft = g.tt + MIN_RIM, fh = g.th - 2 * MIN_RIM;
+  const r = Math.min(fw, fh) / 2;
+  const dx = Math.abs(x - (fl + fw / 2)) - (fw / 2 - r);
+  if (dx <= 0) return ft;
+  if (dx >= r) return Infinity;
+  return ft + r - Math.sqrt(r * r - dx * dx);
+}
+
+/**
+ * Phones: the theme's dealer stands above the table only where it takes no space from the game. The table is
+ * laid out first, exactly as without a dealer; then the dealer shows if there is a spot above the felt (between
+ * the top of the arena and the felt, over the table, clear of every seat) at least as tall as the dealer: the
+ * full-size dealer in the middle, else the small one in the middle, else the small one beside the middle (a
+ * player sitting at the top). No spot: no dealer. Other modes: null (sideways phones have no dealer; big
+ * screens always have room for theirs).
+ */
+export function dealerSpot(g: Geo, placed: Placed, states: SeatIn[]): DealerSpot | null {
+  if (g.mode !== 'phone') return null;
+  // what a seat draws in any theme: avatar, plate and tag, and the two cards it shows after a showdown (up and to
+  // its right, or its left near the right edge: render.ts), so the dealer never has to make way during a hand
+  const seatBoxes: R[] = placed.seats.flatMap((s, i): R[] => states[i]?.mini ? [[s.x - 20, s.y - 20, s.x + 20, s.y + 22]]
+    : [[s.x - 36, s.y - 50, s.x + 36, s.y + 60], s.x + 66 > g.W ? [s.x - 66, s.y - 74, s.x - 6, s.y - 30] : [s.x + 6, s.y - 74, s.x + 66, s.y - 30]]);
+  const cx = g.tl + g.tw / 2;
+  const fits = (size: DealerSize, x: number): R | null => {
+    const [w, h] = DEALER_BOX[size];
+    const box: R = [x - w / 2, 0, x + w / 2, h];
+    if (box[0] < g.tl || box[2] > g.tl + g.tw || box[0] < 4 || box[2] > g.W - 4) return null;
+    for (let px = box[0]; px <= box[2]; px += 4) if (feltTopAt(g, px) < h) return null;
+    if (feltTopAt(g, box[2]) < h) return null;
+    const pad: R = [box[0] - 2, box[1], box[2] + 2, box[3] + 4];
+    return seatBoxes.some((q) => hit(pad, q)) ? null : box;
+  };
+  for (const size of ['lg', 'sm'] as const) { const b = fits(size, cx); if (b) return { size, x: cx, box: b }; }
+  for (let d = 4; d < g.tw / 2; d += 4) for (const x of [cx - d, cx + d]) { const b = fits('sm', x); if (b) return { size: 'sm', x, box: b }; }
+  return null;
 }

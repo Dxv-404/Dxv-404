@@ -85,6 +85,21 @@ describe('web push', () => {
     expect((rpcs[1]![1] as { endpoints: string[] }).endpoints).toEqual(['https://fcm.googleapis.com/fcm/send/dead']);
   });
 
+  it('the phone learns what kind of push it got (a crew table gets a Join now button), the rest as before', async () => {
+    const { vapid } = await vapidKeys();
+    const p = await phoneKeys();
+    const bodies: Uint8Array[] = [];
+    const f = (async (_url: string, init: RequestInit) => { bodies.push(new Uint8Array(init.body as ArrayBuffer)); return new Response('', { status: 201 }); }) as unknown as typeof fetch;
+    const rpc = async (fn: string) => (fn === 'push_targets' ? [p.sub] : null);
+    await deliver({ kind: 'crewTable', crew: '00000000-0000-0000-0000-000000000000', title: 'A crew table just started', body: 'b', url: '/#/t/ABCD', tag: 'table-ABCD' }, { sign: tokenSigner('tok'), rpc, vapid, fetchFn: f });
+    await deliver({ kind: 'turn', accounts: ['a1'], title: 'Your turn', body: 'b', url: '/#/t/ABCD', tag: 'turn-ABCD' }, { sign: tokenSigner('tok'), rpc, vapid, fetchFn: f });
+    const got = await Promise.all(bodies.map(async (b) => JSON.parse(await decrypt(b, p.ua, p.pub, p.auth)) as Record<string, unknown>));
+    expect(got).toEqual([
+      { title: 'A crew table just started', body: 'b', url: '/#/t/ABCD', tag: 'table-ABCD', kind: 'crewTable' },
+      { title: 'Your turn', body: 'b', url: '/#/t/ABCD', tag: 'turn-ABCD', kind: 'turn' },
+    ]);
+  });
+
   it('a push handed from the other server is accepted only with a fresh signature from the same token', async () => {
     const now = 1_700_000_000_000;
     const sig = await tokenSigner('secret', () => now)('{"a":1}');
