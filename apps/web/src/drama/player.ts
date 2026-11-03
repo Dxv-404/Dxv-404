@@ -258,7 +258,8 @@ export function playScene(o: PlayOpts): ScenePlaying {
         wire(pk, [{ offset: 0, transform: tf, opacity: a > 0 ? 0 : 1 }, ...(a > 0 ? [{ offset: a, transform: tf, opacity: 1 }] : []), { offset: 1, transform: end, opacity: 1 }], start, dur, { fill: 'forwards' });
       }
     }
-    const dealer = extra.dealer ? `<g transform="translate(${CHAR_W * 0.95} 0) scale(-1 1) translate(${-CHAR_W} 0) translate(${-CHAR_W * 0.9} 0)">${set.dealer[extra.dealer] ?? set.dealer.slide ?? ''}</g>` : '';
+    // the dealer sits across from the character, on the right (mirrored to face them)
+    const dealer = extra.dealer ? `<g transform="translate(${CHAR_W * 2 + 10} 0) scale(-1 1)">${set.dealer[extra.dealer] ?? set.dealer.slide ?? ''}</g>` : '';
     const secondAt = (layer: 'back' | 'front') => (extra.second ? `<g transform="translate(${CHAR_W * 0.9} 0) translate(${CHAR_W} 0) scale(-1 1)">${poseRun(extra.second.c, extra.second.poses, undefined, start, dur, layer)}</g>` : '');
     const mir = extra.mirror ? `transform="translate(${CHAR_W} 0) scale(-1 1)"` : '';
     const body = `<g ${mir}>${poseRun(who, poses, s.at, start, dur, 'back')}</g>`;
@@ -348,8 +349,8 @@ export function playScene(o: PlayOpts): ScenePlaying {
     let stamp = '';
     const w = s.word ?? (s.cut === 'freeze' ? word : '');
     if (w) {
-      const fsz = Math.min(p.w / Math.max(6, w.length * 0.7), p.h * 0.19);
-      const wx = p.x + p.w / 2, wy = p.y + p.h * 0.9;
+      const fsz = Math.min(p.w / Math.max(7, w.length * 0.78), p.h * 0.15);
+      const wx = p.x + p.w / 2, wy = p.y + p.h * 0.93;
       const k = nc();
       stamp = `<g class="${k}" style="transform-origin:${r1(wx)}px ${r1(wy)}px;opacity:${moving ? 0 : 1}">`
         + `<path d="M${r1(wx - fsz * w.length * 0.34)} ${r1(wy - fsz * 0.2)} L${r1(wx + fsz * w.length * 0.36)} ${r1(wy - fsz * 0.55)} L${r1(wx + fsz * w.length * 0.33)} ${r1(wy + fsz * 0.12)} L${r1(wx - fsz * w.length * 0.37)} ${r1(wy + fsz * 0.3)}Z" fill="${set.red}"/>`

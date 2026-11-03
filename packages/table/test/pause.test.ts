@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { parseServer, type ServerMessage } from '@tp/protocol';
 import { TableRoom, newSeatToken, type Conn, type RoomOptions } from '../src/room';
 import { FOLD_PAUSE_MS, RUNOUT_FIRST_MS, RUNOUT_STREET_MS, bestCategory, resultsPauseMs, runoutStreets } from '../src/pause';
+import { SCENE_MS } from '../src/drama';
 
 class FakeConn implements Conn {
   inbox: ServerMessage[] = [];
@@ -62,7 +63,8 @@ describe('the pause after a hand', () => {
     t.act('call');
     expect(e().s.phase).toBe('between');
     expect(e().s.hand!.runout).toBe(true);
-    expect(t.left).toBe(resultsPauseMs(e().s.hand!.results!) + RUNOUT_FIRST_MS + 3 * RUNOUT_STREET_MS);
+    // the call over the all-in is a drama scene (drama.ts): the next hand waits for it too
+    expect(t.left).toBe(resultsPauseMs(e().s.hand!.results!) + RUNOUT_FIRST_MS + 3 * RUNOUT_STREET_MS + SCENE_MS.allinAnswered);
   });
 
   it('a fixed pause (tests, HAND_PAUSE_MS) is used after every hand', () => {

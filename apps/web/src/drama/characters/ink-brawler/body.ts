@@ -168,5 +168,10 @@ export function arm(sh: Pt, a: ArmSpec): string {
     const p = lerp(a.el, a.wr, 0.86), q = lerp(a.el, a.wr, 0.97);
     return segment(p, q, 33, 31, 0);
   })();
-  return segment(sh, a.el, 50, 42, 7) + segment(a.el, a.wr, 42, 32, 6) + wrap + hand(a.wr, ang + (a.rot ?? 0), a.hand, { tapeTail: a.tail, scale: a.scale });
+  // round the joints: a deltoid cap on the shoulder, the elbow's seam hidden and its point brushed in
+  const ua = Math.atan2(a.el[1] - sh[1], a.el[0] - sh[0]);
+  const out: Pt = [a.el[0] + Math.cos(ua) * 14, a.el[1] + Math.sin(ua) * 14];
+  const elbow = `<circle cx="${f(a.el[0])}" cy="${f(a.el[1])}" r="18.5" fill="${WHITE}"/>` + brush([[out[0] - Math.sin(ua) * 14, out[1] + Math.cos(ua) * 14], [out[0] + Math.cos(ua) * 6, out[1] + Math.sin(ua) * 6], [out[0] + Math.sin(ua) * 14, out[1] - Math.cos(ua) * 14]], 4.4);
+  const delt = `<circle cx="${f(sh[0])}" cy="${f(sh[1])}" r="26" fill="${INK}"/>` + line(`M${f(sh[0] - 14)} ${f(sh[1] - 12)} Q${f(sh[0])} ${f(sh[1] - 22)} ${f(sh[0] + 14)} ${f(sh[1] - 12)}`, 1.4, WHITE);
+  return segment(sh, a.el, 50, 42, 7) + segment(a.el, a.wr, 42, 32, 6) + elbow + delt + wrap + hand(a.wr, ang + (a.rot ?? 0), a.hand, { tapeTail: a.tail, scale: a.scale });
 }

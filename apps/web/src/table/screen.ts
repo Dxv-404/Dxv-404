@@ -14,7 +14,7 @@ import { playTier, winValues, bustValues, tierFor, categoryOf, type Playing } fr
 import { RaiseSheet } from './raise';
 import { RebuyUi } from './rebuys';
 import { Director, type DramaPref } from '../drama/director';
-import type { Moment } from '@tp/table';
+import { holdMs, type Moment } from '@tp/table';
 
 export interface TableLike {
   view: ScreenView | null;
@@ -82,6 +82,7 @@ export class TableScreen {
   private drama: Director;
   /** this hand's result moment (it replaces the winner card) */
   private resultMoment: Moment | null = null;
+  private dramaHold = 0;
 
   constructor(root: HTMLElement, private t: TableLike, private o: { code: string; menu(): void; info(): void; offline?: boolean; leave?: (() => void) | null; drama?: boolean }) {
     this.root = root;
@@ -191,6 +192,8 @@ export class TableScreen {
     // table drama: the moments this update makes (the same tracker as the table server's, which holds the clock)
     if (events.some((e) => e.t === 'handStart')) { this.drama.clear(); this.resultMoment = null; }
     const moments = this.drama.feed(events, v);
+    // the server deals the next hand that much later when in-hand scenes end a hand (whether or not they play here)
+    this.dramaHold = holdMs(moments);
     const res = moments.find((m) => m.kind !== 'rebuy' && !!m.cast);
     if (res) this.resultMoment = res;
     for (const e of events) {
@@ -444,7 +447,7 @@ export class TableScreen {
     const R = e.results;
     const streetEv = events.filter((x): x is Extract<GameEvent, { t: 'street' }> => x.t === 'street' && x.board !== 2);
     const streets = runoutStreets(events, !!v.hand?.runout);
-    const pause = resultsPauseMs(R, streets);
+    const pause = resultsPauseMs(R, streets) + this.dramaHold;
     const next = { at: performance.now() + pause, total: pause };
     const rgen = ++this.resGen;
     const alive = () => rgen === this.resGen && gen === this.fxGen;

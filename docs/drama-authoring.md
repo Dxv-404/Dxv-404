@@ -17,7 +17,7 @@ reference character: copy his folder, keep the structure, redraw everything.
 | Registry | `apps/web/src/drama/registry.ts` | Finds `characters/<avatar-id>/index.ts` and `sets/<theme>/index.ts` with `import.meta.glob`. Nothing to register by hand. |
 | Format | `apps/web/src/drama/types.ts` | The types below, with the shared constants. |
 | Shared art | `apps/web/src/drama/art.ts` | Brush strokes with line weight, tone patterns, sweat drops, anger marks, chips, speed and focus lines. |
-| Lab | `/#/drama-lab` | Any character × moment × position × outcome × theme × screen, with play, replay and step-through. |
+| Lab | `/#/drama-lab` (`apps/web/src/drama/lab.ts`) | Any character × moment × position × outcome × theme × screen, with play, replay and step-through. Every choice is in the address, e.g. `/#/drama-lab?char=ink-brawler&m=allin&pos=desperate&screen=390x664&motion=calm`; `window.__drLab.playing.seek(i)` jumps to shot `i` (for screenshots). Run `pnpm --filter @tp/web dev` and open `http://localhost:5173/#/drama-lab`. |
 
 Assets load per table: a character's folder and a set's folder are separate chunks that load only when a table
 needs them (`npm run build` lists them as `index-<hash>.js` chunks under `assets/`).
@@ -27,9 +27,9 @@ needs them (`npm run build` lists them as `index-<hash>.js` chunks under `assets
 ```
 apps/web/src/drama/characters/<avatar-id>/   e.g. ink-ronin (the folder name IS the avatar id)
   index.ts     export default { id, name, home, motif, poses, props, scenes, reactions } satisfies CharacterDef
-  body.ts      (suggested) the rig / body parts: head(expression), torso, arms, hands
-  poses.ts     (suggested) every named pose as a function of PoseCtx
-  scenes.ts    (suggested) the scene scripts and reactions
+               (the Brawler keeps his poses, props, scenes and reactions here)
+  body.ts      (suggested) the body parts as functions: head(face, opts), torso(opts), arm(shoulder, spec), hand()
+               so a pose is a few numbers (joint positions, an expression) rather than hand-copied paths
 ```
 
 Only `index.ts` is required, and only its default export is read. Never import another character's files; shared
@@ -47,6 +47,11 @@ A pose is SVG markup (no `<svg>` wrapper) in **character space**: a 240 × 320 b
 * `TABLE_Y = 236`: the table's top edge. Forearms, fists and chips rest on it; the set draws the table front below.
 * `HEAD_H = 64`: chin to crown, without hair. Bodies are about 3 heads from crown to the table.
 * Standing poses keep the same scale; the feet go below the box (it is clipped by the panel, never by the pose).
+
+**In front of the table**: put the `TABLE_FRONT` marker (from types.ts) inside a pose. Everything before it is
+drawn behind the table's edge (the body, the head, an arm reaching under the table); everything after it is drawn
+on top of the table (forearms and fists resting on it, things put down on the felt). The Brawler's `draw()` in
+`characters/ink-brawler/index.ts` shows the pattern: `back arms + torso + head + TABLE_FRONT + front arms + marks`.
 
 A pose may be a string or `(c: PoseCtx) => string` (`c.initials` for the silhouette, `c.lite` on slow phones: drop
 the finest hatching and extra tone). Poses are built once and cached.
