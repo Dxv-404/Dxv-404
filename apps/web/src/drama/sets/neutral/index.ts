@@ -4,7 +4,8 @@ import { chipStack, chipTop, line, INK, RED, WHITE } from '../../art';
 import type { SeatSpot, SetDef } from '../../types';
 import { WORLD_H, WORLD_W, TABLE_Y } from '../../types';
 
-export const SEATS: SeatSpot[] = [150, 1450, 310, 1290, 470, 1130, 630, 970].map((x) => ({ x, y: 560, scale: 0.95 }));
+/** From the middle outwards (the star gets the first): either side of the dealer, then further out. */
+export const SEATS: SeatSpot[] = [575, 1025, 415, 1185, 255, 1345, 95, 1505].map((x) => ({ x, y: 560, scale: 0.95 }));
 
 const dealer = (felt: string): string =>
   // a figure in a waistcoat with a visor, in the table's colours (character space)

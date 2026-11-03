@@ -31,14 +31,14 @@ describe('drama registry', () => {
         for (const p of REQUIRED_POSES) { expect(c.poses[p], p).toBeTruthy(); expect(draw(c.poses[p]!).length, p).toBeGreaterThan(20); }
       });
       it('has a scene for every moment and position, and every pose and prop it names', () => {
-        for (const k of IN_HAND) for (const pos of POSITIONS) for (const v of ['', '.call', '.raise']) expect(lookup(c, `${k}.${pos}${v}`), `${k}.${pos}${v}`).toBeTruthy();
+        for (const k of IN_HAND) for (const pos of POSITIONS) for (const v of k.endsWith('Answered') ? ['.call', '.raise'] : ['']) expect(lookup(c, `${k}.${pos}${v}`), `${k}.${pos}${v}`).toBeTruthy();
         for (const k of RESULTS) expect(lookup(c, k), k).toBeTruthy();
         const named = (list: string[] | undefined, where: string) => { for (const p of list ?? []) expect(c.poses[p], `${where}: pose ${p}`).toBeTruthy(); };
         for (const [key, s] of Object.entries(c.scenes)) {
           expect(s.shots.length, key).toBeGreaterThan(0);
           for (const sh of s.shots) {
             named(sh.who === 'star' || !sh.who ? sh.poses : undefined, key);
-            for (const pr of sh.props ?? []) expect(c.props?.[pr.id], `${key}: prop ${pr.id}`).toBeTruthy();
+            for (const pr of sh.props ?? []) if (!pr.id.startsWith('@')) expect(c.props?.[pr.id], `${key}: prop ${pr.id}`).toBeTruthy();
           }
         }
         for (const [key, r] of Object.entries(c.reactions)) named(r.poses, `reaction ${key}`);

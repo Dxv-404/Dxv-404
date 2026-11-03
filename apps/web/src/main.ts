@@ -15,3 +15,11 @@ import { settings } from './legacy/fx.js';
 // ... and play any win scene over it (e2e/tests/tiers.spec.ts)
 import { playTier, winValues, bustValues, sampleValues, loadTiers, peakOf } from './table/tiers';
 (window as unknown as { __tpLab: unknown }).__tpLab = { renderTable, fitPill, sprite, loadDesignCss, setTheme, labTable, settings, playTier, winValues, bustValues, sampleValues, loadTiers, peakOf };
+// the drama scene lab (docs/drama-authoring.md): /#/drama-lab, loaded only when opened
+const dramaLab = (): void => {
+  if (!location.hash.startsWith('#/drama-lab')) return;
+  loadDesignCss();
+  void import('./drama/lab').then((m) => { let el = document.getElementById('dr-lab'); if (!el) { el = document.createElement('div'); el.id = 'dr-lab'; document.body.append(el); } return m.mountLab(el); });
+};
+dramaLab();
+window.addEventListener('hashchange', () => { if (location.hash.startsWith('#/drama-lab') && !document.getElementById('dr-lab')) dramaLab(); });

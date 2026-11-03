@@ -13,6 +13,8 @@ import { presenceCss, bannerHtml, pauseHtml, backHtml, tickClock } from './prese
 import { playTier, winValues, bustValues, tierFor, categoryOf, type Playing } from './tiers';
 import { RaiseSheet } from './raise';
 import { RebuyUi } from './rebuys';
+import { Director, type DramaPref } from '../drama/director';
+import type { Moment } from '@tp/table';
 
 export interface TableLike {
   view: ScreenView | null;
@@ -76,7 +78,12 @@ export class TableScreen {
   private bustAt: { handNo: number; place: number; of: number } | null = null;
   private bustTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(root: HTMLElement, private t: TableLike, private o: { code: string; menu(): void; info(): void; offline?: boolean; leave?: (() => void) | null }) {
+  /** table drama (drama/director.ts): the scenes for big moments, played over the table */
+  private drama: Director;
+  /** this hand's result moment (it replaces the winner card) */
+  private resultMoment: Moment | null = null;
+
+  constructor(root: HTMLElement, private t: TableLike, private o: { code: string; menu(): void; info(): void; offline?: boolean; leave?: (() => void) | null; drama?: boolean }) {
     this.root = root;
     loadDesignCss();
     root.className = 'screen tp-screen';
@@ -86,6 +93,25 @@ export class TableScreen {
     this.overlay = document.createElement('div'); this.overlay.className = 'tp-over';
     root.append(this.stage, this.overlay);
     this.motion = new Motion(this.stage);
+    this.drama = new Director({
+      overlay: this.overlay,
+      theme: currentTheme,
+      pref: () => (o.drama === false ? 'off' : ((settings as { drama?: DramaPref }).drama ?? 'on')),
+      motion: () => (reduceMotion() ? 'still' : settings.motion === 'calm' ? 'calm' : 'full'),
+      keepClear: () => {
+        // phones: the scene stays above my cards and the action buttons
+        if ((this.frame?.mode ?? 'phone') !== 'phone') return null;
+        const hero = this.stage.querySelector('.tp.live .hero')?.getBoundingClientRect();
+        const r = this.overlay.getBoundingClientRect();
+        return hero ? hero.top - r.top : null;
+      },
+      arena: () => {
+        const a = this.stage.querySelector('.tp.live .arena')?.getBoundingClientRect();
+        const r = this.overlay.getBoundingClientRect();
+        return a ? { top: a.top - r.top, height: a.height } : null;
+      },
+      onScene: (on, m) => { this.stage.dataset.drama = on ? m.kind : ''; },
+    });
     this.rb = new RebuyUi({ over: this.overlay, stage: this.stage, theme: currentTheme, level: motionLevel, rebuy: () => this.t.rebuy(), leave: o.leave ?? null, offline: !!o.offline });
     this.off.push(t.subscribe((ev, v) => this.update(ev, v)));
     if (t.view) this.update([], t.view);
@@ -162,6 +188,11 @@ export class TableScreen {
     const snap = events.length ? this.motion.before(events) : null;
     const name = (pid: string | null | undefined) => v.players.find((p) => p.id === pid)?.name ?? 'Someone';
     this.checkBust(events, v, true);
+    // table drama: the moments this update makes (the same tracker as the table server's, which holds the clock)
+    if (events.some((e) => e.t === 'handStart')) { this.drama.clear(); this.resultMoment = null; }
+    const moments = this.drama.feed(events, v);
+    const res = moments.find((m) => m.kind !== 'rebuy' && !!m.cast);
+    if (res) this.resultMoment = res;
     for (const e of events) {
       if (e.t === 'handStart') { this.endResults(); this.say(`Hand ${e.handNo}. Cards coming.`); sfx.card(); }
       else if (e.t === 'act') { this.say(`${name(e.pid)} ${SAY[e.a] ?? e.a}${e.a === 'raise' || e.a === 'bet' ? ` ${fmt(e.to ?? e.amount ?? 0)}` : e.a === 'call' && e.amount ? ` ${fmt(e.amount)}` : ''}.`); if (e.a !== 'fold' && e.a !== 'check') sfx.chip?.(1); }
@@ -425,7 +456,12 @@ export class TableScreen {
     });
     const nameOf = (pid: string) => v.players.find((x) => x.id === pid)?.name ?? 'Someone';
     const sum = summarize(R, nameOf);
+    const drama = this.resultMoment && this.resultMoment.handNo === v.handNo && this.drama.shows(this.resultMoment) ? this.resultMoment : null;
+    let dramaKnockout = false;
     void (async () => {
+      // act one: the in-hand scenes finish first (the server deals that much later)
+      if (this.drama.busy) await Promise.race([this.drama.whenIdle(), new Promise((r) => setTimeout(r, 6000))]);
+      if (!alive()) return;
       if (!R.showdown) set({ step: 'fold' });
       else {
         if (streets && v.hand) {
@@ -441,7 +477,15 @@ export class TableScreen {
             await wait(RUNOUT_STREET_MS);
           }
         }
-        if (showWin && alive()) {
+        if (drama && alive()) {
+          // act three: the result scene, in place of the winner card
+          set({ step: 'scene', skip: true });
+          announce();
+          this.resSkip = () => this.drama.skip();
+          await this.drama.playResult(drama);
+          dramaKnockout = !!drama.cast?.some((c) => c.outcome === 'out');
+          if (!alive()) return;
+        } else if (showWin && alive()) {
           set({ step: 'scene', skip: true });
           announce();
           const values = winValues({ names, amount: total, cat, cards: best?.best ?? [], handNo: v.handNo, code: this.o.code }, currentTheme());
@@ -460,7 +504,7 @@ export class TableScreen {
         await wait(1700);
         if (!set({ step: 'hold' })) return;
       }
-      if (!showBust || gen !== this.fxGen || !out) return;
+      if (!showBust || gen !== this.fxGen || !out || dramaKnockout) return;
       await this.bustScene(out, v, base());
     })().catch(() => { /* a scene that cannot load leaves the table as it is */ })
       // the bust-out sheet comes once the steps are over, also when they were cut short (a new hand, a skip)
@@ -560,6 +604,7 @@ export class TableScreen {
   destroy(): void {
     this.closeRaise();
     this.fxGen++; this.playing?.stop(); this.endResults();
+    this.drama.destroy();
     this.rb.destroy();
     if (this.bustTimer) clearTimeout(this.bustTimer);
     if (this.presenceTimer) clearInterval(this.presenceTimer);

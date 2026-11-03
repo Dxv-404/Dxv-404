@@ -4,7 +4,7 @@ import { Engine, parseCard, randomSeed, type Action, type GameConfig, type GameE
 import type { ScreenView } from '../net-table';
 import { TableScreen, type TableLike } from './screen';
 
-export function labTable(root: HTMLElement, names: string[], o: { me?: number; stack?: number; cfg?: Partial<GameConfig>; offline?: boolean } = {}) {
+export function labTable(root: HTMLElement, names: string[], o: { me?: number; stack?: number; cfg?: Partial<GameConfig>; offline?: boolean; drama?: boolean } = {}) {
   const e = Engine.newGame({ startStack: o.stack ?? 2000, sb: 10, bb: 20, ...(o.cfg ?? {}) }, names);
   for (const p of e.s.players) p.connected = true; // everyone is at the table
   const me = e.s.players[o.me ?? 0]!.id;
@@ -96,6 +96,7 @@ export function labTable(root: HTMLElement, names: string[], o: { me?: number; s
     rebuy() { lab.rebuys++; const r = e.apply({ t: 'rebuy', pid: me, now: Date.now() }); if (r.events) emit(r.events); },
     sitOut() {}, dealNow() {}, vote() {},
   };
-  lab.screen = new TableScreen(root, t, { code: 'LAB', menu() {}, info() {}, offline: o.offline, leave: () => { lab.left++; } });
+  // the motion and results checks look at the table itself: table drama only when asked for
+  lab.screen = new TableScreen(root, t, { code: 'LAB', menu() {}, info() {}, offline: o.offline, leave: () => { lab.left++; }, drama: o.drama ?? false });
   return lab;
 }

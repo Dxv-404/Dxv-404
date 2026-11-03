@@ -5,6 +5,7 @@ import { settings, saveSettings } from './legacy/fx.js';
 import { VAPID_PUBLIC_KEY } from '@tp/protocol';
 import type { Account, PushPrefs } from '@tp/account';
 import { currentTheme, setTheme } from './table/screen';
+import { DRAMA_PREFS } from './drama/director';
 import { themeSwatches } from './ui/shell';
 import type { Ui } from './offline-screens';
 
@@ -101,7 +102,7 @@ export function settingsScreen(ui: Ui): void {
     const save = () => saveSettings();
     const sw = (key: 'holdToPeek' | 'fourColor' | 'sound' | 'haptics' | 'largeText', label: string, hint?: string) => h('label', { class: 'switch-row' }, h('span', {}, label, hint ? h('small', {}, hint) : null),
       h('input', { type: 'checkbox', role: 'switch', 'data-testid': `set-${key}`, checked: settings[key] ? true : null, onchange: (e: Event) => { (settings as Record<string, unknown>)[key] = (e.target as HTMLInputElement).checked; save(); } }));
-    const seg = (key: 'motion' | 'winFx', label: string, opts: [string, string][]) => {
+    const seg = (key: 'motion' | 'winFx' | 'drama', label: string, opts: [string, string][]) => {
       const wrap = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': label });
       const draw = () => wrap.replaceChildren(...opts.map(([v, t]) => h('button', { role: 'radio', 'data-testid': `set-${key}-${v}`, 'aria-checked': settings[key] === v ? 'true' : 'false', class: settings[key] === v ? 'on' : '', onclick: () => { (settings as Record<string, unknown>)[key] = v; save(); draw(); } }, t)));
       draw();
@@ -119,6 +120,7 @@ export function settingsScreen(ui: Ui): void {
         sw('largeText', 'Large text', 'Names, chips and buttons 15% bigger'),
         seg('motion', 'Motion', [['full', 'Full'], ['calm', 'Calm'], ['off', 'Off']]),
         seg('winFx', 'Win animations', [['all', 'All'], ['big', 'Big hands only'], ['off', 'Off']]),
+        seg('drama', 'Table drama', DRAMA_PREFS),
         h('p', { class: 'hint small' }, 'Reduce motion in your phone’s settings also turns motion off.')),
       h('section', { class: 'block' }, h('h2', {}, 'Notifications'), pushBox),
       h('section', { class: 'block' }, h('h2', {}, 'Help'),

@@ -19,6 +19,11 @@ export const CHAR_H = 320;
 export const EYE_Y = 104;
 export const TABLE_Y = 236;
 export const HEAD_H = 64;
+/**
+ * Put this marker inside a pose's markup: what comes before it is drawn behind the table's edge (the body), what
+ * comes after it in front of the table (forearms and fists resting on it, things put down on the felt).
+ */
+export const TABLE_FRONT = '<!--table-front-->';
 /** World space (establish and group shots): the room, 1600 x 900, the table's centre at TABLE_C. */
 export const WORLD_W = 1600;
 export const WORLD_H = 900;
@@ -47,7 +52,7 @@ export interface PropDef { svg: PoseDef; /** drawn in front of the character (de
  * 'lost', 'split', 'comebackLost', 'lastLost', 'witness'. Missing keys fall back to 'lost', then to the pose of the
  * same name.
  */
-export interface Reaction { poses: string[]; sfx?: Sfx[]; props?: PropUse[]; fx?: Fx[] }
+export interface Reaction { poses: string[]; sfx?: Sfx[]; props?: PropUse[]; fx?: Fx[]; /** the dealer joins in (a set dealer pose) */ dealer?: string }
 
 export interface CharacterDef {
   /** The avatar id this character is drawn from ('ink-brawler'); 'initials' is the silhouette. */
@@ -82,11 +87,12 @@ export interface Cam {
   to?: { x: number; y: number; zoom: number };
 }
 
-/** A sound effect lettered on the panel (katakana; only inside a character's own home-style cut-in). */
+/** A sound effect lettered on the panel (katakana; only inside a character's own home-style cut-in). x, y: % of the panel. */
 export interface Sfx { text: string; x: number; y: number; size?: number; rot?: number; /** 0..1 of the shot */ at?: number; red?: boolean }
 
 /** A prop placed in a shot (character space), optionally moving. */
 export interface PropUse {
+  /** The character's prop, or the table's: '@pile' (the winner's pile, sized by the win), '@crown', '@chips'. */
   id: string; x: number; y: number; scale?: number; rot?: number;
   /** 0..1 of the shot: when it appears (default 0) */
   at?: number;
@@ -116,6 +122,8 @@ export interface Shot {
   /** The big word, in the table's lettering with a red accent (freeze shots). */
   word?: string;
   props?: PropUse[];
+  /** The table's dealer in the same panel (the set's pose of that name, e.g. 'grip', 'finger'); mirrored, on the right. */
+  dealer?: string;
 }
 
 export interface SceneScript { shots: Shot[] }

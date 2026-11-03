@@ -9,6 +9,8 @@ export const settings = {
   motion: prefs.motion ?? 'full',
   /** 'all' | 'big' (huge pots and rare hands only) | 'off' */
   winFx: prefs.winFx ?? 'all',
+  /** table drama scenes: 'on' | 'mine' (only my moments) | 'off' */
+  drama: prefs.drama ?? 'on',
   /** table labels 115% */
   largeText: prefs.largeText ?? false,
 };

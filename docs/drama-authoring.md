@@ -72,10 +72,11 @@ interface Shot {
   cam?: Cam; wide?: Cam;           // close-up camera, character space; wide = sideways phones, tablets, laptops
   panel?: { tilt?: number; from?: 'left' | 'right' | 'top' | 'bottom'; inset?: boolean };
   fx?: ('speed' | 'speedV' | 'focus' | 'flash' | 'tone' | 'heavy' | 'shake' | 'splash' | 'dust' | 'shatter')[];
-  sfx?: { text: string; x: number; y: number; size?: number; rot?: number; at?: number; red?: boolean }[];
+  sfx?: { text: string; x: number; y: number; size?: number; rot?: number; at?: number; red?: boolean }[]; // x, y: % of the panel
   word?: string;                   // the big word (freeze)
   props?: { id: string; x: number; y: number; scale?: number; rot?: number; at?: number;
             move?: { x: number; y: number; rot?: number; scale?: number }; layer?: 'front' | 'back'; if?: string }[];
+  dealer?: string;                 // the table's dealer joins the panel (a SetDef.dealer pose: 'slide', 'grip', 'finger')
 }
 interface Cam { x: number; y: number; zoom: number; to?: { x: number; y: number; zoom: number } }
 ```
@@ -86,6 +87,8 @@ interface Cam { x: number; y: number; zoom: number; to?: { x: number; y: number;
   key pose held, ink splash, the word stamped in red, a small shake.
 * **Camera**: `zoom 1` shows the whole 320-high box; `2` is waist-up; `3` a face. `to` pans or pushes in over the
   shot. Phones upright get close shots (waist-up); give `wide` a looser camera for sideways phones and laptops.
+* **Table props**: `@pile` (the winner's chip pile, sized low / heap / mountain by the win over the hand-start
+  stack), `@crown` (the red seal crown, only on the night's biggest pot), `@chips`. They come from the table's set.
 * **Props** travel with the character (the motif). `if: 'allin'` shows a prop only when the hand's first act had
   that moment: that is how a result calls back to the in-hand scene (the Brawler's ripped tape is on the floor).
 * **Lookup** (`scenes` keys): `<moment>.<position>[.<variant>]` for in-hand moments, falling back to less specific
@@ -102,7 +105,7 @@ interface Cam { x: number; y: number; zoom: number; to?: { x: number; y: number;
   { cut: 'establish', w: 0.16 },
   { cut: 'act', w: 0.5, poses: ['lift-1', 'lift-2', 'lift-3'],
     cam: { x: 120, y: 180, zoom: 1.5, to: { x: 120, y: 170, zoom: 1.7 } }, wide: { x: 120, y: 180, zoom: 1.2 },
-    fx: ['speedV', 'shake'], sfx: [{ text: 'ゴゴゴ', x: 30, y: 70, rot: -12 }],
+    fx: ['speedV', 'shake'], sfx: [{ text: 'ゴゴゴ', x: 18, y: 22, rot: -12 }],
     props: [{ id: 'chips-slide', x: 150, y: 250, move: { x: 230, y: 300, rot: 20 } }] },
   { cut: 'reaction', w: 0.16 },
   { cut: 'freeze', w: 0.18, poses: ['lift-3'], word: 'ALL IN', fx: ['flash', 'splash', 'shake'] },
