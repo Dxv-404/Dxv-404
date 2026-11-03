@@ -95,6 +95,7 @@ export function crewsUi(deps: CrewsDeps) {
 
   // ---------------------------------------------------------------- the layout
   let listOnScreen: string | null = null;
+  let selTab: Tab | null = null; // the tab of the crew the list opened by itself (big screens)
   function paint(): void {
     if (!root) return;
     stopPoll?.(); stopPoll = null;
@@ -161,7 +162,7 @@ export function crewsUi(deps: CrewsDeps) {
       refreshBadge();
       fillList(col, L);
       // big screens: the first crew is open next to the list
-      if (wide() && top().k === 'list' && !selected && L.crews[0]) { selected = L.crews[0].id; paint(); }
+      if (wide() && top().k === 'list' && !selected && L.crews[0]) { selected = L.crews[0].id; selTab = null; paint(); }
     } catch (e) {
       if (live(my) && !cached) col.innerHTML = failHtml(e);
     }
@@ -217,7 +218,7 @@ export function crewsUi(deps: CrewsDeps) {
   }
 
   function openCrew(id: string): void {
-    if (wide()) { selected = id; views = [{ k: 'list' }, { k: 'crew', id, tab: size === 'lap' || size === 'desk' ? 'overview' : 'home' }]; paint(); }
+    if (wide()) { selected = id; selTab = null; views = [{ k: 'list' }, { k: 'crew', id, tab: size === 'lap' || size === 'desk' ? 'overview' : 'home' }]; paint(); }
     else go({ k: 'crew', id, tab: 'home' });
   }
 
@@ -283,7 +284,7 @@ export function crewsUi(deps: CrewsDeps) {
     switch (v.k) {
       case 'list':
         if (wide()) {
-          if (selected) return drawCrew(pane, { k: 'crew', id: selected, tab: size === 'lap' || size === 'desk' ? 'overview' : 'home' }, my);
+          if (selected) return drawCrew(pane, { k: 'crew', id: selected, tab: selTab ?? (size === 'lap' || size === 'desk' ? 'overview' : 'home') }, my);
           pane.replaceChildren(emptyState());
         }
         return;
@@ -659,7 +660,9 @@ export function crewsUi(deps: CrewsDeps) {
     }
     pane.innerHTML = header + tabsHtml + '<div class="tabbody" data-slot="body"></div>';
     const body = pane.querySelector('[data-slot=body]') as HTMLElement;
-    const setTab = (t: Tab): void => { const cur = top(); if (cur.k === 'crew') cur.tab = t; paint(); };
+    // (on big screens the crew shown beside the list may be the list's own pick, not a crew view: its tab is kept
+    // apart, or every tab would open on Overview again)
+    const setTab = (t: Tab): void => { const cur = top(); if (cur.k === 'crew') cur.tab = t; else selTab = t; paint(); };
     pane.onclick = (e) => {
       const t = e.target as HTMLElement;
       const tb = t.closest('[data-tab]') as HTMLElement | null;
