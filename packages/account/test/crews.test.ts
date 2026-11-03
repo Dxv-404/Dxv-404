@@ -1,7 +1,7 @@
 // v3 crews in the account package: the crew code rules, and every crew call asking the right database
 // function with the right arguments (and handing its answer or its error back).
 import { describe, expect, it } from 'vitest';
-import { Account, AccountError, CREW_CODE_ALPHABET, cleanCrewCode, crewLink, formatCrewCode, isCrewCode, parseCrewLink, restSeconds, type KeyStore } from '../src/index';
+import { Account, AccountError, CREW_CODE_ALPHABET, cleanCrewCode, crewLink, formatCrewCode, isCrewCode, nightPoints, parseCrewLink, restSeconds, seasonLabel, seasonLengthArgs, seasonLengthOf, type KeyStore } from '../src/index';
 
 const URL = 'https://example.supabase.co';
 const store = (): KeyStore => { const m = new Map<string, string>(); return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => void m.set(k, v), removeItem: (k) => void m.delete(k) }; };
@@ -89,6 +89,13 @@ describe('crew calls', () => {
     ['crewSettings (everything)', (a) => a.crewSettings(C, { name: 'N', badge: 'round', color: '#1f8a5b', seasonMonths: 6, whoHosts: 'leader', membersInvite: false, autoAdmit: true, houseRules: { bb: 20 } }), 'crew_settings',
       { p_crew: C, p_name: 'N', p_badge: 'round', p_color: '#1f8a5b', p_season_months: 6, p_who_hosts: 'leader', p_members_invite: false, p_auto_admit: true, p_house_rules: { bb: 20 } }],
     ['newCrewCode', (a) => a.newCrewCode(C), 'new_crew_code', { p_crew: C }],
+    ['crewSettings (scoring)', (a) => a.crewSettings(C, { scoring: 'average' }), 'crew_settings',
+      { p_crew: C, p_name: null, p_badge: null, p_color: null, p_season_months: null, p_who_hosts: null, p_members_invite: null, p_auto_admit: null, p_house_rules: null, p_scoring: 'average' }],
+    ['crewSettings (2 weeks from a date)', (a) => a.crewSettings(C, { seasonMonths: 1, seasonWeeks: 2, seasonStart: '2026-11-20' }), 'crew_settings',
+      { p_crew: C, p_name: null, p_badge: null, p_color: null, p_season_months: 1, p_who_hosts: null, p_members_invite: null, p_auto_admit: null, p_house_rules: null, p_season_weeks: 2, p_season_start: '2026-11-20' }],
+    ['startSeasonNow', (a) => a.startSeasonNow(C, 'Monsoon'), 'start_season_now', { p_crew: C, p_name: 'Monsoon' }],
+    ['startSeasonNow (no name)', (a) => a.startSeasonNow(C), 'start_season_now', { p_crew: C, p_name: null }],
+    ['renameSeason', (a) => a.renameSeason(C, P, 'Diwali'), 'rename_season', { p_crew: C, p_season: P, p_name: 'Diwali' }],
     ['endSeasonNow', (a) => a.endSeasonNow(C), 'end_season_now', { p_crew: C }],
     ['hostCrewTable', (a) => a.hostCrewTable(C, 'QK7P', 'online', { bb: 20 }), 'host_crew_table', { p_crew: C, p_table: 'QK7P', p_mode: 'online', p_rules: { bb: 20 } }],
     ['hostCrewTable (QR, crew rules)', (a) => a.hostCrewTable(C, null, 'qr'), 'host_crew_table', { p_crew: C, p_table: null, p_mode: 'qr', p_rules: null }],
@@ -118,5 +125,37 @@ describe('crew calls', () => {
   it('a leader-only change refused for an admin', async () => {
     const { a } = fake(null, { message: 'Only the crew leader can do that', code: '42501' });
     await expect(a.crewSettings(C, { name: 'x' })).rejects.toThrow('Only the crew leader can do that');
+  });
+});
+
+describe('league scoring', () => {
+  it('counts a night as the database does', () => {
+    expect(nightPoints(9, 1, 0, 0)).toBe(9);
+    expect(nightPoints(9, 9, 0, 0)).toBe(1);
+    expect(nightPoints(4, 2, 39.99, 0)).toBe(4);
+    expect(nightPoints(4, 2, 40, 0)).toBe(5);
+    expect(nightPoints(4, 2, 250, 0)).toBe(8);
+    expect(nightPoints(4, 2, -19.99, 0)).toBe(3);
+    expect(nightPoints(4, 2, -45, 0)).toBe(1);
+    expect(nightPoints(4, 4, -900, 0)).toBe(-4);
+    expect(nightPoints(4, 1, 0, 2)).toBe(2);
+    expect(nightPoints(4, 1, 0, -1)).toBe(4);
+    expect(nightPoints(3, 7, 0, 0)).toBe(1);
+  });
+  it('turns a season length into months and weeks', () => {
+    expect(seasonLengthArgs('2w')).toEqual({ seasonMonths: 1, seasonWeeks: 2 });
+    expect(seasonLengthArgs('2m')).toEqual({ seasonMonths: 2, seasonWeeks: 0 });
+    expect(seasonLengthArgs('6m')).toEqual({ seasonMonths: 6, seasonWeeks: 0 });
+    expect(seasonLengthArgs('off')).toEqual({ seasonMonths: 0, seasonWeeks: 0 });
+  });
+  it('reads the length back, also from older answers', () => {
+    expect(seasonLengthOf({ season_months: 3 })).toBe('3m');
+    expect(seasonLengthOf({ season_months: 0, season_weeks: 2 })).toBe('off');
+    expect(seasonLengthOf({ season_months: 1, season_weeks: 2 })).toBe('2w');
+    expect(seasonLengthOf({ season_months: 1, season_length: '2w' })).toBe('2w');
+  });
+  it('names a season', () => {
+    expect(seasonLabel({ number: 3, title: 'Monsoon' })).toBe('Season 3 · Monsoon');
+    expect(seasonLabel({ number: 3, title: null })).toBe('Season 3');
   });
 });

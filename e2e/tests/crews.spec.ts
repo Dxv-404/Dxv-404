@@ -186,14 +186,14 @@ test('the leader: requests on the crew card and home, approve and decline in one
   await expect(page.locator('.cw-toast')).toContainText('Kunal was declined');
   expect(db.sqlSync(`select status from crew_requests where account_id = '${vik.id}'`)).toBe('declined');
   // roles: make Kabir an admin, then back
-  await page.getByTestId('member-row').filter({ hasText: 'Kabir' }).getByTestId('member-more').click();
+  await page.getByTestId('member-row').filter({ hasText: 'Sam' }).getByTestId('member-more').click();
   await expect(page.getByText('Hand over leadership')).toBeVisible();
   await shot(page, 'member-sheet');
   await page.getByTestId('make-admin').click();
-  await expect(page.getByTestId('member-row').filter({ hasText: 'Kabir' }).locator('.chipt.o')).toHaveText('Admin');
-  await page.getByTestId('member-row').filter({ hasText: 'Kabir' }).getByTestId('member-more').click();
+  await expect(page.getByTestId('member-row').filter({ hasText: 'Sam' }).locator('.chipt.o')).toHaveText('Admin');
+  await page.getByTestId('member-row').filter({ hasText: 'Sam' }).getByTestId('member-more').click();
   await page.getByTestId('remove-admin').click();
-  await expect(page.getByTestId('member-row').filter({ hasText: 'Kabir' }).locator('.chipt')).toHaveCount(0);
+  await expect(page.getByTestId('member-row').filter({ hasText: 'Sam' }).locator('.chipt')).toHaveCount(0);
   // remove Nisha (the box asks first)
   await answer(page, true);
   await page.getByTestId('member-row').filter({ hasText: 'Nisha' }).getByTestId('member-more').click();
@@ -209,7 +209,7 @@ test('the leader: requests on the crew card and home, approve and decline in one
   expect(db.sqlSync(`select string_agg(a.name || ':' || m.role, ' ' order by a.name) from crew_members m join accounts a on a.id = m.account_id where m.crew_id = '${hostel.id}'`)).toBe('Dev:admin Kabir:member Rohan:owner');
   await expect(page.getByTestId('member-row').filter({ hasText: 'Rohan' }).locator('.chipt.a')).toHaveText('Leader');
   // an admin's ⋯ opens the player card (no leader actions)
-  await page.getByTestId('member-row').filter({ hasText: 'Kabir' }).getByTestId('member-more').click();
+  await page.getByTestId('member-row').filter({ hasText: 'Sam' }).getByTestId('member-more').click();
   await expect(page.getByTestId('player-name')).toHaveText('Kabir');
   // hand it back so the other tests see Dev as the leader
   await call(db, rohan, 'transfer_ownership', { p_crew: hostel.id, p_account: dev.id });
@@ -316,6 +316,98 @@ test('the leader’s settings: name, badge and colour, who can host, season leng
   expect(errors).toEqual([]);
   await ctx.close();
 });
+
+// ---------------------------------------------------------------- league scoring and season control (20261103000017)
+// (people of their own, so the other tests' crews and counts stay as they are; a crew for each size, since
+//  "Start a new season now" empties the league)
+async function seedMonsoon(name: string): Promise<{ crew: { id: string; code: string }; lead: Person }> {
+  const [lead, omar, pia, sam] = await Promise.all(['Leela', 'Omar', 'Pia', 'Sam'].map((n) => person(db, n))) as [Person, Person, Person, Person];
+  const crew = await crewWith(db, lead, name, [omar, pia, sam], { badge: 'round', color: '#1f8a5b' });
+  // three nights for Leela, Omar and Pia; one for Sam (unranked: fewer than 3 nights)
+  await game(db, crew.id, 'MC01', 30, [[lead, 600], [omar, 100], [pia, -300], [sam, -400]]);
+  await game(db, crew.id, 'MC02', 20, [[omar, 500], [lead, 100], [pia, -600]]);
+  await game(db, crew.id, 'MC03', 10, [[pia, 900], [lead, -400], [omar, -500]]);
+  return { crew, lead };
+}
+
+for (const [w, h] of [[390, 844], [1440, 900]] as const) {
+  test(`league scoring and season control at ${w} x ${h} (classic, pixel, ivory): columns, unranked, how points work, settings`, async ({ browser }) => {
+    test.setTimeout(600_000);
+    const { crew: mc, lead } = await seedMonsoon(`Monsoon Club ${w}`);
+    for (const theme of ['classic', 'pixel', 'ivory'] as const) {
+      const { ctx, page, errors } = await phone(browser, db, base, { width: w, height: h, theme });
+      await signInAs(ctx, lead);
+      await crewsTab(page);
+      await page.getByTestId('crew-card').filter({ hasText: `Monsoon Club ${w}` }).click();
+      await expect(page.getByTestId('crew-title')).toHaveText(`Monsoon Club ${w}`);
+      // your season in points per night
+      await expect(page.getByTestId('your-season')).toContainText('points per night');
+      // the league: Pts/night · Nights · Won (bb), the unranked under their divider, the explainer
+      await page.getByTestId('crew-tab-league').click();
+      await expect(page.locator('.hint[role=status]')).toHaveCount(0);
+      const headTxt = await page.getByTestId('league-head').first().innerText();
+      expect(headTxt.replace(/\s+/g, ' ').toLowerCase()).toContain('pts/night nights won (bb)');
+      await expect(page.getByTestId('unranked-divider')).toHaveText(/Fewer than 3 nights/i);
+      await expect(page.getByTestId('league-row').filter({ hasText: 'Sam' }).locator('.n')).toHaveText('–');
+      await expect(page.getByTestId('how-points').first()).toContainText('Points per night');
+      await layoutOk(page, `${theme} ${w} league points`); await targetsOk(page, `${theme} ${w} league points`);
+      await shot(page, `scoring-${w}-${theme}-league`);
+      await page.getByTestId('how-info').first().click();
+      await expect(page.locator('.sheet.open .cw-sheet')).toContainText('How points work');
+      await expect(page.locator('.sheet.open .cw-sheet')).toContainText('1st of 9 gets 8');
+      await targetsOk(page, `${theme} ${w} how sheet`);
+      await shot(page, `scoring-${w}-${theme}-how`);
+      await page.locator('.sheet.open .sheet-close').click();
+      await expect(page.locator('.sheet.open')).toHaveCount(0);
+      // a player's card: the season in a compact grid and the points form line
+      await page.getByTestId('league-row').filter({ hasText: 'Sam' }).click();
+      await expect(page.getByTestId('player-stats')).toContainText('pts/night');
+      await expect(page.getByTestId('player-stats')).toContainText('bb/100 hands');
+      await expect(page.getByTestId('form-points')).toBeVisible();
+      await layoutOk(page, `${theme} ${w} player`); await targetsOk(page, `${theme} ${w} player`);
+      await shot(page, `scoring-${w}-${theme}-player`);
+      await page.getByRole('button', { name: 'Back' }).first().click();
+      // settings: League scoring and the season controls
+      await page.getByTestId('crew-gear').click();
+      await expect(page.getByRole('radiogroup', { name: 'League scoring' })).toBeVisible();
+      await expect(page.getByTestId('start-season')).toBeVisible();
+      await layoutOk(page, `${theme} ${w} settings`); await targetsOk(page, `${theme} ${w} settings`);
+      await shot(page, `scoring-${w}-${theme}-settings`);
+      if (theme === 'ivory') { // (last: a new season empties the league)
+        await page.getByRole('radio', { name: 'Average' }).click();
+        await expect.poll(() => db.sqlSync(`select scoring from crews where id = '${mc.id}'`)).toBe('average');
+        await page.getByRole('radio', { name: 'Big blinds won' }).click();
+        await expect.poll(() => db.sqlSync(`select scoring from crews where id = '${mc.id}'`)).toBe('bb');
+        await page.getByRole('radio', { name: 'Points' }).click();
+        await expect.poll(() => db.sqlSync(`select scoring from crews where id = '${mc.id}'`)).toBe('points');
+        await page.getByRole('radio', { name: '2 weeks' }).click();
+        await expect.poll(() => db.sqlSync(`select season_weeks || '/' || season_months from crews where id = '${mc.id}'`)).toBe('2/3');
+        await page.getByRole('radio', { name: '2 months' }).click();
+        await expect.poll(() => db.sqlSync(`select coalesce(season_weeks::text, '-') || '/' || season_months from crews where id = '${mc.id}'`)).toBe('-/2');
+        const day = db.sqlSync(`select ((now() at time zone 'Asia/Kolkata')::date + 20)::text`);
+        await page.getByTestId('set-season-start').fill(day);
+        await page.getByTestId('set-season-start').dispatchEvent('change');
+        await expect.poll(() => db.sqlSync(`select season_anchor::text from crews where id = '${mc.id}'`)).toBe(day);
+        // start a new season now, with a name; then rename it
+        const before = Number(db.sqlSync(`select count(*) from seasons where crew_id = '${mc.id}'`));
+        await answer(page, 'Monsoon');
+        await page.getByTestId('start-season').click();
+        await expect.poll(() => db.sqlSync(`select count(*) from seasons where crew_id = '${mc.id}'`)).toBe(String(before + 1));
+        await expect.poll(() => db.sqlSync(`select title from seasons where id = public.current_season('${mc.id}')`)).toBe('Monsoon');
+        await expect(page.getByTestId('set-season-name')).toHaveValue('Monsoon');
+        await page.getByTestId('set-season-name').fill('Monsoon Cup');
+        await page.getByTestId('set-season-name').press('Enter');
+        await page.getByTestId('set-season-name').blur();
+        await expect.poll(() => db.sqlSync(`select title from seasons where id = public.current_season('${mc.id}')`)).toBe('Monsoon Cup');
+        await expect(page.getByTestId('season-ends-set')).toContainText('Monsoon Cup');
+        await expect(page.getByTestId('season-ends-set')).toContainText(/ends in \d+ days|ends tomorrow|ends today/);
+        await layoutOk(page, `${theme} ${w} settings after`);
+      }
+      expect(errors).toEqual([]);
+      await ctx.close();
+    }
+  });
+}
 
 test('inviting (QR, code, share, a new code, auto-admit) and hosting a crew table (rules filled in, the crew told)', async ({ browser }) => {
   await seedWorld();

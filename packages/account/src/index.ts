@@ -8,7 +8,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { SUPABASE_KEY, SUPABASE_URL } from './ticket';
 import { cleanDeviceCode, type AccountSummary, type Device, type DeviceCode, type DeviceKind, type DeviceNotice, type RedeemResult } from './devices';
 export { SUPABASE_KEY, SUPABASE_URL };
-import type { Badge, CrewCard, CrewGame, CrewLeague, CrewMemberV3, CrewPage, CrewPreview, CrewSettings, Dispute, Hosted, Invitation, JoinRequest, PendingRequest, PlayerCard, SeasonMonths, TableRules, WhoHosts, WrongCode } from './crews';
+import type { Badge, CrewCard, CrewGame, CrewLeague, CrewMemberV3, CrewPage, CrewPreview, CrewSettings, Dispute, Hosted, Invitation, JoinRequest, PendingRequest, PlayerCard, Scoring, SeasonInfo, SeasonMonths, TableRules, WhoHosts, WrongCode } from './crews';
 export * from './crews';
 export * from './devices';
 
@@ -224,12 +224,22 @@ export class Account {
   playerCard(crewId: string, accountId: string): Promise<PlayerCard> { return this.rpc<PlayerCard>('crew_player', { p_crew: crewId, p_account: accountId }); }
   crewDisputes(crewId: string): Promise<Dispute[]> { return this.rpc<Dispute[]>('crew_disputes', { p_crew: crewId }); }
   /** The leader's crew settings; anything left out stays as it is. */
-  crewSettings(crewId: string, change: { name?: string; badge?: Badge; color?: string; seasonMonths?: SeasonMonths; whoHosts?: WhoHosts; membersInvite?: boolean; autoAdmit?: boolean; houseRules?: TableRules }): Promise<CrewSettings> {
-    return this.rpc<CrewSettings>('crew_settings', {
+  crewSettings(crewId: string, change: { name?: string; badge?: Badge; color?: string; seasonMonths?: SeasonMonths; whoHosts?: WhoHosts; membersInvite?: boolean; autoAdmit?: boolean; houseRules?: TableRules;
+    scoring?: Scoring; seasonWeeks?: number; seasonStart?: string }): Promise<CrewSettings> {
+    const args: Record<string, unknown> = {
       p_crew: crewId, p_name: change.name ?? null, p_badge: change.badge ?? null, p_color: change.color ?? null, p_season_months: change.seasonMonths ?? null,
       p_who_hosts: change.whoHosts ?? null, p_members_invite: change.membersInvite ?? null, p_auto_admit: change.autoAdmit ?? null, p_house_rules: change.houseRules ?? null,
-    });
+    };
+    // the newer settings go only when asked, so the call also reaches a database without them
+    if (change.scoring !== undefined) args.p_scoring = change.scoring;
+    if (change.seasonWeeks !== undefined) args.p_season_weeks = change.seasonWeeks;
+    if (change.seasonStart !== undefined) args.p_season_start = change.seasonStart;
+    return this.rpc<CrewSettings>('crew_settings', args);
   }
+  /** "Start a new season now": the season running closes (standings final, trophy given) and the next starts. */
+  startSeasonNow(crewId: string, name?: string | null): Promise<SeasonInfo> { return this.rpc<SeasonInfo>('start_season_now', { p_crew: crewId, p_name: name ?? null }); }
+  /** A season's own name ("Monsoon"); empty clears it. */
+  renameSeason(crewId: string, seasonId: string, name: string): Promise<SeasonInfo> { return this.rpc<SeasonInfo>('rename_season', { p_crew: crewId, p_season: seasonId, p_name: name }); }
   /** "Make a new code": the old one stops working. */
   newCrewCode(crewId: string): Promise<string> { return this.rpc<string>('new_crew_code', { p_crew: crewId }); }
   endSeasonNow(crewId: string): Promise<void> { return this.rpc('end_season_now', { p_crew: crewId }); }

@@ -235,6 +235,21 @@
 .tp.app .cw .lrow .n{width:16px;font:var(--numw,700) 13px var(--num);color:var(--cw-mut)}.tp.app .cw .lrow b{flex:1;font:700 13px var(--ui);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tp.app .cw .lrow .g{width:34px;text-align:center;font-size:12px;color:var(--cw-mut)}
 .tp.app .cw .lrow .v{width:52px;text-align:right;font:var(--numw,700) 13.5px var(--num)}
 .tp.app .cw .lrow.me{box-shadow:inset 0 0 0 1.5px var(--acc);background-image:linear-gradient(color-mix(in srgb,var(--acc) 12%,var(--chipbg)),color-mix(in srgb,var(--acc) 12%,var(--chipbg)))}
+/* league scoring (20261103000017): points per night · nights · won, unranked under a divider, the explainer */
+.tp.app .cw .lrow .pt{width:46px;text-align:right}.tp.app .cw .lhead .hpt{width:46px;text-align:right}.tp.app .cw .lhead .hg{width:34px;text-align:center}
+.tp.app .cw .lrow.ur .n{color:var(--cw-mut)}
+.tp.app .cw .ldiv{display:flex;align-items:center;gap:8px;font:700 10px var(--ui);letter-spacing:.14em;text-transform:uppercase;color:var(--cw-mut);padding:6px 10px 2px}
+.tp.app .cw .ldiv::before,.tp.app .cw .ldiv::after{content:"";flex:1;height:1px;background:var(--line)}
+.tp.app .cw .howpts{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--cw-mut);line-height:1.4}.tp.app .cw .howpts>span{flex:1;min-width:0}
+.tp.app .cw .howpts .ib.info{font:italic 800 16px/1 var(--dsp,serif);color:var(--acc)}
+.tp.app .cw-sheet .howl{margin:0;padding-left:18px;display:grid;gap:8px;font-size:13.5px;line-height:1.45;color:var(--tx)}
+.tp.app .cw .sgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+@media (min-width:600px){.tp.app .cw .sgrid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.tp.app .cw .sgrid>div{display:grid;gap:1px;padding:8px 6px;border-radius:var(--r-btn,10px);box-shadow:inset 0 0 0 1px var(--line);text-align:center;min-width:0;background-image:linear-gradient(var(--chipbg),var(--chipbg));background-color:var(--bg)}
+.tp.app .cw .sgrid b{font:var(--numw,700) 15px var(--num);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tp.app .cw .sgrid small{font-size:10px;color:var(--cw-mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tp.app .cw .formp{display:flex;gap:4px;flex-wrap:wrap}.tp.app .cw .formp span{font:var(--numw,700) 12px var(--num);padding:3px 7px;border-radius:999px;box-shadow:inset 0 0 0 1px var(--line);background:var(--chipbg)}
+.tp.app .cw .sctl{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}.tp.app .cw .sctl input{min-width:0;width:100%}
+.tp.app .cw .sbtns{flex-wrap:wrap;gap:0 8px}.tp.app .cw .sbtns .lnk{text-align:left}
 .tp.app .cw .glist{display:grid;gap:7px}
 .tp.app .cw .gh{margin-top:2px}
 .tp.app .cw .grow{display:flex;align-items:center;gap:8px;padding:10px 11px;border-radius:var(--r-btn,12px);box-shadow:inset 0 0 0 1px var(--line);min-height:52px;width:100%;text-align:left}
