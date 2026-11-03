@@ -8,6 +8,7 @@
 // If the host phone dies, every phone still holds the last checkpoint (the table between hands). Any phone
 // with the host app turns on its hotspot, opens the app, and taps "Carry on with this phone"; the others
 // type the new code. The hand that was cut off is gone; stacks are as before it.
+import { myAvatar } from './avatars';
 import type { OfflineClaim, TableSettings } from '@tp/protocol';
 import { TableClient, newSeatToken, type SocketLike } from '@tp/table';
 import { NetTable } from './net-table';
@@ -105,7 +106,7 @@ export function offlineTable(me: Me): NetTable {
   return new NetTable({
     me: me.id,
     makeClient: (cb) => new TableClient({
-      url: `ws://${location.host}/table/${TABLE}`, table: TABLE, player: me.id, token: me.token, name: me.name,
+      url: `ws://${location.host}/table/${TABLE}`, table: TABLE, player: me.id, token: me.token, name: me.name, avatar: myAvatar(),
       ...(me.role === 'host' && me.settings ? { settings: me.settings } : {}),
       ...(me.claim ? { claim: me.claim } : {}),
       open: (u) => new WebSocket(u) as unknown as SocketLike,

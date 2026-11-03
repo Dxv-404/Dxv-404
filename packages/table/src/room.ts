@@ -9,7 +9,7 @@
 // - the table is saved after every change as "the table at the start of the hand + the inputs since",
 //   which is also exactly the hand's replay log.
 import { Engine, TABLE_DEFAULTS, clampRebuyAmount, isSeed, randomSeed, seedCommit, sha256hex, toHex, type GameEvent, type GameState, type HandRecord, type Input, type PlayerId } from '@tp/engine';
-import { PROTOCOL_VERSION, encode, parseClient, versionOk, type ClientMessage, type DeviceInfo, type ServerMessage, type TableSettings } from '@tp/protocol';
+import { PROTOCOL_VERSION, encode, isAvatarId, parseClient, versionOk, type ClientMessage, type DeviceInfo, type ServerMessage, type TableSettings } from '@tp/protocol';
 import { handPlayers, publicReplay, slimRecord, type EndPlayerRow, type GameInfo } from './record';
 import { FOLD_PAUSE_MS, resultsPauseMs, runoutStreets } from './pause';
 
@@ -58,6 +58,8 @@ export interface Persisted {
   minStacks?: Record<PlayerId, number>;
   /** Offline: the checkpoint this table was carried on from (phones holding another copy are pointed out). */
   continuedFrom?: string | null;
+  /** The avatar each player picked (players without one show their initials). */
+  avatars?: Record<PlayerId, string>;
 }
 
 /** A push notification the server sends for the table (to accounts' phones that allowed it). */
@@ -147,6 +149,8 @@ export class TableRoom {
   private tokens: Record<PlayerId, string> = {};
   /** Seats taken by signed-in accounts: only a ticket for that account may use them. */
   private accountSeats = new Set<PlayerId>();
+  /** The avatar each player picked (only ids this build knows; anything else is shown as initials). */
+  private avatars: Record<PlayerId, string> = {};
   /** This game in the league (made with the table). */
   game: NonNullable<Persisted['game']> | null = null;
   private minStacks: Record<PlayerId, number> = {};
@@ -335,10 +339,15 @@ export class TableRoom {
     if (!this.engine && !m.settings) return fail('no_table', 'This table has not started yet');
     if (!this.engine) { this.create(m.settings, now); this.crew = crew; }
     const e = this.engine!;
-    if (!e.player(m.player)) {
+    // the player's avatar (before a join, so the join's update already carries it): set on every hello that
+    // says (null = initials); an older app that does not say keeps what the seat had
+    const isNew = !e.player(m.player);
+    const avChanged = this.setAvatar(m.player, m.avatar);
+    if (isNew) {
       const name = m.name ?? who?.name;
+      const r = name ? this.apply({ t: 'join', id: m.player, name: this.uniqueName(name), now }) : 'A name is needed to join';
+      if (r && avChanged) { delete this.avatars[m.player]; this.persist(); }
       if (!name) return fail('bad_message', 'A name is needed to join');
-      const r = this.apply({ t: 'join', id: m.player, name: this.uniqueName(name), now });
       if (r) return fail(r === 'The table is full' ? 'table_full' : 'not_allowed', r === 'The table is full' && this.opt.offline ? OFFLINE_FULL : r);
       if (m.token && !who) this.tokens[m.player] = hashToken(m.token);
       if (who) this.accountSeats.add(m.player);
@@ -353,10 +362,12 @@ export class TableRoom {
     }
     this.goingOffline.delete(m.player); // back before anyone noticed
     // mark the player back before this connection counts as listening, so its first message is the welcome
-    if (!e.player(m.player)!.connected) this.apply({ t: 'presence', pid: m.player, connected: true, now });
+    const wasAway = !e.player(m.player)!.connected;
+    if (wasAway) this.apply({ t: 'presence', pid: m.player, connected: true, now });
     st.hello = true; st.pid = m.player;
     this.trackEmpty();
     this.welcome(conn, m.player, m.lastSeq);
+    if (avChanged && !isNew && !wasAway) this.announce(); // a new picture on a seat nobody saw leave: everyone else is told
     if (this.opt.offline) this.sendCheckpoint(conn);
     this.tryDeal(now); // a returning or new player may be all a waiting table needs
     this.reschedule();
@@ -623,6 +634,7 @@ export class TableRoom {
     const cp: Persisted = {
       v: 1, code: this.code, base, inputs: [], seq: 0, host: this.host, tokens: this.tokens, running: false, nextDealAt: null, createdAt: this.createdAt,
       crew: this.crew, accountSeats: [...this.accountSeats], ...(this.game ? { game: { ...this.game } } : {}), minStacks: this.minStacks,
+      ...(Object.keys(this.avatars).length ? { avatars: { ...this.avatars } } : {}),
     };
     const data = JSON.stringify(cp);
     const hash = sha256hex(data);
@@ -743,9 +755,20 @@ export class TableRoom {
     return others.find((p) => p.connected)?.id ?? others[0]?.id ?? null;
   }
 
+  /** Keeps (or clears) a player's avatar from their hello; true if it changed. Unknown ids count as none. */
+  private setAvatar(pid: PlayerId, av: string | null | undefined): boolean {
+    if (av === undefined) return false;
+    const next = isAvatarId(av) ? av : null;
+    if ((this.avatars[pid] ?? null) === next) return false;
+    if (next) this.avatars[pid] = next; else delete this.avatars[pid];
+    this.persist();
+    return true;
+  }
+
   // ---------------- doors out ----------------
   private view(pid: PlayerId | null): Record<string, unknown> {
     const v = this.engine!.viewFor(pid);
+    if (Object.keys(this.avatars).length) v.players = v.players.map((p) => (this.avatars[p.id] ? { ...p, avatar: this.avatars[p.id]! } : p));
     if (v.hand) v.hand = { ...v.hand, proof: null }; // see apply(): the seed never goes to phones
     // when the next hand will be dealt (server clock): a busted player's rebuy sheet drains a bar to it
     const e = this.engine!;
@@ -794,6 +817,7 @@ export class TableRoom {
       v: 1, code: this.code, base: this.base, inputs: this.inputs, seq: this.seq, host: this.host, tokens: this.tokens,
       running: this.running, nextDealAt: this.nextDealAt, createdAt: this.createdAt, acks, crew: this.crew, accountSeats: [...this.accountSeats], ...(this.game ? { game: this.game } : {}), minStacks: this.minStacks,
       ...(this.continuedFrom ? { continuedFrom: this.continuedFrom } : {}),
+      ...(Object.keys(this.avatars).length ? { avatars: { ...this.avatars } } : {}),
     };
   }
 
@@ -817,6 +841,8 @@ export class TableRoom {
     this.base = p.base; this.inputs = p.inputs.slice();
     this.seq = p.seq; this.host = p.host; this.tokens = { ...p.tokens };
     this.running = p.running; this.nextDealAt = p.nextDealAt; this.createdAt = p.createdAt; this.crew = p.crew ?? null; this.accountSeats = new Set(p.accountSeats ?? []); this.game = p.game ?? null; this.minStacks = { ...(p.minStacks ?? {}) }; this.continuedFrom = p.continuedFrom ?? null;
+    this.avatars = {};
+    for (const [pid, av] of Object.entries(p.avatars ?? {})) if (isAvatarId(av)) this.avatars[pid] = av;
     for (const [pid, list] of Object.entries(p.acks ?? {})) this.acks.set(pid, new Map(list.map((a) => [a.actionId, a])));
   }
 

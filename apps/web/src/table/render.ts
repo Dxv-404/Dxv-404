@@ -7,6 +7,7 @@ import { describePartial, parseCard } from '@tp/engine';
 import { FEEL } from './motion';
 import { TIER_LABEL, bestOnBoard, chancesLine, handShort, handWords, nextLabel, runoutTitle, summarize, type ResStage, type Summary } from './results';
 import { heroRebuyHint } from './rebuy-hint';
+import { avatarMarkup, isAvatarId } from '../avatars';
 
 interface ThemeArt { fx: string; arena: string; dealer: string; rail: string; felt: string; pot: string }
 export interface Theme { name: string; css: string; sprite: string; phone: ThemeArt; lap: ThemeArt; avatars: string[] }
@@ -60,8 +61,13 @@ export function avatarLetters(style: string, name: string): string {
 }
 // the span that carries the letters in a lettered avatar (any extra classes: hue, photo)
 const LETTERED = /(<span class="(ini|mono|emb|cam)(?: [^"]*)?">)[^<]*(<\/span>)/;
-/** A player's avatar in this theme: one of the theme's 14 looks, chosen by id, with the letters of their name. */
-export function avatar(th: Theme, id: string, name: string): string {
+/**
+ * A player's avatar. With a picked avatar (`pick`, an id like "train-night-owl"): that avatar, in its own style
+ * whatever the theme. Without one (or an id this build does not know): their initials as before, one of the
+ * theme's 14 looks, chosen by id, with the letters of their name.
+ */
+export function avatar(th: Theme, id: string, name: string, pick?: string | null): string {
+  if (isAvatarId(pick)) return avatarMarkup(pick);
   const art = th.avatars[hash(id) % th.avatars.length] ?? '';
   return art.replace(LETTERED, (_m, open: string, style: string, close: string) => `${open}${esc(avatarLetters(style, name))}${close}`);
 }
@@ -157,7 +163,7 @@ export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: num
     } else if (hp?.cards && hp.cards.length && !s.mini) inner += `<div class="shown">${hp.cards.map((c) => card(c, 22, winners.has(p.id) ? 'win' : '')).join('')}</div>`;
     else if (hp && !hp.folded) inner += `<div class="backs">${back(17)}${back(17)}</div>`;
     const status = !p.connected ? '<span class="status off" title="Connection lost">⏻</span>' : '';
-    inner += `<div class="av">${avatar(th, p.id, p.name)}${status}</div>`;
+    inner += `<div class="av">${avatar(th, p.id, p.name, p.avatar)}${status}</div>`;
     inner += `<div class="plate"><b>${esc(p.name)}</b><i>${fmt(stackOf(p))}</i></div>`;
     let tag: [string, string] | null = null;
     const ev = evals[p.id];
@@ -243,7 +249,7 @@ export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: num
   const away = !mine && o.elsewhere ? players.find((p) => p.id === o.elsewhere!.pid) : undefined;
   const heroMeta = away
     ? `<div class="hmeta" data-testid="hero-elsewhere"><span class="hname">${esc(away.name)}</span><span class="hstack">${fmt(stackOf(away))}</span><span class="hhint"><span class="s1">Your seat is on ${esc(o.elsewhere!.where)}</span></span></div>`
-    : `<div class="hmeta"><span class="hname">${esc(mine?.name ?? 'Watching')}${status ? ` · ${status}` : ''}</span><span class="hstack">${mine ? fmt(stackOf(mine)) : ''}</span>${hintHtml}</div>`;
+    : `<div class="hmeta"><span class="hname">${mine && isAvatarId(mine.avatar) ? `<span class="av hav">${avatar(th, mine.id, mine.name, mine.avatar)}</span>` : ''}${esc(mine?.name ?? 'Watching')}${status ? ` · ${status}` : ''}</span><span class="hstack">${mine ? fmt(stackOf(mine)) : ''}</span>${hintHtml}</div>`;
   const hero = `<section class="hero" aria-label="Your seat">${hc}${heroMeta}${timer}</section>`;
   const actions = actionsHtml(v, mode, rs);
 
@@ -276,7 +282,8 @@ export function winnerCardHtml(v: ScreenView, themeKey: ThemeKey, s: Summary, ti
   const th = THEMES[themeKey] ?? THEMES.classic!;
   const rows = s.winners.map((w, i) => {
     const cards = v.hand?.ps[w.pid]?.cards ?? [];
-    return `<div class="hrow"><span class="av" style="--av:${s.winners.length > 1 ? 40 : 46}px">${avatar(th, w.pid, w.name)}</span>`
+    const pick = v.players.find((p) => p.id === w.pid)?.avatar;
+    return `<div class="hrow"><span class="av" style="--av:${s.winners.length > 1 ? 40 : 46}px">${avatar(th, w.pid, w.name, pick)}</span>`
       + `<div class="txt">${i === 0 ? `<small class="klbl">${TIER_LABEL[tier] ?? ''}</small>` : ''}<b><span class="wn">${esc(w.name)} wins</span> <span class="wa">${fmt(w.amount)}</span></b>`
       + `<span>${esc(w.ev ? handWords(w.ev) : s.line)}</span></div><div class="wcards">${cards.map((c) => card(c, 40, 'win')).join('')}</div></div>`;
   }).join('');

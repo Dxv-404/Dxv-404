@@ -1,0 +1,141 @@
+/* "Choose your avatar" (tools/design/avatars/board.py, the picker section), in the player's theme tokens.
+   Only the avatars' own swatches and tile backgrounds carry their style's colours (the board's palette). */
+.tp.app .avp{position:fixed;inset:0;z-index:900;display:flex;flex-direction:column;background:var(--bg);color:var(--tx);font-family:var(--ui,system-ui,sans-serif);
+  --avp-k:1;--avp-ease:cubic-bezier(.2,.7,.2,1);--avp-panel:var(--panel,var(--chipbg));--avp-r:var(--r-btn,14px);
+  /* readable colours from the theme's tokens, the way the crews screens make them (crews.css: --cw-*k per theme) */
+  --avp-mut:color-mix(in srgb,var(--mut) var(--cw-mutk,100%),var(--tx));
+  --avp-neg:color-mix(in srgb,var(--red,#e0524a) var(--cw-negk,100%),var(--tx));
+  --avp-pos:color-mix(in srgb,#3fbf7f var(--cw-posk,100%),var(--tx));
+  --avp-accn:color-mix(in srgb,var(--acc) var(--cw-acck,100%),var(--tx));
+  /* the accent behind text (the chosen tab, the button): a little deeper where the theme's own pair is under 4.5 : 1 */
+  --avp-accbg:color-mix(in srgb,var(--acc) var(--avp-acck,100%),#000)}
+.th-cyber{--avp-acck:75%}
+.th-edo{--avp-acck:85%}
+html.avp-open,html.avp-open body{overflow:hidden}
+.tp.app .avp *{box-sizing:border-box}
+.tp.app .avp button{font:inherit;color:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.tp.app .avp button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.tp.app .avp .avp-wait{margin:auto;color:var(--avp-mut);font-size:14px;padding:24px;text-align:center}
+
+/* header */
+.tp.app .avp .a-pk-top{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:calc(12px + env(safe-area-inset-top)) 18px 10px;flex:none}
+.tp.app .avp .a-pk-top h2{margin:0;font:var(--dspw,600) 21px/1.2 var(--dsp);text-align:center;min-width:0}
+.tp.app .avp .a-ib{width:44px;height:44px;flex:none;border-radius:12px;border:1px solid var(--line);background:var(--avp-panel);font-size:26px;line-height:1;display:grid;place-items:center;padding:0 0 3px}
+.tp.app .avp .a-ib.a-ghost{visibility:hidden}
+
+/* phone + tablet: one column that scrolls, the button pinned under it */
+.tp.app .avp .a-pk-scroll{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:4px 18px 8px}
+.tp.app .avp .a-pv-hero{display:flex;align-items:center;gap:16px;padding:6px 0 14px}
+.tp.app .avp .av{position:relative;display:block;width:var(--av);height:var(--av);flex:none}
+.tp.app .avp .av>:first-child{width:100%;height:100%;display:block}
+.tp.app .avp .a-pv-txt{min-width:0}
+.tp.app .avp .a-pv-name{font:var(--dspw,600) 22px/1.15 var(--dsp);overflow-wrap:anywhere}
+.tp.app .avp .a-pv-from{display:flex;align-items:center;gap:7px;margin-top:6px;color:var(--avp-mut);font-size:13px}
+.tp.app .avp .a-sw{display:inline-block;width:14px;height:14px;border-radius:4px;flex:none}
+.tp.app .avp .a-pv-pair{display:grid;grid-template-columns:1fr 1.25fr;gap:10px;margin-bottom:14px}
+.tp.app .avp .a-cap{display:block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--avp-mut);margin-top:6px}
+.tp.app .avp .a-felt{height:96px;border-radius:var(--avp-r);background:var(--feltbg);box-shadow:var(--feltsh);display:flex;align-items:center;justify-content:center;overflow:hidden;padding:0 6px}
+.tp.app .avp .a-seatbox{display:grid;grid-template-columns:auto minmax(0,auto);grid-template-rows:auto auto;column-gap:7px;align-items:center;background:var(--plbg);color:var(--tx);padding:5px 10px 5px 5px;border-radius:99px;box-shadow:0 0 0 1.5px var(--acc);max-width:100%}
+.tp.app .avp .a-sav{grid-row:1/3}
+.tp.app .avp .a-snm{font-size:12px;font-weight:600;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:9em}
+.tp.app .avp .a-sst{font-size:11px;color:var(--stack,var(--acc));line-height:1.1;font-variant-numeric:tabular-nums}
+.tp.app .avp .a-pv-crew{background:var(--avp-panel);border:1px solid var(--line);border-radius:var(--avp-r);padding:6px 8px;min-width:0}
+.tp.app .avp .a-crow{display:flex;align-items:center;gap:8px;font-size:13px;padding:3px 2px}
+.tp.app .avp .a-crow.a-dim{opacity:.6}
+.tp.app .avp .a-crow+.a-crow{border-top:1px solid var(--line)}
+.tp.app .avp .a-rk{width:12px;flex:none;color:var(--avp-mut);font-size:12px}
+.tp.app .avp .a-cn{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tp.app .avp .a-cw{color:var(--avp-pos);font-weight:700;font-variant-numeric:tabular-nums}.tp.app .avp .a-cw.a-neg{color:var(--avp-neg)}
+.tp.app .avp .a-pv-crew .a-cap{margin:2px 0}
+
+/* style tabs: the pill is the design's (34 px); the button around it is 44 px tall to tap */
+.tp.app .avp .a-tabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:0 0 7px;margin:-3px -18px 0 0;padding-right:18px;
+  -webkit-mask-image:linear-gradient(90deg,#000 85%,transparent);mask-image:linear-gradient(90deg,#000 85%,transparent)}
+.tp.app .avp .a-tabs::-webkit-scrollbar{display:none}
+.tp.app .avp .a-tab{flex:none;height:44px;padding:0;border:0;background:none;display:flex;align-items:center}
+.tp.app .avp .a-tab .a-pill{display:inline-flex;align-items:center;gap:7px;padding:7px 12px 7px 8px;border-radius:99px;border:1px solid var(--line);background:var(--avp-panel);font:500 13px/1.2 var(--ui,system-ui);white-space:nowrap;transition:background-color calc(.18s * var(--avp-k)) var(--avp-ease),color calc(.18s * var(--avp-k)) var(--avp-ease)}
+.tp.app .avp .a-tab.a-on .a-pill{background:var(--avp-accbg);color:var(--acctx);border-color:var(--avp-accbg);font-weight:700}
+.tp.app .avp .a-tab:focus-visible{outline:none}.tp.app .avp .a-tab:focus-visible .a-pill{outline:2px solid var(--acc);outline-offset:2px}
+
+/* the grid of eight */
+.tp.app .avp .a-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.tp.app .avp .a-tile{position:relative;display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 4px 7px;border-radius:var(--avp-r);border:1px solid var(--line);background:var(--avp-panel);min-width:0;
+  transition:box-shadow calc(.18s * var(--avp-k)) var(--avp-ease),border-color calc(.18s * var(--avp-k)) var(--avp-ease)}
+.tp.app .avp .a-tile .a-art{display:block;width:100%;max-width:64px;aspect-ratio:1;border-radius:10px;background:var(--tbg);padding:3px}
+.tp.app .avp .a-tile .a-art>.tpav{width:100%;height:100%}
+.tp.app .avp .a-tile .a-tn{font-size:11px;line-height:1.15;text-align:center;max-width:100%;min-height:2.3em;display:flex;align-items:center;justify-content:center;overflow-wrap:anywhere}
+.tp.app .avp .a-tile.a-on{border-color:var(--acc);box-shadow:0 0 0 2px var(--acc),0 6px 18px rgba(0,0,0,.25)}
+.tp.app .avp .a-tile.a-on .a-tn{font-weight:700;color:var(--avp-accn)}
+.tp.app .avp .a-chk{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;background:var(--acc);color:var(--acctx);font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px var(--bg)}
+
+/* Initials */
+.tp.app .avp .a-ini-opt{display:flex;align-items:center;gap:12px;width:100%;margin:12px 0 8px;padding:10px 14px 10px 10px;border-radius:var(--avp-r);border:1px dashed var(--line);background:transparent;text-align:left;min-height:62px}
+.tp.app .avp .a-ini-opt.a-on{border-style:solid;border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
+.tp.app .avp .a-it{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.25}
+.tp.app .avp .a-it b{font-size:14px}.tp.app .avp .a-it span{font-size:12px;color:var(--avp-mut)}
+.tp.app .avp .a-radio{width:20px;height:20px;border-radius:50%;border:2px solid var(--line);flex:none;display:grid;place-items:center}
+.tp.app .avp .a-ini-opt.a-on .a-radio{border-color:var(--acc)}
+.tp.app .avp .a-ini-opt.a-on .a-radio::after{content:"";width:10px;height:10px;border-radius:50%;background:var(--acc)}
+.tp.app .avp .a-pk-note{font-size:12px;color:var(--avp-mut);margin:4px 0 0;text-align:center}
+.tp.app .avp .a-pk-foot{flex:none;padding:12px 18px calc(16px + env(safe-area-inset-bottom));border-top:1px solid var(--line);background:var(--bg)}
+.tp.app .avp .a-cta{width:100%;height:50px;border-radius:var(--avp-r);border:0;background:var(--avp-accbg);color:var(--acctx);font:700 16px var(--ui,system-ui)}
+.tp.app .avp .a-cta:disabled{opacity:.7;cursor:progress}
+
+/* tablet: 4 large columns, tabs wrap */
+.tp.app .avp.l-tablet .a-pk-top{padding:calc(22px + env(safe-area-inset-top)) 40px 10px}
+.tp.app .avp.l-tablet .a-pk-scroll{padding:8px 40px 12px}
+.tp.app .avp.l-tablet .a-pv-hero{gap:22px}.tp.app .avp.l-tablet .a-pv-big{--av:120px!important}.tp.app .avp.l-tablet .a-pv-name{font-size:28px}
+.tp.app .avp.l-tablet .a-pv-pair{grid-template-columns:1fr 1.3fr;gap:16px;margin-bottom:22px}
+.tp.app .avp.l-tablet .a-felt{height:120px}
+.tp.app .avp.l-tablet .a-sav{--av:40px!important}.tp.app .avp.l-tablet .a-snm{font-size:15px}.tp.app .avp.l-tablet .a-sst{font-size:13px}
+.tp.app .avp.l-tablet .a-crow{font-size:15px;padding:6px 2px}.tp.app .avp.l-tablet .a-cav{--av:28px!important}
+.tp.app .avp.l-tablet .a-tabs,.tp.app .avp.l-laptop .a-tabs{flex-wrap:wrap;margin-right:0;padding-right:0;-webkit-mask-image:none;mask-image:none;overflow:visible}
+.tp.app .avp.l-tablet .a-tab .a-pill{font-size:14px;padding:9px 14px 9px 10px}
+.tp.app .avp.l-tablet .a-tiles{gap:16px}.tp.app .avp.l-tablet .a-tile{padding:14px 8px 10px}.tp.app .avp.l-tablet .a-tile .a-art{max-width:150px;padding:5px}.tp.app .avp.l-tablet .a-tile .a-tn{font-size:14px;min-height:1.4em}
+.tp.app .avp.l-tablet .a-ini-opt{margin-top:20px}
+.tp.app .avp.l-tablet .a-pk-foot{padding:16px 40px calc(28px + env(safe-area-inset-bottom))}.tp.app .avp.l-tablet .a-cta{max-width:360px;display:block;margin:0 auto}
+
+/* laptop (and phones on their side): the preview on the left, the eight in one row, the other styles below */
+.tp.app .avp.l-laptop .a-pk-top,.tp.app .avp.l-land .a-pk-top{padding:calc(14px + env(safe-area-inset-top)) 36px 14px;border-bottom:1px solid var(--line)}
+.tp.app .avp .a-lap-cols{flex:1;min-height:0;display:grid;grid-template-columns:360px minmax(0,1fr)}
+.tp.app .avp .a-lap-pv{padding:26px 28px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:18px;overflow-y:auto;overscroll-behavior:contain;min-height:0}
+.tp.app .avp .a-lap-main{display:flex;flex-direction:column;min-height:0}
+.tp.app .avp .a-lap-scroll{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:24px 36px 8px}
+.tp.app .avp.l-laptop .a-pv-hero,.tp.app .avp.l-land .a-pv-hero{flex-direction:column;align-items:flex-start;padding:0}
+.tp.app .avp.l-laptop .a-pv-big{--av:128px!important}.tp.app .avp.l-laptop .a-pv-name{font-size:28px}
+.tp.app .avp.l-laptop .a-lap-pv .a-felt{height:150px}
+.tp.app .avp.l-laptop .a-sav{--av:40px!important}.tp.app .avp.l-laptop .a-snm{font-size:15px}.tp.app .avp.l-laptop .a-sst{font-size:13px}
+.tp.app .avp.l-laptop .a-crow,.tp.app .avp.l-land .a-crow{font-size:14px;padding:6px 2px}
+.tp.app .avp.l-laptop .a-tab .a-pill{font-size:14px;padding:9px 15px 9px 10px}
+.tp.app .avp.l-laptop .a-tiles,.tp.app .avp.l-land .a-tiles{grid-template-columns:repeat(8,minmax(0,1fr));gap:14px;margin-top:8px}
+.tp.app .avp.l-laptop .a-tile{padding:14px 8px 12px}.tp.app .avp.l-laptop .a-tile .a-art{max-width:128px;padding:5px}.tp.app .avp.l-laptop .a-tile .a-tn{font-size:13px}
+.tp.app .avp.l-laptop .a-ini-opt,.tp.app .avp.l-land .a-ini-opt{max-width:420px;margin-top:22px}
+.tp.app .avp .a-jump{margin:26px 0 0;font:600 13px var(--ui,system-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--avp-mut)}
+.tp.app .avp .a-strip{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:12px;margin-top:12px}
+.tp.app .avp .a-sp{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 6px;border-radius:12px;border:1px solid var(--line);min-width:0}
+.tp.app .avp .a-sp i{width:56px;height:56px;max-width:100%;display:block}.tp.app .avp .a-sp i>.tpav{width:100%;height:100%}
+.tp.app .avp .a-sp b{font-size:12px;font-weight:600;text-align:center}
+.tp.app .avp.l-laptop .a-pk-foot,.tp.app .avp.l-land .a-pk-foot{border:0;padding:12px 36px calc(24px + env(safe-area-inset-bottom));display:flex;justify-content:flex-end;background:none}
+.tp.app .avp.l-laptop .a-cta,.tp.app .avp.l-land .a-cta{width:240px}
+/* big screens: the main column keeps the board's proportions */
+@media (min-width:1700px){.tp.app .avp .a-lap-cols{grid-template-columns:400px minmax(0,1fr)}.tp.app .avp .a-lap-scroll{padding:28px 56px 8px}.tp.app .avp.l-laptop .a-pk-foot{padding-right:56px}}
+/* phones on their side: short, so everything is smaller and the preview column narrower */
+.tp.app .avp.l-land .a-lap-cols{grid-template-columns:clamp(220px,32vw,280px) minmax(0,1fr)}
+.tp.app .avp.l-land .a-pk-top{padding:calc(6px + env(safe-area-inset-top)) max(16px,env(safe-area-inset-left)) 6px}
+.tp.app .avp.l-land .a-pk-top h2{font-size:18px}
+.tp.app .avp.l-land .a-lap-pv{padding:12px 14px 12px max(14px,env(safe-area-inset-left));gap:10px}
+.tp.app .avp.l-land .a-pv-big{--av:64px!important}.tp.app .avp.l-land .a-pv-name{font-size:18px}.tp.app .avp.l-land .a-pv-from{margin-top:2px}
+.tp.app .avp.l-land .a-pv-hero{flex-direction:row;align-items:center;gap:12px}
+.tp.app .avp.l-land .a-felt{height:72px}
+.tp.app .avp.l-land .a-lap-scroll{padding:10px max(16px,env(safe-area-inset-right)) 4px 16px}
+.tp.app .avp.l-land .a-tiles{gap:8px}.tp.app .avp.l-land .a-tile{padding:6px 3px 5px}.tp.app .avp.l-land .a-tile .a-tn{font-size:10.5px}
+.tp.app .avp.l-land .a-ini-opt{margin:10px 0 4px}
+.tp.app .avp.l-land .a-jump,.tp.app .avp.l-land [data-part=strip]{display:none}
+.tp.app .avp.l-land .a-pk-foot{padding:6px max(16px,env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) 16px}
+.tp.app .avp.l-land .a-cta{height:44px;width:220px}
+@media (max-width:719px){.tp.app .avp.l-land .a-tiles{grid-template-columns:repeat(4,minmax(0,1fr))}.tp.app .avp.l-land .a-tile .a-art{max-width:44px}}
+/* the smallest phones */
+@media (max-width:359px){.tp.app .avp.l-phone .a-pk-scroll{padding:4px 12px 8px}.tp.app .avp.l-phone .a-pk-top{padding-left:12px;padding-right:12px}.tp.app .avp.l-phone .a-pk-foot{padding-left:12px;padding-right:12px}
+  .tp.app .avp.l-phone .a-pv-pair{grid-template-columns:1fr}.tp.app .avp.l-phone .a-tiles{gap:6px}.tp.app .avp.l-phone .a-tile .a-tn{font-size:10.5px}.tp.app .avp.l-phone .a-tabs{margin-right:-12px;padding-right:12px}}
+.tp.app .avp.l-land .a-tabs{margin-right:-16px;padding-right:16px}
+.tp.app .avp.l-land .a-tab .a-pill{padding:6px 11px 6px 7px}

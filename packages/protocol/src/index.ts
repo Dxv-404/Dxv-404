@@ -3,6 +3,9 @@
 // dropped connection is applied once; the server numbers its updates (seq) so a phone that reconnects
 // asks only for what it missed.
 import { z } from 'zod';
+import { AVATAR_PATTERN } from './avatars';
+
+export * from './avatars';
 
 /** Bumped whenever a message shape changes. Servers accept this version and the one before. */
 export const PROTOCOL_VERSION = 1;
@@ -14,6 +17,12 @@ export const REACTIONS = ['👍', '😂', '😮', '😬', '🔥', '👏', '🙏'
 const id = z.string().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/);
 const seed = z.string().regex(/^[0-9a-f]{64}$/);
 const tableCode = z.string().regex(/^[A-Z0-9]{4,12}$/);
+/**
+ * The avatar a player picked (an id like "train-night-owl"), or null for initials. Only the shape is checked
+ * here, so a newer app's avatar does not stop an older server seating the player: the table keeps ids it knows
+ * and shows anything else as initials. Leaving it out (older apps) keeps whatever the seat had.
+ */
+export const AvatarField = z.string().max(40).regex(AVATAR_PATTERN).nullable();
 const action = z.object({
   type: z.enum(['fold', 'check', 'call', 'bet', 'raise', 'allin']),
   to: z.number().int().nonnegative().optional(),
@@ -58,7 +67,7 @@ export type OfflineClaim = z.infer<typeof OfflineClaim>;
 export const ClientMessage = z.discriminatedUnion('t', [
   z.object({
     t: z.literal('hello'), v: z.number().int(), table: tableCode, player: id, token: token.optional(), ticket: z.string().min(16).max(128).optional(),
-    lastSeq: z.number().int().nonnegative(), name: z.string().min(1).max(20).optional(), spectate: z.boolean().optional(), settings: TableSettings.optional(),
+    lastSeq: z.number().int().nonnegative(), name: z.string().min(1).max(20).optional(), avatar: AvatarField.optional(), spectate: z.boolean().optional(), settings: TableSettings.optional(),
     claim: OfflineClaim.optional(),
     /** Offline: fingerprint of the last table checkpoint this phone holds (checked when a table is continued on another phone). */
     cp: z.string().regex(/^[0-9a-f]{64}$/).optional(),

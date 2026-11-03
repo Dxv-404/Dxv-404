@@ -1,6 +1,7 @@
 // Online tables: a table server (Hyderabad, with Cloudflare as the backup) runs the table; phones join with
 // a 4-letter code or a link. Signed-in phones sit as their account (their games go to history and the
 // league); anyone else plays as a guest.
+import { myAvatar, syncFromProfile } from './avatars';
 import { h, toast, ask } from './legacy/ui.js';
 import type { TableSettings } from '@tp/protocol';
 import { TableClient, newSeatToken, type SocketLike } from '@tp/table';
@@ -64,6 +65,7 @@ async function mySeat(code: string, sitting = true): Promise<Seat> {
       const a = new mod.Account();
       if (await a.hasLogin()) {
         await a.start(me.name);
+        await syncFromProfile(a.profile, a);
         return { id: a.profile!.id, name: a.profile!.name, getTicket: () => a.ticket(code) };
       }
     } catch { /* offline accounts: play as a guest */ }
@@ -85,7 +87,7 @@ export function onlineTable(code: string, seat: Seat, settings?: TableSettings, 
   return new NetTable({
     me: seat.id,
     makeClient: (cb) => new TableClient({
-      url: `${serverFor(code)}/table/${code}`, table: code, player: seat.id, name: seat.name,
+      url: `${serverFor(code)}/table/${code}`, table: code, player: seat.id, name: seat.name, avatar: myAvatar(),
       ...(seat.token ? { token: seat.token } : {}), ...(seat.getTicket ? { getTicket: seat.getTicket } : {}),
       ...(settings ? { settings } : {}), ...(spectate ? { spectate: true } : {}),
       open: (u) => new WebSocket(u) as unknown as SocketLike,

@@ -7,6 +7,7 @@ import { currentTheme, setTheme, loadDesignCss } from '../table/screen';
 import type { ScreenView } from '../net-table';
 import { Engine, sha256hex } from '@tp/engine';
 import { settings } from '../legacy/fx.js';
+import { myAvatar, preloadMine } from '../avatars';
 
 interface Piece { bg: string; logo: string; extra: string; css: string }
 interface ThemeScreens { name: string; tagline: string; swatch: { bg: string; felt: string; rim: string; acc: string; tx: string }; loading: Piece; menu: Piece; lapBg: string }
@@ -151,15 +152,20 @@ export function menuScreen(root: HTMLElement, a: MenuActions & { onPlay?: never 
   const th = THEMES[k]!;
   const me = store.get<{ account: string; name: string }>('tp-me');
   const name = me?.name ?? (localStorage.getItem('tp-name') || 'Player');
-  const crews = store.get<{ id: string; name: string; members?: { id: string; name: string }[]; count?: number; season?: number; live?: boolean }[]>('tp-crews') ?? [];
+  const crews = store.get<{ id: string; name: string; members?: { id: string; name: string; avatar?: string | null }[]; count?: number; season?: number; live?: boolean }[]>('tp-crews') ?? [];
   const last = store.get<{ code: string; at: number }>('tp-online-last');
   const lastMin = last ? Math.floor((Date.now() - last.at) / 60_000) : null;
   root.className = 'screen menu with-nav';
   const mm = el('div', 'mm');
 
-  const meBtn = el('button', 'me', `<span class="av">${avatar(th, me?.account ?? `guest-${name}`, name)}</span><span><b>${esc(name)}</b><small>Tap to change name or picture</small></span>`);
+  // your avatar (or initials): tapping the picture opens "Choose your avatar", the rest of the row your profile
+  const meBtn = el('button', 'me', `<span class="av" data-testid="menu-avatar">${avatar(th, me?.account ?? `guest-${name}`, name, myAvatar())}</span><span><b>${esc(name)}</b><small>Tap to change name or picture</small></span>`);
   meBtn.dataset.testid = 'open-profile';
-  meBtn.addEventListener('click', a.profile);
+  meBtn.addEventListener('click', (e) => {
+    if ((e.target as HTMLElement).closest('.av')) { void openPicker(() => { if (root.isConnected) menuScreen(root, a); }); return; }
+    a.profile();
+  });
+  preloadMine();
   const gear = el('button', 'ib', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>');
   gear.setAttribute('aria-label', 'Settings'); gear.dataset.testid = 'open-settings';
   gear.addEventListener('click', a.settings);
@@ -197,7 +203,7 @@ export function menuScreen(root: HTMLElement, a: MenuActions & { onPlay?: never 
     mm.append(el('span', 'sh', 'Your crews'));
     for (const c of crews.slice(0, 4)) {
       const members = (c.members ?? []).slice(0, 4);
-      const stk = members.length ? `<span class="stk">${members.map((m) => `<span class="av">${avatar(th, m.id, m.name)}</span>`).join('')}</span>` : `<span class="stk"><span class="av">${avatar(th, c.id, c.name)}</span></span>`;
+      const stk = members.length ? `<span class="stk">${members.map((m) => `<span class="av">${avatar(th, m.id, m.name, m.avatar)}</span>`).join('')}</span>` : `<span class="stk"><span class="av">${avatar(th, c.id, c.name)}</span></span>`;
       const sub = [c.count ? `${c.count} friend${c.count === 1 ? '' : 's'}` : '', c.season ? `season ${c.season}` : ''].filter(Boolean).join(' · ') || 'League and history';
       const row = el('button', 'crew', `${stk}<b>${esc(c.name)}<small>${esc(sub)}</small></b>${c.live ? '<span class="live">LIVE</span>' : ''}`);
       row.addEventListener('click', () => a.crew(c.id));
@@ -226,6 +232,13 @@ export function menuScreen(root: HTMLElement, a: MenuActions & { onPlay?: never 
   if (!refreshing && me?.account) void refreshCrews().then((changed) => { if (changed && root.isConnected) menuScreen(root, a); });
 }
 
+/** "Choose your avatar" (loaded when first opened); signed-in phones keep the pick on their account. */
+export async function openPicker(onSaved?: () => void): Promise<void> {
+  const [{ openAvatarPicker }, data] = await Promise.all([import('../avatars/picker'), import('../crews/data')]);
+  const me = store.get<{ account: string }>('tp-me');
+  await openAvatarPicker({ account: () => (me?.account ? data.existing() : Promise.resolve(null)), onSaved: () => onSaved?.() });
+}
+
 /** Leaving the menu (the shell calls this before any other screen). */
 export const leaveMenu = (): void => { document.getElementById('app')?.classList.remove('menu'); };
 
@@ -240,9 +253,10 @@ async function refreshCrews(): Promise<boolean> {
     const data = await import('../crews/data');
     const acc = await data.existing();
     if (!acc) return false;
-    const before = localStorage.getItem('tp-crews') + '|' + localStorage.getItem('tp-crews-badge');
+    const now = (): string => [localStorage.getItem('tp-crews'), localStorage.getItem('tp-crews-badge'), localStorage.getItem('tp-avatar')].join('|');
+    const before = now();
     await data.fetchLists(acc);
-    return before !== localStorage.getItem('tp-crews') + '|' + localStorage.getItem('tp-crews-badge');
+    return before !== now();
   } catch { return false; } finally { setTimeout(() => { refreshing = false; }, 30_000); }
 }
 

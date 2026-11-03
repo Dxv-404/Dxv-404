@@ -3,6 +3,7 @@
 // the phone so they show at once next time.
 import type { Account, CrewCard, Invitation, JoinRequest } from '@tp/account';
 import { ask } from '../legacy/ui.js';
+import { syncFromProfile } from '../avatars';
 
 let acct: Account | null = null;
 let started: Promise<Account> | null = null;
@@ -15,7 +16,7 @@ async function load(): Promise<Account> {
 }
 
 const getName = (): string | null => { try { return localStorage.getItem('tp-name'); } catch { return null; } };
-const keepMe = (a: Account): void => { try { localStorage.setItem('tp-me', JSON.stringify({ account: a.profile!.id, name: a.profile!.name })); } catch { /* storage blocked */ } void claimGuest(a); };
+const keepMe = (a: Account): void => { try { localStorage.setItem('tp-me', JSON.stringify({ account: a.profile!.id, name: a.profile!.name })); } catch { /* storage blocked */ } void syncFromProfile(a.profile, a); void claimGuest(a); };
 
 /** The games this phone played as a guest join its profile (once per profile; quietly, in the background). */
 async function claimGuest(a: Account): Promise<void> {

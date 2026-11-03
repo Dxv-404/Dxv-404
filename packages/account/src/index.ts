@@ -77,6 +77,13 @@ export class Account {
     return (this.profile = data as Profile);
   }
 
+  /** Picks an avatar (an id like "train-night-owl"), or null for initials. Returns what the account keeps ("tp:<id>" or null). */
+  async setAvatar(id: string | null): Promise<string | null> {
+    const v = await this.rpc<string | null>('set_avatar', { p_avatar: id });
+    if (this.profile) this.profile = { ...this.profile, avatar_url: v };
+    return v;
+  }
+
   // ---------------- recovery ----------------
   /** A new 12-digit code (shown once; the cloud keeps only a hash). Replaces any earlier code. */
   newRecoveryCode(): Promise<string> { return this.rpc<string>('new_recovery_code'); }

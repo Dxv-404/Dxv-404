@@ -1,7 +1,8 @@
 // Phase 6 gate: the 693 layout checks of the design phase, now on the live table the app draws:
 // 9 themes x 11 screens x 7 table sizes (2 to 15 players), mid-hand with bets, a folded seat, the board and
 // the pot. Nothing may overlap, be cut off or fall off the felt; buttons stay at least 44 px tall; text stays
-// readable. Screenshots of every theme at three sizes go to test-results/tables for a look.
+// readable. Half the players (Dev among them) have a picked avatar, the others their initials. Screenshots of every
+// theme at three sizes go to test-results/tables for a look.
 import { test, expect } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { Engine, sha256hex } from '@tp/engine';
@@ -14,6 +15,10 @@ const DEVICES: [string, number, number][] = [
 const COUNTS = [2, 4, 6, 8, 10, 12, 15];
 const THEMES = ['classic', 'noir', 'ivory', 'velvet', 'cyber', 'ink', 'pixel', 'train', 'edo'];
 const NAMES = ['Dev', 'Aditya', 'Sneha', 'Kabir', 'Meera', 'Arjun', 'Ishaan', 'Tara', 'Riya', 'Zoya', 'Rohan', 'Vikram', 'Nisha', 'Kunal', 'Priya'];
+/** Picked avatars (tools/design/avatars): Dev and every other player have one, from all nine styles; the rest keep
+ *  their initials, so both kinds are checked on every table. */
+const PICKS = ['train-night-owl', 'pixel-wizard', null, 'edo-maiko', null, 'cyber-hex-cat', null, 'ink-crane', null, 'velvet-diamond', null, 'noir-raven', null, 'ivory-swan', null];
+const withPicks = (v: Record<string, unknown>): Record<string, unknown> => ({ ...v, players: (v.players as Record<string, unknown>[]).map((p, i) => (PICKS[i] ? { ...p, avatar: PICKS[i] } : p)) });
 
 /** A table mid-hand, seen from Dev's seat: everyone in, some called, one folded, the flop out, bets on the turn. */
 function viewFor(n: number, scene: 'flop' | 'preflop' | 'showdown' = 'flop'): unknown {
@@ -28,7 +33,7 @@ function viewFor(n: number, scene: 'flop' | 'preflop' | 'showdown' = 'flop'): un
     const pid = e.s.hand!.toAct; const L = e.legal(pid)!;
     e.apply({ t: 'act', pid, action: i === 0 && L.canRaise ? { type: 'bet', to: L.minTo * 3 } : { type: L.canCheck ? 'check' : 'call' }, now: 3 });
   }
-  const v = e.viewFor('p0') as unknown as Record<string, unknown>;
+  const v = withPicks(e.viewFor('p0') as unknown as Record<string, unknown>);
   return { ...v, isHost: true, hostId: 'p0', turnLeft: 14000, turnTotal: 20000, nextIn: 0 };
 }
 
@@ -40,7 +45,7 @@ function sceneView(n: number, scene: 'preflop' | 'showdown'): unknown {
   if (scene === 'showdown') {
     while (e.s.phase === 'hand' && e.s.hand!.toAct) { const pid = e.s.hand!.toAct; const L = e.legal(pid)!; e.apply({ t: 'act', pid, action: { type: L.canCheck ? 'check' : 'call' }, now: 2 }); }
   }
-  const v = e.viewFor('p0') as unknown as Record<string, unknown>;
+  const v = withPicks(e.viewFor('p0') as unknown as Record<string, unknown>);
   return { ...v, isHost: true, hostId: 'p0', turnLeft: 14000, turnTotal: 20000, nextIn: 0 };
 }
 

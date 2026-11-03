@@ -182,3 +182,6 @@ button.dv-row{cursor:pointer}
 /* one seat per player: the watching bar sits under the table's top bar, never over its title */
 .tp .tp-watching[data-testid=watching-elsewhere]{top:calc(60px + env(safe-area-inset-top));width:max-content;max-width:calc(100% - 24px);font:600 13px/1.3 var(--ui);gap:10px}
 .tp .tp-watching[data-testid=watching-elsewhere] .btn{width:auto;min-height:44px;flex:none;font-size:13px}
+/* Profile: your picture is a button (it opens "Choose your avatar") */
+.tp .dv-pcard .dv-avbtn{border:0;padding:0;margin:0;background:none;border-radius:50%;cursor:pointer;min-width:44px;min-height:44px}
+.tp .dv-pcard .dv-avbtn:focus-visible{outline:2px solid var(--acc);outline-offset:4px}

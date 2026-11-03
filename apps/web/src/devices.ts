@@ -7,6 +7,7 @@ import { h, toast as kitToast, ask } from './legacy/ui.js';
 import { qrSvg, Scanner } from './legacy/qr.js';
 import { settings } from './legacy/fx.js';
 import { avatar, THEMES } from './table/render';
+import { avatarFromStored } from './avatars';
 import { currentTheme } from './table/screen';
 import { FEEL } from './table/motion';
 import type { Account, AccountSummary, Device, DeviceKind, DeviceNotice, RedeemResult } from '@tp/account';
@@ -523,7 +524,7 @@ function signedIn(ctx: DevCtx, r: Extract<RedeemResult, { ok: true }>): void {
     const stat = (n: number, what: string): HTMLElement => h('div', { class: 'dv-stat' }, h('b', {}, String(n)), h('small', {}, what));
     el.append(head('You’re in', '', null),
       h('div', { class: 'dv-linkart', 'aria-hidden': 'true' }, h('span', { class: 'd1', html: deviceIcon(r.from ?? 'laptop') }), h('span', { class: 'dv-wire' }, h('i', {}), h('i', {}), h('i', {})), h('span', { class: 'd2', html: deviceIcon(kind) })),
-      h('div', { class: 'dv-pcard' }, h('span', { class: 'av', style: { '--av': '70px' }, html: avatar(th, r.profile.id, r.profile.name) }),
+      h('div', { class: 'dv-pcard' }, h('span', { class: 'av', style: { '--av': '70px' }, html: avatar(th, r.profile.id, r.profile.name, avatarFromStored(r.profile.avatar_url)) }),
         h('b', { 'data-testid': 'welcome' }, `Welcome back, ${r.profile.name}`), h('span', { class: 'mut' }, `This ${kind} is now your account too`)),
       h('div', { class: 'dv-three', 'data-testid': 'moved' }, stat(r.moved.crews, r.moved.crews === 1 ? 'crew' : 'crews'), stat(r.moved.games, r.moved.games === 1 ? 'game' : 'games'), stat(r.moved.trophies, r.moved.trophies === 1 ? 'trophy' : 'trophies')),
       h('div', { class: 'dv-pnl', style: { gap: '6px', fontSize: '12.5px', lineHeight: '1.5' } }, h('span', { class: 'dv-klbl' }, 'What moved with you'),

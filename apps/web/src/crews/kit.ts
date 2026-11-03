@@ -33,7 +33,8 @@ export const ic = (name: string, cls = 'ico'): string => `<i class="${cls}">${IC
 
 // ---------------------------------------------------------------- people
 const theme = () => THEMES[currentTheme()]!;
-export const av = (f: Face, size = 36, cls = ''): string => `<span class="av ${cls}" style="--av:${size}px">${avatar(theme(), f.id, f.name)}</span>`;
+/** A player's face: their picked avatar (in its own style) or their initials in the theme's. */
+export const av = (f: Face, size = 36, cls = ''): string => `<span class="av ${cls}" style="--av:${size}px">${avatar(theme(), f.id, f.name, f.avatar)}</span>`;
 export const stack = (faces: Face[], size = 26): string => `<span class="stk" style="--av:${size}px">${faces.map((f) => av(f, size)).join('')}</span>`;
 export const cardImg = (code: string, w: number): string => cardHtml(code, w);
 export const themeKey = (): ThemeKey => currentTheme();

@@ -10,6 +10,7 @@ import { cleanCrewCode, crewLink, formatCrewCode, isCrewCode, parseCrewLink, res
 import { evalBest, parseCard, cardStr } from '@tp/engine';
 import type { TableSettings } from '@tp/protocol';
 import { navBar, type MenuActions } from '../ui/shell';
+import { myAvatar } from '../avatars';
 import { currentTheme } from '../table/screen';
 import { ask, toast } from '../legacy/ui.js';
 import { qrSvg, Scanner } from '../legacy/qr.js';
@@ -145,7 +146,7 @@ export function crewsUi(deps: CrewsDeps) {
       if (k === 'crews') b.setAttribute('aria-current', 'page');
       n.append(b);
     }
-    n.append(el('span', 'sp'), btn('rme', `${av({ id: me?.account ?? `guest-${name}`, name }, 34)}${withLogo ? `<b>${esc(name)}</b>` : ''}`, a.profile, { 'aria-label': 'Profile' }));
+    n.append(el('span', 'sp'), btn('rme', `${av({ id: me?.account ?? `guest-${name}`, name, avatar: myAvatar() }, 34)}${withLogo ? `<b>${esc(name)}</b>` : ''}`, a.profile, { 'aria-label': 'Profile' }));
     return n;
   }
 
@@ -711,7 +712,7 @@ export function crewsUi(deps: CrewsDeps) {
     if (all) return `<div class="pnl req" style="gap:8px" data-testid="requests"><span class="klbl">Wants to join · ${p.requests.length}</span>${rows}</div>`;
     return `<div class="pnl req" data-testid="requests"><div class="hrow"><h2 class="ttl" style="font-size:15px">${p.requests.length} ${p.requests.length === 1 ? 'person wants' : 'people want'} to join</h2><span class="sp"></span><button class="lnk" data-x="to-members">See all</button></div>${rows}</div>`;
   }
-  const reqRow = (r: PendingRequest, size: number): string => `<div class="hrow mrow rq" data-req="${r.id}">${av({ id: r.account_id, name: r.name }, size)}<span class="txt"><b>${esc(r.name)}</b><small>asked ${ago(r.asked_at)}${r.invited_by ? ` · invited by ${esc(r.invited_by)}` : r.plays_at ? ` · plays at ${esc(r.plays_at)}` : ''}</small></span>`
+  const reqRow = (r: PendingRequest, size: number): string => `<div class="hrow mrow rq" data-req="${r.id}">${av({ id: r.account_id, name: r.name, avatar: r.avatar ?? null }, size)}<span class="txt"><b>${esc(r.name)}</b><small>asked ${ago(r.asked_at)}${r.invited_by ? ` · invited by ${esc(r.invited_by)}` : r.plays_at ? ` · plays at ${esc(r.plays_at)}` : ''}</small></span>`
     + `<button class="mb n" data-x="req-no" data-id="${r.id}" aria-label="Decline ${esc(r.name)}" data-testid="req-no">✕</button><button class="mb y" data-x="req-yes" data-id="${r.id}" aria-label="Let ${esc(r.name)} in" data-testid="req-yes">${ICON.check}</button></div>`;
   function seasonHtml(p: CrewPage): string {
     const m = p.me;
@@ -731,12 +732,12 @@ export function crewsUi(deps: CrewsDeps) {
   }
   /** the podium's figure for a row in the crew's scoring */
   const podiumFig = (r: { bb: number; avg?: number | null }, sc: Scoring): string => (sc === 'points' ? `${ptsText(r.avg ?? 0)} pts` : sc === 'average' ? `${bbText(r.avg ?? 0)}/night` : bbText(r.bb));
-  function podiumHtml(all: { account_id: string; name: string; bb: number; avg?: number | null; ranked?: boolean }[], big: boolean, sc: Scoring): string {
+  function podiumHtml(all: { account_id: string; name: string; avatar?: string | null; bb: number; avg?: number | null; ranked?: boolean }[], big: boolean, sc: Scoring): string {
     const rows = all.filter((r) => r.ranked !== false);
     if (!rows.length) return `<p class="hint" style="text-align:center">${all.length ? 'The podium fills once players have 3 nights.' : 'The podium fills after the first game.'}</p>`;
     const order = [rows[1], rows[0], rows[2]];
     const cls = ['p2', 'p1', 'p3'];
-    return `<div class="podium${big ? ' big' : ''}">${order.map((r, i) => (r ? `<button class="pd ${cls[i]}" data-x="player" data-id="${r.account_id}">${av({ id: r.account_id, name: r.name }, big ? (i === 1 ? 52 : 42) : i === 1 ? 44 : 36)}<b>${esc(r.name)}</b><small>${podiumFig(r, sc)}</small><i>${i === 1 ? 1 : i === 0 ? 2 : 3}</i></button>` : '<span></span>')).join('')}</div>`;
+    return `<div class="podium${big ? ' big' : ''}">${order.map((r, i) => (r ? `<button class="pd ${cls[i]}" data-x="player" data-id="${r.account_id}">${av({ id: r.account_id, name: r.name, avatar: r.avatar ?? null }, big ? (i === 1 ? 52 : 42) : i === 1 ? 44 : 36)}<b>${esc(r.name)}</b><small>${podiumFig(r, sc)}</small><i>${i === 1 ? 1 : i === 0 ? 2 : 3}</i></button>` : '<span></span>')).join('')}</div>`;
   }
   function lastGameHtml(p: CrewPage): string {
     const g = p.last_game;
@@ -782,7 +783,7 @@ export function crewsUi(deps: CrewsDeps) {
     } catch (e) { if (live(my)) body.innerHTML = failHtml(e); }
   }
   function gamesBlock(p: CrewPage, games: CrewGame[]): string {
-    const rows = games.map((g) => `<button class="grow" data-x="game" data-id="${g.id}"><div class="txt"><b>${dayMonth(g.started_at)}</b><small>${g.offline ? 'Offline' : esc(g.table)} · ${g.players} players</small></div>${g.winner ? `<div class="win">${av({ id: g.winner.id ?? g.winner.name, name: g.winner.name }, 24)}<span>${bbText(g.winner.bb, false)}</span></div>` : ''}<span class="me ${upDown(g.mine)}">${g.mine != null ? bbText(g.mine, false) : ''}</span></button>`).join('');
+    const rows = games.map((g) => `<button class="grow" data-x="game" data-id="${g.id}"><div class="txt"><b>${dayMonth(g.started_at)}</b><small>${g.offline ? 'Offline' : esc(g.table)} · ${g.players} players</small></div>${g.winner ? `<div class="win">${av({ id: g.winner.id ?? g.winner.name, name: g.winner.name, avatar: g.winner.avatar ?? null }, 24)}<span>${bbText(g.winner.bb, false)}</span></div>` : ''}<span class="me ${upDown(g.mine)}">${g.mine != null ? bbText(g.mine, false) : ''}</span></button>`).join('');
     void p;
     return `<div class="pnl"><div class="hrow"><h2 class="ttl">Games</h2><span class="sp"></span><button class="lnk" data-x="to-games">All ›</button></div><div class="glist">${rows || '<p class="hint">No games yet. Host the first crew table.</p>'}</div></div>`;
   }
@@ -807,7 +808,7 @@ export function crewsUi(deps: CrewsDeps) {
     const row = (r: LeagueRowV3): string => {
       const tr = r.trend ? `<span class="trend ${r.trend === 'up' ? 'tu' : 'td'}">${r.trend === 'up' ? ICON.up : ICON.down}</span>` : '<span class="trend"></span>';
       const lead = sc === 'points' ? `<span class="v pt">${ptsText(r.avg ?? 0)}</span>` : sc === 'average' ? `<span class="v pt ${upDown(r.avg)}">${bbText(r.avg ?? 0, false)}</span>` : '';
-      return `<button class="lrow${r.me ? ' me' : ''}${r.ranked === false ? ' ur' : ''}" data-x="player" data-id="${r.account_id}" data-testid="league-row"><span class="n">${r.rank ?? '–'}</span>${av({ id: r.account_id, name: r.name }, 30)}<b>${esc(r.name)}${r.me ? ' (you)' : ''}</b>${tr}${lead}<span class="g">${r.games}</span><span class="v ${upDown(r.bb)}">${bbText(r.bb, false)}</span></button>`;
+      return `<button class="lrow${r.me ? ' me' : ''}${r.ranked === false ? ' ur' : ''}" data-x="player" data-id="${r.account_id}" data-testid="league-row"><span class="n">${r.rank ?? '–'}</span>${av({ id: r.account_id, name: r.name, avatar: r.avatar ?? null }, 30)}<b>${esc(r.name)}${r.me ? ' (you)' : ''}</b>${tr}${lead}<span class="g">${r.games}</span><span class="v ${upDown(r.bb)}">${bbText(r.bb, false)}</span></button>`;
     };
     return ranked.map(row).join('') + (unranked.length ? `<div class="ldiv" data-testid="unranked-divider"><span>Fewer than 3 nights</span></div>${unranked.map(row).join('')}` : '');
   }
@@ -885,7 +886,7 @@ export function crewsUi(deps: CrewsDeps) {
       if (gg !== grp) { grp = gg; out += `<span class="klbl gh">${esc(gg)}</span>`; }
       const tag = g.status === 'void' ? '<span class="chipt o">void</span>' : g.offline ? '<span class="chipt">offline</span>' : '';
       out += `<button class="grow${g.status === 'void' ? ' void' : ''}" data-x="game" data-id="${g.id}" data-testid="game-row"><div class="txt"><b>${dayMonth(g.started_at)} · ${clock(g.started_at)}</b><small>${g.offline ? 'Offline' : esc(g.table)} · ${g.players} players${g.ended_at ? ` · ${duration(g.started_at, g.ended_at)}` : ''}</small></div>`
-        + (g.winner ? `<div class="win">${av({ id: g.winner.id ?? g.winner.name, name: g.winner.name }, 26)}<span>${bbText(g.winner.bb, false)}</span></div>` : '')
+        + (g.winner ? `<div class="win">${av({ id: g.winner.id ?? g.winner.name, name: g.winner.name, avatar: g.winner.avatar ?? null }, 26)}<span>${bbText(g.winner.bb, false)}</span></div>` : '')
         + `<span class="me ${upDown(g.mine)}">${g.mine != null ? bbText(g.mine, false) : ''}</span>${tag}<span class="go">›</span></button>`;
     }
     body.innerHTML = seg + `<div class="glist" data-testid="games">${out || `<p class="hint">${f === 'mine' ? 'You have not played a crew game yet.' : f === 'trophies' ? 'No trophies won at this crew’s tables yet.' : 'No games yet. Every crew table shows up here.'}</p>`}</div>`;
@@ -902,7 +903,7 @@ export function crewsUi(deps: CrewsDeps) {
     const d = (Date.now() - new Date(m.joined_at).getTime()) / 86400000;
     return d < 7 ? `joined ${ago(m.joined_at)}` : `joined ${monthName(m.joined_at)}`;
   }
-  const memberRow = (m: CrewMemberV3): string => `<div class="hrow mrow" data-testid="member-row" data-name="${esc(m.name)}"><button class="mhit" data-x="player" data-id="${m.account_id}" aria-label="${esc(m.name)}">${av({ id: m.account_id, name: m.name }, 36)}${m.at_table != null ? '<i class="onl" aria-label="at a table"></i>' : ''}<span class="txt"><b>${esc(m.name)}</b><small>${esc(memberSub(m))}</small></span></button>${roleChip(m.role)}`
+  const memberRow = (m: CrewMemberV3): string => `<div class="hrow mrow" data-testid="member-row" data-name="${esc(m.name)}"><button class="mhit" data-x="player" data-id="${m.account_id}" aria-label="${esc(m.name)}">${av({ id: m.account_id, name: m.name, avatar: m.avatar ?? null }, 36)}${m.at_table != null ? '<i class="onl" aria-label="at a table"></i>' : ''}<span class="txt"><b>${esc(m.name)}</b><small>${esc(memberSub(m))}</small></span></button>${roleChip(m.role)}`
     + (!m.me ? `<button class="mm" data-x="member-more" data-id="${m.account_id}" aria-label="What you can do with ${esc(m.name)}" data-testid="member-more">${ICON.more}</button>` : '<span class="mm"></span>') + '</div>';
   async function membersTab(body: HTMLElement, p: CrewPage, my: number): Promise<void> {
     body.innerHTML = '<p class="hint" role="status">Loading…</p>';
@@ -957,7 +958,7 @@ export function crewsUi(deps: CrewsDeps) {
     if (p.role !== 'owner') return go({ k: 'player', crewId: p.crew.id, accountId });
     const box = sheetBox();
     const since = `Member since ${monthName(m.joined_at)} · ${m.games} game${m.games === 1 ? '' : 's'}${m.bb != null ? ` · ${bbText(m.bb)}` : ''}`;
-    box.innerHTML = `<div class="hrow">${av({ id: m.account_id, name: m.name }, 54)}<span class="txt"><b class="sh2">${esc(m.name)}</b><small class="mut">${esc(since)}</small></span></div>`
+    box.innerHTML = `<div class="hrow">${av({ id: m.account_id, name: m.name, avatar: m.avatar ?? null }, 54)}<span class="txt"><b class="sh2">${esc(m.name)}</b><small class="mut">${esc(since)}</small></span></div>`
       + `<div class="alist"><button class="row" data-x="card">${ic('cards')}<span class="txt"><b>Player card</b><small>Results, best hands, trophies</small></span><span class="go">›</span></button>`
       + (m.role === 'admin'
         ? `<button class="row" data-x="unadmin" data-testid="remove-admin">${ic('lock')}<span class="txt"><b>Remove as admin</b><small>Back to a member</small></span><span class="go">›</span></button>`
@@ -1229,7 +1230,7 @@ export function crewsUi(deps: CrewsDeps) {
     }
     const pct = pc.hands ? Math.round((100 * pc.won) / pc.hands) : null;
     pane.innerHTML = head(pc.name, `${p.crew.name} · ${role}`)
-      + `<div class="pcard">${av({ id: pc.account_id, name: pc.name }, 86)}<b data-testid="player-name">${esc(pc.name)}</b><span class="mut" style="font-size:12.5px">${esc(sub)}</span></div>`
+      + `<div class="pcard">${av({ id: pc.account_id, name: pc.name, avatar: pc.avatar ?? null }, 86)}<b data-testid="player-name">${esc(pc.name)}</b><span class="mut" style="font-size:12.5px">${esc(sub)}</span></div>`
       + `<div class="three"><div class="stat"><b>${pc.games}</b><small>${scoringOf(p) === 'bb' ? 'games' : 'nights'}</small></div><div class="stat"><b class="${upDown(pc.bb)}">${pc.bb == null ? '–' : bbText(pc.bb, false)}</b><small>bb this season</small></div><div class="stat"><b>${pct == null ? '–' : `${pct}%`}</b><small>hands won</small></div></div>`
       + statsGrid(pc)
       + `<div class="pnl"><span class="klbl">Best hand this season</span>${best}</div>`

@@ -34,6 +34,8 @@ export interface ClientOptions {
   /** Signed-in phones: fetch a table ticket for each connection (fresh = the last one was refused). */
   getTicket?(fresh: boolean): Promise<string>;
   name?: string;
+  /** The avatar the player picked (an id), or null for initials; left out, the table keeps what the seat had. */
+  avatar?: string | null;
   spectate?: boolean;
   settings?: TableSettings;
   open(url: string): SocketLike;
@@ -180,6 +182,7 @@ export class TableClient {
         this.raw({
           t: 'hello', v: PROTOCOL_VERSION, table: this.o.table, player: this.o.player, lastSeq: this.seq,
           ...(ticket ? { ticket } : {}), ...(this.o.token ? { token: this.o.token } : {}), ...(this.o.name ? { name: this.o.name } : {}),
+          ...(this.o.avatar !== undefined ? { avatar: this.o.avatar } : {}),
           ...(this.o.spectate ? { spectate: true } : {}), ...(this.o.settings ? { settings: this.o.settings } : {}),
           ...(this.o.claim ? { claim: this.o.claim } : {}), ...(cp ? { cp } : {}),
         });

@@ -213,6 +213,8 @@ export interface PlayerView {
   id: PlayerId; name: string; seat: number; chair: number; stack: number; sittingOut: boolean; away: boolean;
   connected: boolean; busted: boolean; leaving: boolean; buyins: number; bank: number;
   waitForBB: boolean; missedSB: boolean; missedBB: boolean; rebuysUsed: number;
+  /** The avatar the player picked (an id like "train-night-owl"; added by the table server). None: initials. */
+  avatar?: string;
 }
 
 export interface HandPlayerView {

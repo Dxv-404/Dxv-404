@@ -9,7 +9,8 @@ export type Scoring = 'points' | 'bb' | 'average';
 /** A season length as the settings show it: 2 weeks, 1/2/3/6 months, or off. */
 export type SeasonLength = '2w' | '1m' | '2m' | '3m' | '6m' | 'off';
 export type CrewRole = 'owner' | 'admin' | 'member';
-export interface Face { id: string; name: string }
+/** A player's face: their avatar (an id, see @tp/protocol/avatars) or, without one, their initials. */
+export interface Face { id: string; name: string; avatar?: string | null }
 export interface Usual { day: string; hour: number | null }
 /** The crew's table running now (opened in the last hours and not finished). */
 export interface LiveTable { table: string | null; mode: 'online' | 'offline' | 'qr'; since: string; rules: TableRules; host: string | null; faces: Face[] }
@@ -30,7 +31,7 @@ export interface CrewPreview {
 }
 export interface WrongCode { found: false; tries_left: number; rest: number; code: string }
 export interface JoinRequest { id: string; crew_id: string; name: string; color: string; badge: Badge; status: 'pending' | 'approved' | 'declined'; notify: boolean; asked_at: string; decided_at: string | null; leader: string | null }
-export interface PendingRequest { id: string; account_id: string; name: string; asked_at: string; invited_by: string | null; plays_at: string | null }
+export interface PendingRequest { id: string; account_id: string; name: string; avatar?: string | null; asked_at: string; invited_by: string | null; plays_at: string | null }
 export interface Invitation { crew_id: string; name: string; color: string; badge: Badge; code: string; invited_by: string | null; at: string; members: number; season: number | null; seasons_on: boolean }
 export interface SeasonInfo { id: string; number: number; name: string; title?: string | null; starts_at: string; ends_at: string | null; closed?: boolean; days_left?: number | null }
 export interface CrewSettings { id: string; name: string; color: string; badge: Badge; season_months: SeasonMonths; who_hosts: WhoHosts; members_invite: boolean; auto_admit: boolean; house_rules: TableRules; created_at?: string;
@@ -41,19 +42,19 @@ export interface CrewPage {
   members: number; leader: Face | null; season: SeasonInfo | null; next_season: number;
   seasons: { id: string; number: number; name: string; title?: string | null; closed: boolean }[];
   me: { rank: number | null; bb: number | null; games: number; of: number; spark: number[]; points?: number | null; avg?: number | null; ranked?: boolean };
-  podium: { account_id: string; name: string; bb: number; rank: number | null; points?: number; avg?: number; games?: number; ranked?: boolean }[];
-  last_game: { id: string; started_at: string; ended_at: string; players: number; winner: { id: string | null; name: string; bb: number | null } | null; mine: number | null; offline: boolean; table: string } | null;
+  podium: { account_id: string; name: string; avatar?: string | null; bb: number; rank: number | null; points?: number; avg?: number; games?: number; ranked?: boolean }[];
+  last_game: { id: string; started_at: string; ended_at: string; players: number; winner: { id: string | null; name: string; bb: number | null; avatar?: string | null } | null; mine: number | null; offline: boolean; table: string } | null;
   live: LiveTable | null; usual: Usual | null; requests: PendingRequest[]; disputes: number;
 }
 export interface LeagueRowV3 {
-  account_id: string; name: string; games: number; bb: number; rank: number | null; trend: 'up' | 'down' | ''; member: boolean; me: boolean;
+  account_id: string; name: string; avatar?: string | null; games: number; bb: number; rank: number | null; trend: 'up' | 'down' | ''; member: boolean; me: boolean;
   points?: number; avg?: number; wins?: number; top3?: number; busts?: number; rebuys?: number; ranked?: boolean;
 }
 export interface CrewLeague { season: SeasonInfo | null; rows: LeagueRowV3[]; scoring?: Scoring; min_nights?: number }
-export interface CrewGame { id: string; started_at: string; ended_at: string | null; table: string; status: 'ended' | 'void' | 'live'; offline: boolean; waiting: boolean; casual: boolean; hands: number; players: number; winner: { id: string | null; name: string; bb: number | null } | null; mine: number | null; trophy: boolean }
-export interface CrewMemberV3 { account_id: string; name: string; role: CrewRole; joined_at: string; me: boolean; last_played: string | null; at_table: string | null; games: number; bb: number | null }
+export interface CrewGame { id: string; started_at: string; ended_at: string | null; table: string; status: 'ended' | 'void' | 'live'; offline: boolean; waiting: boolean; casual: boolean; hands: number; players: number; winner: { id: string | null; name: string; bb: number | null; avatar?: string | null } | null; mine: number | null; trophy: boolean }
+export interface CrewMemberV3 { account_id: string; name: string; avatar?: string | null; role: CrewRole; joined_at: string; me: boolean; last_played: string | null; at_table: string | null; games: number; bb: number | null }
 export interface PlayerCard {
-  account_id: string; name: string; role: CrewRole | null; joined_at: string | null; member: boolean; first_season: number | null;
+  account_id: string; name: string; avatar?: string | null; role: CrewRole | null; joined_at: string | null; member: boolean; first_season: number | null;
   season: number | null; rank: number | null; games: number; bb: number | null; hands: number; won: number;
   best: { rank: number; at: string; cards: string[] | null; board: string[] | null } | null; form: number[];
   trophies: { kind: string; at: string; season: number | null }[];

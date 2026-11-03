@@ -7,6 +7,7 @@ import { offerPush } from '../more-screens.ts';
 import { devicesBlock, drawDeviceNotices, reportDevice, useAccount, addDevice, routeDevice, checkDeviceNotices } from '../devices.ts';
 import { avatar, THEMES } from '../table/render.ts';
 import { currentTheme } from '../table/screen.ts';
+import { avatarFromStored, syncFromProfile } from '../avatars/index.ts';
 
 let mod = null;
 let acct = null;
@@ -81,12 +82,26 @@ export function accountScreens({ screen, openSheet, home, nav, crews = null }) {
     void import('../crews/data.ts').then((m) => m.claimGuestGames()).catch(() => {});
     const th = THEMES[currentTheme()] ?? THEMES.classic;
     const nameEl = h('b', { 'data-testid': 'profile-name' }, p.name);
-    const avEl = h('span', { class: 'av', style: { '--av': '78px' }, html: avatar(th, p.id, p.name) });
+    // your picture: tap it to choose an avatar (any of the 72, from any style) or go back to initials
+    const pick = () => avatarFromStored(a.profile?.avatar_url ?? null);
+    const avEl = h('button', { type: 'button', class: 'av dv-avbtn', style: { '--av': '78px' }, 'aria-label': 'Change picture', 'data-testid': 'profile-avatar', html: avatar(th, p.id, p.name, pick()) });
+    const choosePicture = async () => {
+      const { openAvatarPicker } = await import('../avatars/picker.ts');
+      await openAvatarPicker({ account: async () => a, onSaved: () => { avEl.innerHTML = avatar(th, p.id, a.profile?.name ?? p.name, pick()); } });
+    };
+    avEl.addEventListener('click', choosePicture);
+    // (a pick this phone made as a guest goes up to a new profile: the picture shows it once it is kept)
+    void syncFromProfile(p, a).then(() => { avEl.innerHTML = avatar(th, p.id, a.profile?.name ?? p.name, pick()); });
     const rename = async () => {
-      const n = await ask('Your name', { yes: 'Save', input: { value: p.name, max: 20, placeholder: 'Your name' } });
+      const n = await ask('Your name', { yes: 'Save', input: { value: a.profile?.name ?? p.name, max: 20, placeholder: 'Your name' } });
       const name = String(n ?? '').trim();
       if (!name) return;
-      try { await a.rename(name); localStorage.setItem('tp-name', name); nameEl.textContent = name; avEl.innerHTML = avatar(th, p.id, name); toast('Name saved'); } catch (err) { toast(err.message); }
+      try { await a.rename(name); localStorage.setItem('tp-name', name); nameEl.textContent = name; avEl.innerHTML = avatar(th, p.id, name, pick()); toast('Name saved'); } catch (err) { toast(err.message); }
+    };
+    const nameOrPicture = () => {
+      const s = openSheet(h('div', { class: 'menu-actions', 'data-testid': 'name-or-picture' }, h('h2', {}, 'Name and picture'),
+        h('button', { class: 'btn secondary', 'data-testid': 'change-picture', onclick: () => { s.close(); void choosePicture(); } }, 'Change picture', h('small', {}, 'Pick an avatar, or use your initials')),
+        h('button', { class: 'btn secondary', 'data-testid': 'rename', onclick: () => { s.close(); void rename(); } }, 'Change name')), { label: 'Name and picture' });
     };
     const codeBox = h('div', { class: 'block-inner' });
     const crewsBox = h('div', {});
@@ -94,7 +109,7 @@ export function accountScreens({ screen, openSheet, home, nav, crews = null }) {
     const noticeBox = h('div', {});
     body.replaceChildren(
       noticeBox, alertBox,
-      h('div', { class: 'dv-pcard' }, avEl, nameEl, h('button', { class: 'dv-link', 'data-testid': 'change-name', onclick: rename }, 'Change name or picture')),
+      h('div', { class: 'dv-pcard' }, avEl, nameEl, h('button', { class: 'dv-link', 'data-testid': 'change-name', onclick: nameOrPicture }, 'Change name or picture')),
       ...devicesBlock(dev, a),
       h('button', { class: 'dv-row', 'data-testid': 'recovery-row', onclick: () => {
         openSheet(h('div', { class: 'menu-actions' }, h('h2', {}, 'Recovery code'), codeBox), { label: 'Recovery code' });
