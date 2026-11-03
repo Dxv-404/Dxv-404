@@ -16217,7 +16217,12 @@ var TableSettings = external_exports.object({
   turnTime: external_exports.number().int().min(0).max(300),
   timeBank: external_exports.number().int().min(0).max(600),
   rebuys: external_exports.boolean(),
+  /** Rebuys per player; 0 = no limit. */
   maxRebuys: external_exports.number().int().min(0).max(100),
+  /** Chips per rebuy; 0 = the starting stack. The table keeps a custom amount between 20 and 500 big blinds. */
+  rebuyAmount: external_exports.number().int().min(0).max(1e8),
+  /** Rebuys close after this blind level; 0 = never (only meaningful when blinds go up). */
+  rebuyUntilLevel: external_exports.number().int().min(0).max(100),
   straddle: external_exports.boolean(),
   dealItTwice: external_exports.boolean(),
   maxPlayers: external_exports.number().int().min(2).max(15),
@@ -16264,8 +16269,11 @@ var ClientMessage = external_exports.discriminatedUnion("t", [
   }),
   external_exports.object({ t: external_exports.literal("ping"), c: external_exports.number() }),
   /** The app went to the background (or came back): a turn push is sent only while it is not on screen. */
-  external_exports.object({ t: external_exports.literal("bg"), hidden: external_exports.boolean() })
+  external_exports.object({ t: external_exports.literal("bg"), hidden: external_exports.boolean() }),
+  /** One seat per player: this device (watching, signed in as a player who plays from another device) takes the seat. */
+  external_exports.object({ t: external_exports.literal("moveSeat") })
 ]);
+var DeviceInfo = external_exports.object({ kind: external_exports.enum(["phone", "tablet", "laptop"]), name: external_exports.string().max(30).nullable() });
 var view = external_exports.record(external_exports.string(), external_exports.unknown());
 var events = external_exports.array(external_exports.record(external_exports.string(), external_exports.unknown()));
 var ServerMessage = external_exports.discriminatedUnion("t", [
@@ -16277,6 +16285,10 @@ var ServerMessage = external_exports.discriminatedUnion("t", [
   external_exports.object({ t: external_exports.literal("pong"), c: external_exports.number(), s: external_exports.number(), seq: external_exports.number().int().nonnegative() }),
   /** Offline: the table between hands (no cards), kept by every phone so another phone can carry the night on. */
   external_exports.object({ t: external_exports.literal("checkpoint"), handNo: external_exports.number().int().nonnegative(), hash: external_exports.string().regex(/^[0-9a-f]{64}$/), data: external_exports.string().max(2e5) }),
+  /** This device watches: the player's seat is being played on another device (it may ask for it with moveSeat). */
+  external_exports.object({ t: external_exports.literal("seatElsewhere"), device: DeviceInfo }),
+  /** The seat moved to another device; this one watches now (a welcome as a watcher follows). */
+  external_exports.object({ t: external_exports.literal("seatMoved"), device: DeviceInfo }),
   /** Something everyone at the table should be told (not part of the game itself). */
   external_exports.object({ t: external_exports.literal("notice"), text: external_exports.string().max(300) }),
   external_exports.object({ t: external_exports.literal("error"), code: external_exports.enum(["version", "bad_message", "not_allowed", "table_full", "no_table", "rate_limited", "server", "replaced", "need_hello", "ticket"]), message: external_exports.string() })
@@ -16656,6 +16668,7 @@ var TABLE_DEFAULTS = {
   rebuys: true,
   maxRebuys: 0,
   rebuyBelow: 0,
+  rebuyAmount: 0,
   rebuyUntilLevel: 0,
   anteFromLevel: 0,
   straddle: false,
@@ -16664,9 +16677,21 @@ var TABLE_DEFAULTS = {
   sharedShuffle: false,
   maxPlayers: 15
 };
+var REBUY_MIN_BB = 20;
+var REBUY_MAX_BB = 500;
+var rebuyRange = (bb) => [REBUY_MIN_BB * Math.max(1, bb), REBUY_MAX_BB * Math.max(1, bb)];
+function clampRebuyAmount(amount, bb) {
+  if (!Number.isFinite(amount) || amount <= 0) return 0;
+  const [lo, hi] = rebuyRange(bb);
+  return Math.min(hi, Math.max(lo, Math.round(amount)));
+}
+var rebuyChips = (c) => c.rebuyAmount || c.startStack;
 function makeConfig(c = {}) {
   const cfg = { ...TABLE_DEFAULTS, ...c };
-  if (!cfg.rebuyBelow) cfg.rebuyBelow = cfg.startStack;
+  if (!cfg.rebuyBelow) cfg.rebuyBelow = 1;
+  cfg.rebuyAmount = clampRebuyAmount(cfg.rebuyAmount ?? 0, cfg.bb);
+  cfg.maxRebuys = Math.max(0, Math.floor(cfg.maxRebuys || 0));
+  cfg.rebuyUntilLevel = Math.max(0, Math.floor(cfg.rebuyUntilLevel || 0));
   cfg.maxPlayers = Math.min(15, Math.max(2, Math.floor(cfg.maxPlayers)));
   return cfg;
 }
@@ -17022,15 +17047,34 @@ var Engine = class _Engine {
     if (!c.rebuys) return "Rebuys are off at this table";
     const inHand = s.hand?.ps[id2];
     if (s.phase === "hand" && inHand && !inHand.folded) return "Rebuy after this hand";
-    if (p.stack >= c.rebuyBelow || p.stack >= c.startStack) return "Your stack is too big to rebuy";
+    if (p.stack > 0 && c.rebuyBelow <= 1) return "You can rebuy once you are out of chips";
+    if (p.stack >= c.rebuyBelow || p.stack >= rebuyChips(c)) return "Your stack is too big to rebuy";
     if (c.maxRebuys > 0 && p.rebuysUsed >= c.maxRebuys) return "No rebuys left";
     if (c.rebuyUntilLevel > 0 && s.level.n > c.rebuyUntilLevel) return "Rebuys have closed";
     return null;
   }
+  /** The table's rebuy rules, and for `pid` how many are left and whether they may rebuy now. */
+  rebuyView(pid) {
+    const c = this.s.cfg, p = pid ? this.player(pid) : void 0;
+    const used = p?.rebuysUsed ?? 0;
+    const why = p ? this.whyNoRebuy(p.id) : "You are watching";
+    return {
+      on: !!c.rebuys,
+      amount: rebuyChips(c),
+      max: c.maxRebuys || 0,
+      untilLevel: c.rebuyUntilLevel || 0,
+      closed: (c.rebuyUntilLevel || 0) > 0 && this.s.level.n > c.rebuyUntilLevel,
+      atZero: (c.rebuyBelow || 0) <= 1,
+      used,
+      left: c.maxRebuys > 0 ? Math.max(0, c.maxRebuys - used) : null,
+      can: !why,
+      why
+    };
+  }
   rebuy(id2) {
     if (this.whyNoRebuy(id2)) return [];
     const p = this.P(id2);
-    const add = this.s.cfg.startStack - p.stack;
+    const add = rebuyChips(this.s.cfg) - p.stack;
     p.stack += add;
     p.buyins += add;
     p.rebuysUsed += 1;
@@ -17349,8 +17393,14 @@ var Engine = class _Engine {
   undo() {
     if (!this.canUndo()) return null;
     const now = this.s.now;
+    const cur = this.s;
     this.s = this.undoStack.pop();
     this.s.now = now;
+    for (const p of this.s.players) {
+      const q = cur.players.find((x) => x.id === p.id);
+      if (!q || q.rebuysUsed <= p.rebuysUsed || this.s.hand?.ps[p.id]) continue;
+      Object.assign(p, { stack: q.stack, buyins: q.buyins, rebuysUsed: q.rebuysUsed, busted: q.busted, sittingOut: q.sittingOut, away: q.away, sitOutHands: q.sitOutHands });
+    }
     this.H.turnStartedAt = now;
     this.logLine("Dealer undoes the last action");
     return [{ t: "undo" }, { t: "turn", pid: this.H.toAct, deadline: this.deadline() }];
@@ -17747,7 +17797,9 @@ var Engine = class _Engine {
       phase: s.phase,
       handNo: s.handNo,
       level: s.level,
-      cfg: { startStack: c.startStack, rebuys: c.rebuys, turnTime: c.turnTime, blindUpEvery: c.blindUpEvery, timeBank: c.timeBank, dealItTwice: c.dealItTwice, straddle: c.straddle, maxPlayers: c.maxPlayers },
+      cfg: { startStack: c.startStack, rebuys: c.rebuys, turnTime: c.turnTime, blindUpEvery: c.blindUpEvery, timeBank: c.timeBank, dealItTwice: c.dealItTwice, straddle: c.straddle, maxPlayers: c.maxPlayers, maxRebuys: c.maxRebuys || 0, rebuyUntilLevel: c.rebuyUntilLevel || 0 },
+      rebuy: this.rebuyView(pid),
+      stats: pid && this.player(pid) ? { won: s.stats[pid]?.won ?? 0, biggest: s.stats[pid]?.biggest ?? 0 } : null,
       button: s.button,
       paused: s.paused,
       players: s.players.map((p) => ({
@@ -18032,6 +18084,28 @@ function supabaseSend(url2, key, fetchFn = fetch) {
   };
 }
 
+// ../../packages/table/src/pause.ts
+var FOLD_PAUSE_MS = 3e3;
+var SHOWDOWN_PAUSE_MS = 8e3;
+var LEGEND_PAUSE_MS = 10500;
+var RUNOUT_FIRST_MS = 1e3;
+var RUNOUT_STREET_MS = 1400;
+function bestCategory(results) {
+  if (!results.showdown) return -1;
+  let best = -1;
+  for (const p of results.pots) if (p.hand) best = Math.max(best, CATEGORY.indexOf(p.hand.name));
+  return best;
+}
+function runoutStreets(events2, runout) {
+  if (!runout) return 0;
+  return events2.filter((e) => e.t === "street" && e.board !== 2).length;
+}
+function resultsPauseMs(results, streets = 0) {
+  if (!results.showdown) return FOLD_PAUSE_MS;
+  const base = bestCategory(results) >= 8 ? LEGEND_PAUSE_MS : SHOWDOWN_PAUSE_MS;
+  return base + (streets > 0 ? RUNOUT_FIRST_MS + streets * RUNOUT_STREET_MS : 0);
+}
+
 // ../../packages/table/src/room.ts
 var hashToken = (t) => sha256hex(t);
 var UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -18046,7 +18120,7 @@ var TableRoom = class {
     this.clock = clock;
     this.store = store;
     this.code = code;
-    this.opt = { handPauseMs: 4e3, rateLimit: 40, rateWindowMs: 2e3, keepUpdates: 200, offlineAfterMs: 3e3, seed: randomSeed, identify: async () => null, server: "test", turnPushMs: 3e3, autoEndAfterMs: 20 * 6e4, hostHandoverMs: 6e4, maxConnections: 60, silentCloseMs: 3e4, helloWithinMs: 15e3, offline: false, sharedShuffle: !!opt.offline, shuffleWaitMs: 1500, ...opt };
+    this.opt = { rateLimit: 40, rateWindowMs: 2e3, keepUpdates: 200, offlineAfterMs: 3e3, seed: randomSeed, identify: async () => null, server: "test", turnPushMs: 3e3, autoEndAfterMs: 20 * 6e4, hostHandoverMs: 6e4, maxConnections: 60, silentCloseMs: 3e4, helloWithinMs: 15e3, offline: false, sharedShuffle: !!opt.offline, shuffleWaitMs: 1500, ...opt };
     if (this.opt.offline) this.opt.maxConnections = Math.min(this.opt.maxConnections, OFFLINE_MAX_PLAYERS + 4);
     this.createdAt = clock.now();
     if (saved) this.restore(saved);
@@ -18135,6 +18209,7 @@ var TableRoom = class {
       return;
     }
     if (m.t === "seed") return this.onSeed(st, m.handNo, m.seed);
+    if (m.t === "moveSeat") return this.moveSeat(conn, st);
     if (!st.pid || !this.engine) return this.ack(conn, null, m.actionId, "Spectators cannot play");
     const pid = st.pid;
     const done = this.acks.get(pid)?.get(m.actionId);
@@ -18220,6 +18295,11 @@ var TableRoom = class {
     const crew = this.engine ? this.crew : m.settings?.crew ?? null;
     if (crew && !who?.crews.includes(crew)) return fail("not_allowed", "This table is for crew members");
     if (who && m.player !== who.account) return fail("not_allowed", "That seat belongs to another account");
+    if (who) {
+      st.device = who.device;
+      st.account = who.account;
+      st.info = deviceInfo(who);
+    }
     const watch = () => {
       if (!this.engine) return fail("no_table", "This table has not started");
       if ([...this.conns.values()].filter((o) => o.hello && o.spectator).length >= MAX_WATCHERS) return fail("table_full", `${MAX_WATCHERS} people are already watching this table`);
@@ -18234,12 +18314,13 @@ var TableRoom = class {
       const tokenHash = hashToken(m.token);
       if (this.tokens[m.player] && this.tokens[m.player] !== tokenHash) return fail("not_allowed", "That seat belongs to another phone");
     }
-    if (who && this.connsOf(m.player).some((c) => {
-      const o = this.conns.get(c);
-      return o.device && o.device !== who.device;
-    })) {
-      st.device = who.device;
-      return watch();
+    if (who) {
+      const holder = this.connsOf(m.player).map((c) => this.conns.get(c)).find((o) => o.device && o.device !== who.device);
+      if (holder) {
+        watch();
+        if (st.hello) this.send(conn, { t: "seatElsewhere", device: holder.info ?? PLAIN_DEVICE });
+        return;
+      }
     }
     if (!this.engine && !m.settings) return fail("no_table", "This table has not started yet");
     if (!this.engine) {
@@ -18266,9 +18347,36 @@ var TableRoom = class {
     if (!e.player(m.player).connected) this.apply({ t: "presence", pid: m.player, connected: true, now });
     st.hello = true;
     st.pid = m.player;
-    if (who) st.device = who.device;
     this.trackEmpty();
     this.welcome(conn, m.player, m.lastSeq);
+    if (this.opt.offline) this.sendCheckpoint(conn);
+    this.tryDeal(now);
+    this.reschedule();
+  }
+  /**
+   * "Move seat here": a device watching as a player whose seat is played on another of their devices takes the
+   * seat. The other device becomes a watcher at once (it is told, and sent the watcher's view), so the seat is
+   * never played from two devices; anything the other device sends after this is refused as a watcher's.
+   */
+  moveSeat(conn, st) {
+    const pid = st.account;
+    const e = this.engine;
+    if (!pid || !e || !e.player(pid) || e.player(pid).leaving) return this.send(conn, { t: "error", code: "bad_message", message: "There is no seat of yours at this table" });
+    if (st.pid === pid) return;
+    const now = this.clock.now();
+    for (const old of this.connsOf(pid)) {
+      const o = this.conns.get(old);
+      o.pid = null;
+      o.spectator = true;
+      this.send(old, { t: "seatMoved", device: st.info ?? PLAIN_DEVICE });
+      this.welcome(old, null, this.seq);
+    }
+    st.pid = pid;
+    st.spectator = false;
+    this.goingOffline.delete(pid);
+    if (!e.player(pid).connected) this.apply({ t: "presence", pid, connected: true, now });
+    this.trackEmpty();
+    this.welcome(conn, pid, this.seq);
     if (this.opt.offline) this.sendCheckpoint(conn);
     this.tryDeal(now);
     this.reschedule();
@@ -18346,6 +18454,14 @@ var TableRoom = class {
     delete rules.crew;
     delete rules.casual;
     if (this.opt.offline) rules.maxPlayers = Math.min(rules.maxPlayers ?? OFFLINE_MAX_PLAYERS, OFFLINE_MAX_PLAYERS);
+    const bb = rules.bb ?? TABLE_DEFAULTS.bb;
+    if (rules.rebuyAmount !== void 0) rules.rebuyAmount = clampRebuyAmount(rules.rebuyAmount, bb);
+    if (!rules.blindUpEvery) rules.rebuyUntilLevel = 0;
+    if (rules.rebuys === false) {
+      rules.maxRebuys = 0;
+      rules.rebuyAmount = 0;
+      rules.rebuyUntilLevel = 0;
+    }
     this.engine = Engine.create(this.code, rules, now);
     const c = this.engine.s.cfg;
     this.game = { id: newGameId(), startedAt: new Date(now).toISOString(), casual: !!settings?.casual, bigBlind: c.bb, startStack: c.startStack, ended: false };
@@ -18372,7 +18488,10 @@ var TableRoom = class {
       this.lastRecord = rec;
       this.store.appendHand(rec);
       this.toLeague(rec);
-      if (this.running && e.s.phase !== "ended") this.nextDealAt = input.now + this.opt.handPauseMs;
+      if (this.running && e.s.phase !== "ended") {
+        const res = e.s.hand?.results;
+        this.nextDealAt = input.now + (this.opt.handPauseMs ?? (res ? resultsPauseMs(res, runoutStreets(r.events, !!e.s.hand?.runout)) : FOLD_PAUSE_MS));
+      }
       if (this.opt.offline) this.checkpointLater = true;
     }
     for (const [c, st] of this.conns) if (st.hello) this.send(c, { t: "update", seq: this.seq, events: events2, view: this.view(st.pid), host: this.host, at: input.now });
@@ -18427,7 +18546,7 @@ var TableRoom = class {
     const p = this.pendingDeal;
     this.pendingDeal = null;
     const r = this.apply({ t: "start", seed: p.seed, contributions: [...p.got.values()], now });
-    if (r && this.running) this.nextDealAt = now + this.opt.handPauseMs;
+    if (r && this.running) this.nextDealAt = now + (this.opt.handPauseMs ?? FOLD_PAUSE_MS);
     this.reschedule();
     return r;
   }
@@ -18640,7 +18759,9 @@ var TableRoom = class {
   view(pid) {
     const v = this.engine.viewFor(pid);
     if (v.hand) v.hand = { ...v.hand, proof: null };
-    return v;
+    const e = this.engine;
+    const dealing = this.running && v.phase === "between" && !e.s.paused && e.canStartHand();
+    return { ...v, nextDealAt: dealing ? this.nextDealAt : null };
   }
   welcome(conn, pid, lastSeq) {
     const missed = lastSeq > 0 && lastSeq < this.seq && this.recent[0] && this.recent[0].seq <= lastSeq + 1 ? this.recent.filter((u) => u.seq > lastSeq).flatMap((u) => u.events) : void 0;
@@ -18738,8 +18859,19 @@ var TableRoom = class {
    * After a restore, connections that survived (a Durable Object waking from hibernation keeps its
    * sockets) are handed back with the seat they had said hello for.
    */
-  adopt(conn, pid) {
-    this.conns.set(conn, { pid, hello: true, spectator: pid === null, windowStart: this.clock.now(), count: 0, lastReact: 0, lastSeen: this.clock.now() });
+  adopt(conn, pid, more = {}) {
+    this.conns.set(conn, {
+      pid,
+      hello: true,
+      spectator: pid === null,
+      windowStart: this.clock.now(),
+      count: 0,
+      lastReact: 0,
+      lastSeen: this.clock.now(),
+      ...more.device ? { device: more.device } : {},
+      ...more.account ? { account: more.account } : {},
+      ...more.info ? { info: more.info } : {}
+    });
   }
   /** Call once after a restore (and any adopt calls): players with no connection are shown as gone. */
   settleAfterRestart() {
@@ -18753,7 +18885,8 @@ var TableRoom = class {
   /** What a connection said hello as (kept by servers that may sleep, like a Durable Object). */
   connInfo(conn) {
     const st = this.conns.get(conn);
-    return st ? { pid: st.pid, hello: st.hello } : null;
+    if (!st) return null;
+    return { pid: st.pid, hello: st.hello, ...st.device ? { device: st.device } : {}, ...st.account ? { account: st.account } : {}, ...st.info ? { info: st.info } : {} };
   }
   /** Numbers for /health and tests. */
   stats() {
@@ -18767,6 +18900,11 @@ var TableRoom = class {
     return !!this.conns.get(conn)?.hello;
   }
 };
+var PLAIN_DEVICE = { kind: "phone", name: null };
+var deviceInfo = (who) => ({
+  kind: who.deviceKind === "laptop" || who.deviceKind === "tablet" ? who.deviceKind : "phone",
+  name: who.deviceName ? who.deviceName.slice(0, 30) : null
+});
 function newGameId() {
   const b = new Uint8Array(16);
   globalThis.crypto.getRandomValues(b);
@@ -18847,7 +18985,7 @@ function cachedTicketChecker(opts = {}) {
     const key = `${table}:${token2}`;
     const hit = cache.get(key);
     if (hit && now() - hit.at < ttl) return hit.info;
-    const info = await checkTicket(token2, table, opts.fetch ? { fetch: opts.fetch } : {});
+    const info = await checkTicket(token2, table, { ...opts.fetch ? { fetch: opts.fetch } : {}, ...opts.url ? { url: opts.url } : {} });
     if (info) {
       cache.set(key, { at: now(), info });
       if (cache.size > 5e3) cache.delete(cache.keys().next().value);
@@ -19042,7 +19180,7 @@ setInterval(() => {
   }
 }, 6e4).unref();
 var live = /* @__PURE__ */ new Map();
-var identify = cachedTicketChecker();
+var identify = cachedTicketChecker(process.env.SUPABASE_URL ? { url: process.env.SUPABASE_URL } : {});
 var echo = /* @__PURE__ */ new Map();
 var tableFile = (code) => join(DATA, "tables", `${code}.json`);
 function flush(code, l) {
