@@ -472,7 +472,19 @@ document.addEventListener('pointerdown', () => unlockAudio(), { once: true });
 
 // service worker for offline use
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  navigator.serviceWorker.register('sw.js').then((reg) => {
+    // look for a new version whenever the app comes back to the front
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
+  }).catch(() => {});
+  // A new version took over (the old one served this page from its cache): load it now, or, mid-game, as soon as
+  // the table is left, so an update never needs two reloads and never interrupts a hand.
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloading) return;
+    const go = () => { if (reloading) return; if (document.body.dataset.playing) { setTimeout(go, 5000); return; } reloading = true; location.reload(); };
+    go();
+  });
 }
 
 // test hooks

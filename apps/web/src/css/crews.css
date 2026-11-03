@@ -35,7 +35,7 @@
 .tp.app .cw-lay .cmain{flex:1;padding:22px 26px 28px;gap:14px}
 .tp.app .cw-lay.s-phone .cmain{padding:0}
 .tp.app .cw-lay .mcol{width:320px;flex:none;padding:22px 18px 22px 0;gap:14px}
-.tp.app .cw-lay.s-tab{height:calc(100dvh - 74px - env(safe-area-inset-bottom))}
+.tp.app .cw-lay.s-tab{height:calc(100dvh - 74px - env(safe-area-inset-bottom));min-height:0} /* (min-height 100dvh above made it run under the bottom bar) */
 .tp.app .cw-lay.s-tab .clist{width:300px}
 .tp.app .cw-lay.s-tab .cmain{padding:20px}
 .tp.app .cw-lay.s-side .clist{width:300px;padding:12px;gap:8px}

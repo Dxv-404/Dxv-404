@@ -53,3 +53,20 @@ test('on a laptop every crew tab opens, also for the crew the list shows by itse
   expect(errors).toEqual([]);
   await ctx.close();
 });
+
+test('on a tablet the Create crew button sits above the bottom bar (820 x 1180)', async ({ browser, baseURL }) => {
+  const dev = await person(db, 'Dev3');
+  const { ctx, page, errors } = await phone(browser, db, baseURL!, { width: 820, height: 1180 });
+  await signInAs(ctx, dev);
+  await page.goto('/');
+  await page.getByTestId('nav-crews').first().click();
+  await page.getByTestId('crews-create').first().click();
+  const btn = (await page.getByTestId('crew-create').boundingBox())!;
+  const nav = (await page.locator('.cw-nav').boundingBox())!;
+  expect(btn.y + btn.height, 'Create crew under the bottom bar').toBeLessThanOrEqual(nav.y + 1);
+  await page.getByTestId('crew-name').fill('Tablet crew');
+  await page.getByTestId('crew-create').click();
+  await expect(page.getByTestId('crew-made')).toBeVisible();
+  expect(errors).toEqual([]);
+  await ctx.close();
+});
