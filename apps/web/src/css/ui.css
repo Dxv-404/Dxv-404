@@ -206,3 +206,15 @@ html:has(#app.tp.app),body:has(#app.tp.app){background:var(--app-bg,#1b120d)}
 .tp .ask-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .tp .ask-btns .btn{min-height:48px}
 @media (prefers-reduced-motion:reduce){.ask-wrap,.tp .ask{transition:none}}
+
+/* Open a table: Casual off → which crew (online-screens.ts) */
+.tp.app .casual-wrap{display:grid;gap:10px}
+.tp.app .crew-pick{display:grid;gap:8px}
+.tp.app .crew-pick[hidden]{display:none}
+.tp.app .crew-pick .pick-q{font:700 13px var(--ui);color:var(--tx)}
+.tp.app .crew-pick .pick-row{display:grid;gap:2px;text-align:left;min-height:48px;padding:9px 13px;border:0;border-radius:var(--r-btn,12px);cursor:pointer;
+  background:var(--chipbg);color:var(--tx);box-shadow:inset 0 0 0 1px var(--line);font:inherit}
+.tp.app .crew-pick .pick-row b{font:700 14.5px var(--ui);overflow-wrap:anywhere}
+.tp.app .crew-pick .pick-row small{font-size:12px;color:var(--mut)}
+.tp.app .crew-pick .pick-row.on{box-shadow:inset 0 0 0 2px var(--acc)}
+.tp.app .crew-pick .pick-row:focus-visible{outline:2px solid var(--acc);outline-offset:2px}

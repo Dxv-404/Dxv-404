@@ -140,4 +140,5 @@ export const encode = (m: ClientMessage | ServerMessage): string => JSON.stringi
 
 /** The public half of the push key (phones subscribe with it; the private half is a Cloudflare secret). */
 export const VAPID_PUBLIC_KEY = 'BA49ZnpCIbcRzeR-XeKrrAUv0xUgJjm0--bYq490MgYjO2YAV3AYuk5xggcMgWMgNE2yrgAbl4N7GlEjZt034NY';
-export const PUSH_SUBJECT = 'mailto:devkrishna6780@gmail.com';
+// the contact push services may use for this sender (a page, not a person's address)
+export const PUSH_SUBJECT = 'https://train-poker.vercel.app';

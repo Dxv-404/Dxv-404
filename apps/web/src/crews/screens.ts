@@ -94,6 +94,7 @@ export function crewsUi(deps: CrewsDeps) {
   }
 
   // ---------------------------------------------------------------- the layout
+  let listOnScreen: string | null = null;
   function paint(): void {
     if (!root) return;
     stopPoll?.(); stopPoll = null;
@@ -109,6 +110,10 @@ export function crewsUi(deps: CrewsDeps) {
     listCol.setAttribute('aria-label', 'Your crews');
     const pane = el('section', 'cw-col cmain');
     pane.setAttribute('aria-live', 'polite');
+    // the list column is already on screen (a tab or crew changed beside it): it is redrawn without its arrival
+    // animations, so the crew cards stay still instead of sliding in again
+    if (showList && listOnScreen === size) listCol.classList.add('again');
+    listOnScreen = showList ? size : null;
     if (showList) lay.append(listCol);
     if (wide() || v.k !== 'list') lay.append(pane);
     if (size === 'desk') { const mc = el('section', 'cw-col mcol'); mc.setAttribute('aria-label', 'Members'); lay.append(mc); }

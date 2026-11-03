@@ -199,6 +199,6 @@ export function privacyScreen(ui: Ui, back: () => void = ui.home): void {
       p('Your crew sees the crew’s league, its games and their results. Nobody else does. The data is stored with Supabase (in Mumbai); live tables run on Oracle Cloud (Hyderabad) and Cloudflare. Nothing is sold or shared, and there are no ads or trackers.'),
       h('h2', {}, 'Leaving'),
       p('Profile and crews → Delete my account removes your name, logins and cards; your results stay in your crews’ history as “Former player”, so the league still adds up.'),
-      p('Questions: devkrishna6780@gmail.com')));
+      p('Questions or a problem? Settings → Report a problem reaches the people who run Train Poker.')));
   });
 }

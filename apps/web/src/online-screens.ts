@@ -140,19 +140,67 @@ export function hostOnline(ui: Ui, opts?: HostOpts): void {
       draw();
       return h('div', { class: 'field' }, h('span', {}, label), wrap);
     };
-    const crews = store.get<{ id: string; name: string }[]>('tp-crews') ?? [];
+    // a table for anyone (casual), or for one of my crews: turning Casual off asks which crew, from the crews
+    // I am allowed to host for (the crew's "who can host"); a crew table counts for that crew's league
+    if (!opts) { cfg.casual = cfg.crew ? false : true; }
     const crewSel = opts ? (opts.canSave ? h('label', { class: 'switch-row' }, h('span', {}, 'Keep as the crew’s rules', h('small', {}, 'Off: just for tonight')),
-      h('input', { type: 'checkbox', role: 'switch', 'data-testid': 'save-crew-rules', onchange: (e: Event) => { save = (e.target as HTMLInputElement).checked; } })) : null) : crews.length ? h('label', { class: 'field' }, h('span', {}, 'Crew table'),
-      h('select', { onchange: (e: Event) => { const v = (e.target as HTMLSelectElement).value; if (v) cfg.crew = v; else delete cfg.crew; } },
-        h('option', { value: '' }, 'Anyone with the code'), ...crews.map((c) => h('option', { value: c.id, selected: cfg.crew === c.id ? true : null }, `${c.name} only (counts for its league)`)))) : null;
+      h('input', { type: 'checkbox', role: 'switch', 'data-testid': 'save-crew-rules', onchange: (e: Event) => { save = (e.target as HTMLInputElement).checked; } })) : null) : null;
+    const pick = h('div', { class: 'crew-pick', role: 'radiogroup', 'aria-label': 'Which crew is this table for?', 'data-testid': 'crew-pick', hidden: true });
+    let hostable: { id: string; name: string; members: number }[] | null = null;
+    const drawPick = (): void => {
+      if (cfg.casual) { pick.hidden = true; return; }
+      pick.hidden = false;
+      if (hostable === null) { pick.replaceChildren(h('p', { class: 'hint', role: 'status' }, 'Finding your crews…')); return; }
+      if (!hostable.length) {
+        pick.replaceChildren(h('p', { class: 'hint', 'data-testid': 'crew-pick-none' }, 'You can’t host for any crew yet: make a crew, or ask your crew’s leader to let you host. This table stays casual.'));
+        return;
+      }
+      pick.replaceChildren(h('span', { class: 'pick-q' }, 'Which crew is this table for?'), ...hostable.map((c) => h('button', {
+        type: 'button', role: 'radio', class: 'pick-row' + (cfg.crew === c.id ? ' on' : ''), 'aria-checked': cfg.crew === c.id ? 'true' : 'false', 'data-testid': 'crew-pick-row',
+        onclick: () => { cfg.crew = c.id; drawPick(); },
+      }, h('b', {}, c.name), h('small', {}, `${c.members} member${c.members === 1 ? '' : 's'} · counts for its league`))));
+    };
+    const loadHostable = async (): Promise<void> => {
+      try {
+        const { existing } = await import('./crews/data');
+        const a = await existing();
+        const list = a ? await a.myCrews() : [];
+        // (my_crews says can_host; where it doesn't yet, the crew page does)
+        const can = await Promise.all(list.map(async (c) => (c as { can_host?: boolean }).can_host ?? (a ? (await a.crewPage(c.id)).can_host : false)));
+        hostable = list.filter((_c, i) => can[i]).map((c) => ({ id: c.id, name: c.name, members: c.members }));
+      } catch { hostable = []; }
+      if (hostable.length === 1 && !cfg.crew) cfg.crew = hostable[0]!.id;
+      if (!hostable.length) {
+        // nothing to host for: the table stays casual, and the switch says why
+        cfg.casual = true; delete cfg.crew; casualBox.checked = true;
+        pick.hidden = false;
+        pick.replaceChildren(h('p', { class: 'hint', 'data-testid': 'crew-pick-none' }, 'You can’t host for any crew yet: make a crew, or ask your crew’s leader to let you host. This table stays casual.'));
+        return;
+      }
+      drawPick();
+    };
+    const casualBox = h('input', { type: 'checkbox', role: 'switch', 'data-testid': 'casual', checked: cfg.casual ? true : null, onchange: (e: Event) => {
+      cfg.casual = (e.target as HTMLInputElement).checked;
+      if (cfg.casual) delete cfg.crew;
+      drawPick();
+      if (!cfg.casual && hostable === null) void loadHostable();
+    } }) as HTMLInputElement;
+    const casualRow = opts ? null : h('div', { class: 'casual-wrap' },
+      h('label', { class: 'switch-row' }, h('span', {}, 'Casual game', h('small', {}, 'Anyone with the code; not in any crew league. Turn off to play for a crew.')), casualBox), pick);
     const go = h('button', { class: 'btn primary', 'data-testid': 'online-open', onclick: async () => {
       if ((cfg.bb ?? 10) < (cfg.sb ?? 5)) return toast('The big blind must be at least the small blind.');
       if ((cfg.startStack ?? 1000) < (cfg.bb ?? 10) * 2) return toast('Starting chips should be at least two big blinds.');
+      if (!opts && !cfg.casual && !cfg.crew) { drawPick(); return toast('Pick the crew this table is for, or turn Casual back on.'); }
       rb.finish();
       if (!opts) store.set('tp-online-settings', cfg);
       (go as HTMLButtonElement).disabled = true;
       const code = newCode(await pickServer());
       opts?.opened(code, { ...cfg }, save);
+      // a crew table opened from here tells the crew too (the LIVE strip and a notification), like the crew's host sheet
+      if (!opts && cfg.crew && !cfg.casual) {
+        const crew = cfg.crew;
+        void import('./crews/data').then(async ({ existing }) => { const a = await existing(); await a?.hostCrewTable(crew, code, 'online'); }).catch(() => undefined);
+      }
       void playOnline(ui, code, cfg);
     } }, 'Open the table');
     el.append(setupHead(opts ? 'Tonight’s crew table' : 'Open a table', 'Online', opts ? 'Crew table · counts for the season' : 'Online · anyone with the code', () => (opts ? opts.back() : onlineStart(ui))),
@@ -161,7 +209,7 @@ export function hostOnline(ui: Ui, opts?: HostOpts): void {
       rb.el,
       h('section', { class: 'block s3-c3' }, h('h2', {}, 'Table'), seg('maxPlayers', 'Seats', [[6, '6'], [9, '9'], [12, '12'], [15, '15']]),
         seg('turnTime', 'Time to act', [[20, '20 s'], [30, '30 s'], [45, '45 s'], [0, 'No limit']]),
-        h('label', { class: 'switch-row' }, h('span', {}, 'Casual game', h('small', {}, 'In history, not in the crew league')), h('input', { type: 'checkbox', role: 'switch', checked: cfg.casual ? true : null, onchange: (e: Event) => { cfg.casual = (e.target as HTMLInputElement).checked; } })),
+        opts ? h('label', { class: 'switch-row' }, h('span', {}, 'Casual game', h('small', {}, 'In history, not in the crew league')), h('input', { type: 'checkbox', role: 'switch', checked: cfg.casual ? true : null, onchange: (e: Event) => { cfg.casual = (e.target as HTMLInputElement).checked; } })) : casualRow,
         crewSel),
       setupFoot('Friends join with the table’s code or its link', go));
   });

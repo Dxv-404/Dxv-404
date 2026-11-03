@@ -305,3 +305,6 @@
 .tp.app [data-motion=off] *,.tp.app [data-motion=off] *::before,.tp.app [data-motion=off] *::after,.tp [data-motion=off].cw-toast{animation:none!important;transition:none!important}
 .tp.app [data-motion=off] .conf{display:none}
 @media (prefers-reduced-motion:reduce){.tp.app .cw *,.tp.app .cw *::before,.tp.app .cw *::after,.tp .cw-toast,.tp.app .nav button.on::after{animation:none!important;transition:none!important}}
+
+/* the crews column redrawn beside a tab change: no arrival animations (they made the cards shake) */
+.tp.app .cw .clist.again .ccard,.tp.app .cw .clist.again .row{animation:none}

@@ -24,7 +24,10 @@
 @keyframes bubIn{from{opacity:0;transform:translateY(6px) scale(.95)}to{opacity:1;transform:none}}
 .tp.live .seat.turn .av{animation:turnPulse 1.4s ease-in-out infinite}
 @keyframes turnPulse{50%{box-shadow:0 0 0 4px var(--acc)}}
-.tp.live .seat.win{animation:winp .6s ease-in-out 2}
+/* the winner's avatar pulses (base2: .seat.win .av); never the seat itself, whose transform places it (a scale on
+   the seat dropped its translate, so the seat jumped back and forth, again on every redraw of the results) */
+.tp.live .seat.win{animation:none}
+.tp.still .seat.win .av,.tp.calm .seat.win .av{animation:none}
 .tp.live .board .cd{animation:dealIn .3s ease-out both}
 @keyframes dealIn{from{opacity:0;transform:translateY(-10px) scale(.9)}to{opacity:1;transform:none}}
 .tp.live button[data-act]{cursor:pointer}
