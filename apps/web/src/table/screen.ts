@@ -226,7 +226,7 @@ export class TableScreen {
     if (!v) { this.stage.innerHTML = '<div class="tp-wait" role="status">Connecting…</div>'; return; }
     this.stage.dataset.res = v.hand?.results ? (this.res?.step ?? 'end') : ''; // the step after a hand (for the checks)
     const W = this.root.clientWidth || window.innerWidth, H = this.root.clientHeight || window.innerHeight;
-    const frame = renderTable(v, currentTheme(), W, H, { peek: this.peek || !settings.holdToPeek, bubble: this.bubble, code: this.o.code, net: this.net, res: v.hand?.results ? this.res : null });
+    const frame = renderTable(v, currentTheme(), W, H, { peek: this.peek || !settings.holdToPeek, bubble: this.bubble, code: this.o.code, net: this.net, res: v.hand?.results ? this.res : null, elsewhere: this.elsewhere });
     if (frame.html === this.frame?.html) return; // nothing changed on screen
     try { this.drawParts(frame); } finally { this.drainBar(); }
     // the result pill clear of the seats and their cards (again once the theme's fonts are in: its size changes)
@@ -552,6 +552,10 @@ export class TableScreen {
     draw();
     this.overlay.append(box);
   }
+
+  /** My seat is played on another of my devices (one seat per player): the hero says whose seat and where. */
+  private elsewhere: { pid: string; where: string } | null = null;
+  setElsewhere(x: { pid: string; where: string } | null): void { this.elsewhere = x; this.draw(); }
 
   destroy(): void {
     this.closeRaise();

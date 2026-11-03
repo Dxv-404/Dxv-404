@@ -76,7 +76,7 @@ export interface Frame { html: string; mode: Mode; u: number; lw: number; lh: nu
  * The whole table as HTML for a W x H screen. `peek`: the player is holding their cards up. `bubble`: what
  * the dealer last said. `code`: the table's code (shown in the top bar).
  */
-export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: number, o: { peek: boolean; bubble: string | null; code: string; net: 'good' | 'weak' | 'lost'; title?: string; res?: ResStage | null }): Frame {
+export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: number, o: { peek: boolean; bubble: string | null; code: string; net: 'good' | 'weak' | 'lost'; title?: string; res?: ResStage | null; elsewhere?: { pid: string; where: string } | null }): Frame {
   const th = THEMES[themeKey] ?? THEMES.classic!;
   const me = v.me;
   const players = v.players;
@@ -238,7 +238,12 @@ export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: num
   const hintHtml = rb && !(R && step !== 'hold' && step !== 'fold') && !(o.peek && myCards)
     ? `<span class="hhint rbh" data-testid="rb-hint"><span class="s1">${esc(myCards ? hint : rb[0])}</span><span class="s2">${esc(myCards ? rb[0] : rb[1])}</span></span>`
     : `<span class="hhint"><span class="s1">${esc(hint)}</span></span>`;
-  const heroMeta = `<div class="hmeta"><span class="hname">${esc(mine?.name ?? 'Watching')}${status ? ` · ${status}` : ''}</span><span class="hstack">${mine ? fmt(stackOf(mine)) : ''}</span>${hintHtml}</div>`;
+  // watching because my seat is played on another of my devices: my name, my stack and where the seat is
+  // (v3devices.py seatmove: "Dev · 1,840 · Your seat is on your laptop")
+  const away = !mine && o.elsewhere ? players.find((p) => p.id === o.elsewhere!.pid) : undefined;
+  const heroMeta = away
+    ? `<div class="hmeta" data-testid="hero-elsewhere"><span class="hname">${esc(away.name)}</span><span class="hstack">${fmt(stackOf(away))}</span><span class="hhint"><span class="s1">Your seat is on ${esc(o.elsewhere!.where)}</span></span></div>`
+    : `<div class="hmeta"><span class="hname">${esc(mine?.name ?? 'Watching')}${status ? ` · ${status}` : ''}</span><span class="hstack">${mine ? fmt(stackOf(mine)) : ''}</span>${hintHtml}</div>`;
   const hero = `<section class="hero" aria-label="Your seat">${hc}${heroMeta}${timer}</section>`;
   const actions = actionsHtml(v, mode, rs);
 
