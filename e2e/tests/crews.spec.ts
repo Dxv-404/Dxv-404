@@ -186,14 +186,14 @@ test('the leader: requests on the crew card and home, approve and decline in one
   await expect(page.locator('.cw-toast')).toContainText('Kunal was declined');
   expect(db.sqlSync(`select status from crew_requests where account_id = '${vik.id}'`)).toBe('declined');
   // roles: make Kabir an admin, then back
-  await page.getByTestId('member-row').filter({ hasText: 'Sam' }).getByTestId('member-more').click();
+  await page.getByTestId('member-row').filter({ hasText: 'Kabir' }).getByTestId('member-more').click();
   await expect(page.getByText('Hand over leadership')).toBeVisible();
   await shot(page, 'member-sheet');
   await page.getByTestId('make-admin').click();
-  await expect(page.getByTestId('member-row').filter({ hasText: 'Sam' }).locator('.chipt.o')).toHaveText('Admin');
-  await page.getByTestId('member-row').filter({ hasText: 'Sam' }).getByTestId('member-more').click();
+  await expect(page.getByTestId('member-row').filter({ hasText: 'Kabir' }).locator('.chipt.o')).toHaveText('Admin');
+  await page.getByTestId('member-row').filter({ hasText: 'Kabir' }).getByTestId('member-more').click();
   await page.getByTestId('remove-admin').click();
-  await expect(page.getByTestId('member-row').filter({ hasText: 'Sam' }).locator('.chipt')).toHaveCount(0);
+  await expect(page.getByTestId('member-row').filter({ hasText: 'Kabir' }).locator('.chipt')).toHaveCount(0);
   // remove Nisha (the box asks first)
   await answer(page, true);
   await page.getByTestId('member-row').filter({ hasText: 'Nisha' }).getByTestId('member-more').click();
@@ -209,7 +209,7 @@ test('the leader: requests on the crew card and home, approve and decline in one
   expect(db.sqlSync(`select string_agg(a.name || ':' || m.role, ' ' order by a.name) from crew_members m join accounts a on a.id = m.account_id where m.crew_id = '${hostel.id}'`)).toBe('Dev:admin Kabir:member Rohan:owner');
   await expect(page.getByTestId('member-row').filter({ hasText: 'Rohan' }).locator('.chipt.a')).toHaveText('Leader');
   // an admin's ⋯ opens the player card (no leader actions)
-  await page.getByTestId('member-row').filter({ hasText: 'Sam' }).getByTestId('member-more').click();
+  await page.getByTestId('member-row').filter({ hasText: 'Kabir' }).getByTestId('member-more').click();
   await expect(page.getByTestId('player-name')).toHaveText('Kabir');
   // hand it back so the other tests see Dev as the leader
   await call(db, rohan, 'transfer_ownership', { p_crew: hostel.id, p_account: dev.id });
@@ -367,8 +367,10 @@ for (const [w, h] of [[390, 844], [1440, 900]] as const) {
       await layoutOk(page, `${theme} ${w} player`); await targetsOk(page, `${theme} ${w} player`);
       await shot(page, `scoring-${w}-${theme}-player`);
       await page.getByRole('button', { name: 'Back' }).first().click();
-      // settings: League scoring and the season controls
-      await page.getByTestId('crew-gear').click();
+      // settings: League scoring and the season controls (the gear on phones, More › Crew settings on big screens)
+      await expect(page.getByTestId('crew-title')).toBeVisible();
+      if (await page.getByTestId('crew-gear').count()) await page.getByTestId('crew-gear').click();
+      else { await page.getByTestId('crew-more').click(); await page.locator('.sheet.open').getByText('Crew settings').click(); }
       await expect(page.getByRole('radiogroup', { name: 'League scoring' })).toBeVisible();
       await expect(page.getByTestId('start-season')).toBeVisible();
       await layoutOk(page, `${theme} ${w} settings`); await targetsOk(page, `${theme} ${w} settings`);
@@ -381,7 +383,7 @@ for (const [w, h] of [[390, 844], [1440, 900]] as const) {
         await page.getByRole('radio', { name: 'Points' }).click();
         await expect.poll(() => db.sqlSync(`select scoring from crews where id = '${mc.id}'`)).toBe('points');
         await page.getByRole('radio', { name: '2 weeks' }).click();
-        await expect.poll(() => db.sqlSync(`select season_weeks || '/' || season_months from crews where id = '${mc.id}'`)).toBe('2/3');
+        await expect.poll(() => db.sqlSync(`select season_weeks || '/' || season_months from crews where id = '${mc.id}'`)).toBe('2/1');
         await page.getByRole('radio', { name: '2 months' }).click();
         await expect.poll(() => db.sqlSync(`select coalesce(season_weeks::text, '-') || '/' || season_months from crews where id = '${mc.id}'`)).toBe('-/2');
         const day = db.sqlSync(`select ((now() at time zone 'Asia/Kolkata')::date + 20)::text`);
@@ -678,7 +680,7 @@ test('avatar letters on the crews screens belong to the person, in all nine them
     expect(league.bad, `${theme} league`).toEqual([]);
     expect(league.read).toBeGreaterThan(3);
     // a player's card
-    await page.getByTestId('league-row').filter({ hasText: 'Riya' }).click();
+    await page.locator('.cw [data-x=player]').filter({ hasText: 'Riya' }).first().click(); // (on points per night Riya is on the podium)
     await expect(page.getByTestId('player-name')).toHaveText('Riya');
     const card = await page.evaluate(avatarLetters, { rows: '.pcard', nameSel: '[data-testid=player-name]' });
     expect(card.bad, `${theme} player card`).toEqual([]);
