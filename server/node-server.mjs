@@ -16198,6 +16198,12 @@ function date4(params) {
 // ../../node_modules/.pnpm/zod@4.1.12/node_modules/zod/v4/classic/external.js
 config(en_default());
 
+// ../../packages/protocol/src/avatars.ts
+var AVATAR_IDS = ["classic-dealer", "classic-gambler", "classic-lady-luck", "classic-old-hand", "classic-rookie", "classic-card-fox", "classic-gold-chip", "classic-four-leaf", "noir-detective", "noir-femme", "noir-boss", "noir-informant", "noir-torch-singer", "noir-black-cat", "noir-raven", "noir-keyhole", "ivory-duchess", "ivory-admiral", "ivory-scholar", "ivory-heiress", "ivory-poet", "ivory-swan", "ivory-laurel-crest", "ivory-stag", "velvet-croupier", "velvet-countess", "velvet-high-roller", "velvet-showgirl", "velvet-magnate", "velvet-panther", "velvet-peacock-plume", "velvet-diamond", "cyber-netrunner", "cyber-synth-diva", "cyber-street-ronin", "cyber-android", "cyber-fixer", "cyber-neon-koi", "cyber-circuit-eye", "cyber-hex-cat", "ink-ronin", "ink-monk", "ink-brawler", "ink-sensei", "ink-kunoichi", "ink-ink-tiger", "ink-crane", "ink-enso-sun", "pixel-knight", "pixel-wizard", "pixel-rogue", "pixel-bard", "pixel-innkeeper", "pixel-tavern-cat", "pixel-little-dragon", "pixel-treasure-chest", "train-conductor", "train-stoker", "train-traveller", "train-porter", "train-stationmaster", "train-night-owl", "train-night-express", "train-moonline", "edo-samurai", "edo-maiko", "edo-kabuki-star", "edo-fisherman", "edo-merchant", "edo-wave-crest", "edo-lucky-koi", "edo-beckoning-cat"];
+var AVATAR_PATTERN = /^[a-z]+(-[a-z0-9]+){1,4}$/;
+var KNOWN = new Set(AVATAR_IDS);
+var isAvatarId = (s) => typeof s === "string" && KNOWN.has(s);
+
 // ../../packages/protocol/src/index.ts
 var PROTOCOL_VERSION = 1;
 var SUPPORTED_VERSIONS = [PROTOCOL_VERSION, PROTOCOL_VERSION - 1].filter((v) => v >= 1);
@@ -16205,6 +16211,7 @@ var REACTIONS = ["\u{1F44D}", "\u{1F602}", "\u{1F62E}", "\u{1F62C}", "\u{1F525}"
 var id = external_exports.string().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/);
 var seed = external_exports.string().regex(/^[0-9a-f]{64}$/);
 var tableCode = external_exports.string().regex(/^[A-Z0-9]{4,12}$/);
+var AvatarField = external_exports.string().max(40).regex(AVATAR_PATTERN).nullable();
 var action = external_exports.object({
   type: external_exports.enum(["fold", "check", "call", "bet", "raise", "allin"]),
   to: external_exports.number().int().nonnegative().optional()
@@ -16243,6 +16250,7 @@ var ClientMessage = external_exports.discriminatedUnion("t", [
     ticket: external_exports.string().min(16).max(128).optional(),
     lastSeq: external_exports.number().int().nonnegative(),
     name: external_exports.string().min(1).max(20).optional(),
+    avatar: AvatarField.optional(),
     spectate: external_exports.boolean().optional(),
     settings: TableSettings.optional(),
     claim: OfflineClaim.optional(),
@@ -18139,6 +18147,8 @@ var TableRoom = class {
   tokens = {};
   /** Seats taken by signed-in accounts: only a ticket for that account may use them. */
   accountSeats = /* @__PURE__ */ new Set();
+  /** The avatar each player picked (only ids this build knows; anything else is shown as initials). */
+  avatars = {};
   /** This game in the league (made with the table). */
   game = null;
   minStacks = {};
@@ -18328,10 +18338,16 @@ var TableRoom = class {
       this.crew = crew;
     }
     const e = this.engine;
-    if (!e.player(m.player)) {
+    const isNew = !e.player(m.player);
+    const avChanged = this.setAvatar(m.player, m.avatar);
+    if (isNew) {
       const name = m.name ?? who?.name;
+      const r = name ? this.apply({ t: "join", id: m.player, name: this.uniqueName(name), now }) : "A name is needed to join";
+      if (r && avChanged) {
+        delete this.avatars[m.player];
+        this.persist();
+      }
       if (!name) return fail("bad_message", "A name is needed to join");
-      const r = this.apply({ t: "join", id: m.player, name: this.uniqueName(name), now });
       if (r) return fail(r === "The table is full" ? "table_full" : "not_allowed", r === "The table is full" && this.opt.offline ? OFFLINE_FULL : r);
       if (m.token && !who) this.tokens[m.player] = hashToken(m.token);
       if (who) this.accountSeats.add(m.player);
@@ -18344,11 +18360,13 @@ var TableRoom = class {
       old.close(4001, "replaced");
     }
     this.goingOffline.delete(m.player);
-    if (!e.player(m.player).connected) this.apply({ t: "presence", pid: m.player, connected: true, now });
+    const wasAway = !e.player(m.player).connected;
+    if (wasAway) this.apply({ t: "presence", pid: m.player, connected: true, now });
     st.hello = true;
     st.pid = m.player;
     this.trackEmpty();
     this.welcome(conn, m.player, m.lastSeq);
+    if (avChanged && !isNew && !wasAway) this.announce();
     if (this.opt.offline) this.sendCheckpoint(conn);
     this.tryDeal(now);
     this.reschedule();
@@ -18644,7 +18662,8 @@ var TableRoom = class {
       crew: this.crew,
       accountSeats: [...this.accountSeats],
       ...this.game ? { game: { ...this.game } } : {},
-      minStacks: this.minStacks
+      minStacks: this.minStacks,
+      ...Object.keys(this.avatars).length ? { avatars: { ...this.avatars } } : {}
     };
     const data = JSON.stringify(cp);
     const hash2 = sha256hex(data);
@@ -18755,9 +18774,20 @@ var TableRoom = class {
     const others = this.engine.s.players.filter((p) => p.id !== not && !p.leaving);
     return others.find((p) => p.connected)?.id ?? others[0]?.id ?? null;
   }
+  /** Keeps (or clears) a player's avatar from their hello; true if it changed. Unknown ids count as none. */
+  setAvatar(pid, av) {
+    if (av === void 0) return false;
+    const next = isAvatarId(av) ? av : null;
+    if ((this.avatars[pid] ?? null) === next) return false;
+    if (next) this.avatars[pid] = next;
+    else delete this.avatars[pid];
+    this.persist();
+    return true;
+  }
   // ---------------- doors out ----------------
   view(pid) {
     const v = this.engine.viewFor(pid);
+    if (Object.keys(this.avatars).length) v.players = v.players.map((p) => this.avatars[p.id] ? { ...p, avatar: this.avatars[p.id] } : p);
     if (v.hand) v.hand = { ...v.hand, proof: null };
     const e = this.engine;
     const dealing = this.running && v.phase === "between" && !e.s.paused && e.canStartHand();
@@ -18815,7 +18845,8 @@ var TableRoom = class {
       accountSeats: [...this.accountSeats],
       ...this.game ? { game: this.game } : {},
       minStacks: this.minStacks,
-      ...this.continuedFrom ? { continuedFrom: this.continuedFrom } : {}
+      ...this.continuedFrom ? { continuedFrom: this.continuedFrom } : {},
+      ...Object.keys(this.avatars).length ? { avatars: { ...this.avatars } } : {}
     };
   }
   persist() {
@@ -18853,6 +18884,8 @@ var TableRoom = class {
     this.game = p.game ?? null;
     this.minStacks = { ...p.minStacks ?? {} };
     this.continuedFrom = p.continuedFrom ?? null;
+    this.avatars = {};
+    for (const [pid, av] of Object.entries(p.avatars ?? {})) if (isAvatarId(av)) this.avatars[pid] = av;
     for (const [pid, list] of Object.entries(p.acks ?? {})) this.acks.set(pid, new Map(list.map((a) => [a.actionId, a])));
   }
   /**
