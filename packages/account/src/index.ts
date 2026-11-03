@@ -234,7 +234,7 @@ export class Account {
     if (change.scoring !== undefined) args.p_scoring = change.scoring;
     if (change.seasonWeeks !== undefined) args.p_season_weeks = change.seasonWeeks;
     if (change.seasonStart !== undefined) args.p_season_start = change.seasonStart;
-    return this.rpc<CrewSettings>('crew_settings', args);
+    return this.rpc<CrewSettings>('crew_settings_v2', args);
   }
   /** "Start a new season now": the season running closes (standings final, trophy given) and the next starts. */
   startSeasonNow(crewId: string, name?: string | null): Promise<SeasonInfo> { return this.rpc<SeasonInfo>('start_season_now', { p_crew: crewId, p_name: name ?? null }); }

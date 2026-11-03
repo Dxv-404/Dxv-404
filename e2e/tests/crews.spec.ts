@@ -31,7 +31,7 @@ async function seedWorld(): Promise<void> {
   const zoya = await person(db, 'Zoya'), tara = await person(db, 'Tara'), sneha = await person(db, 'Sneha');
   fnt = await crewWith(db, meera, 'Friday Night Table', [aditya, riya, dev, kabir, zoya, tara, sneha], { badge: 'shield', color: '#c0392b' });
   await call(db, meera, 'set_role', { p_crew: fnt.id, p_account: aditya.id, p_role: 'admin' });
-  await call(db, meera, 'crew_settings', { p_crew: fnt.id, p_house_rules: { startStack: 1000, sb: 10, bb: 20, blindUpEvery: 20, rebuys: true, maxRebuys: 2 } });
+  await call(db, meera, 'crew_settings_v2', { p_crew: fnt.id, p_house_rules: { startStack: 1000, sb: 10, bb: 20, blindUpEvery: 20, rebuys: true, maxRebuys: 2 } });
   await game(db, fnt.id, 'P8WD', 300, [[kabir, 420], [dev, 60], [meera, -100], [aditya, -180], [riya, -200]]);
   await game(db, fnt.id, 'J2RM', 170, [[aditya, 300], [meera, 200], [dev, -200], [riya, -100], [zoya, -200]]);
   await game(db, fnt.id, 'QK7P', 26, [[meera, 900], [riya, 100], [dev, 40], [tara, -400], [sneha, -640]]);
@@ -312,7 +312,7 @@ test('the leader’s settings: name, badge and colour, who can host, season leng
   await answer(page, true);
   await page.getByTestId('end-season').click();
   await expect.poll(() => db.sqlSync(`select count(*) from seasons where crew_id = '${hostel.id}' and closed_at is not null`)).toBe('1');
-  await call(db, dev, 'crew_settings', { p_crew: hostel.id, p_name: 'Hostel 4B', p_who_hosts: 'everyone', p_members_invite: true, p_badge: 'hex', p_color: '#2f6fd6' });
+  await call(db, dev, 'crew_settings_v2', { p_crew: hostel.id, p_name: 'Hostel 4B', p_who_hosts: 'everyone', p_members_invite: true, p_badge: 'hex', p_color: '#2f6fd6' });
   expect(errors).toEqual([]);
   await ctx.close();
 });

@@ -123,8 +123,8 @@ language sql stable security definer set search_path = '' as $$
 $$;
 
 -- ---------------------------------------------------------------- standings in the crew's scoring
-drop function if exists private.standings(uuid, uuid, boolean);
-create function private.standings(c uuid, s uuid, all_time boolean)
+-- (a new name: the standings now return more columns, and the old function stays for anything still asking it)
+create or replace function private.league_standings(c uuid, s uuid, all_time boolean)
 returns table (account_id uuid, name text, games int, points int, avg numeric, bb numeric, wins int, top3 int, busts int, rebuys int,
   rank int, trend text, member boolean, ranked boolean)
 language sql stable security definer set search_path = '' as $$
@@ -162,10 +162,10 @@ begin
   delete from public.trophies where season_id = s.id and kind in ('season_winner', 'iron_chair');
   insert into public.trophies (account_id, crew_id, season_id, kind, detail)
     select st.account_id, s.crew_id, s.id, 'season_winner', jsonb_build_object('bb', st.bb, 'points', st.points, 'avg', st.avg)
-    from private.standings(s.crew_id, s.id, false) st
+    from private.league_standings(s.crew_id, s.id, false) st
     where st.rank = 1
-       or (not exists (select 1 from private.standings(s.crew_id, s.id, false) z where z.ranked)
-           and (st.avg, st.bb) = (select z.avg, z.bb from private.standings(s.crew_id, s.id, false) z limit 1))
+       or (not exists (select 1 from private.league_standings(s.crew_id, s.id, false) z where z.ranked)
+           and (st.avg, st.bb) = (select z.avg, z.bb from private.league_standings(s.crew_id, s.id, false) z limit 1))
     on conflict do nothing;
   insert into public.trophies (account_id, crew_id, season_id, kind, detail)
     select gp.account_id, s.crew_id, s.id, 'iron_chair', jsonb_build_object('games', count(*))
@@ -178,8 +178,8 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------- the crew's settings (leader)
-drop function if exists public.crew_settings(uuid, text, text, text, int, text, boolean, boolean, jsonb);
-create function public.crew_settings(p_crew uuid, p_name text default null, p_badge text default null, p_color text default null,
+-- (crew_settings_v2: the settings with scoring and season control; the older crew_settings stays as it was)
+create or replace function public.crew_settings_v2(p_crew uuid, p_name text default null, p_badge text default null, p_color text default null,
   p_season_months int default null, p_who_hosts text default null, p_members_invite boolean default null, p_auto_admit boolean default null,
   p_house_rules jsonb default null, p_scoring text default null, p_season_weeks int default null, p_season_start date default null) returns jsonb
 language plpgsql security definer set search_path = '' as $$
@@ -286,7 +286,7 @@ begin
       'season_title', (select title from public.seasons where id = s.sid),
       'seasons_on', c.season_months > 0, 'scoring', c.scoring,
       'next_season', (select coalesce(max(number), 0) + 1 from public.seasons where crew_id = c.id),
-      'rank', (select st.rank from private.standings(c.id, s.sid, false) st where st.account_id = a),
+      'rank', (select st.rank from private.league_standings(c.id, s.sid, false) st where st.account_id = a),
       'live', private.live_table(c.id),
       'usual', private.usual_night(c.id),
       'can_host', private.can_host(c.id, a), 'who_hosts', c.who_hosts,
@@ -303,7 +303,7 @@ begin
   if r is null then raise exception 'Only crew members can open the crew' using errcode = '42501'; end if;
   select * into c from public.crews where id = p_crew;
   select * into s from public.seasons where id = public.current_season(p_crew);
-  select * into me from private.standings(p_crew, s.id, false) st where st.account_id = a;
+  select * into me from private.league_standings(p_crew, s.id, false) st where st.account_id = a;
   select x.id, x.name into ldr from public.crew_members m join public.accounts x on x.id = m.account_id where m.crew_id = p_crew and m.role = 'owner' limit 1;
   select g.id, g.started_at, g.ended_at, g.server, g.table_code,
     (select count(*) from public.game_players where game_id = g.id) players,
@@ -329,7 +329,7 @@ begin
         where g.crew_id = p_crew and g.season_id = s.id and g.status = 'ended' and not g.casual and gp.account_id = a) sp)),
     'podium', (select coalesce(jsonb_agg(jsonb_build_object('account_id', st.account_id, 'name', st.name, 'bb', st.bb, 'rank', st.rank,
         'points', st.points, 'avg', st.avg, 'games', st.games, 'ranked', st.ranked) order by st.o), '[]'::jsonb)
-      from (select x.*, row_number() over () o from private.standings(p_crew, s.id, false) x limit 3) st),
+      from (select x.*, row_number() over () o from private.league_standings(p_crew, s.id, false) x limit 3) st),
     'last_game', case when lg.id is null then null else jsonb_build_object('id', lg.id, 'started_at', lg.started_at, 'ended_at', lg.ended_at, 'players', lg.players,
       'winner', lg.winner, 'mine', lg.mine, 'offline', lg.server = 'host', 'table', lg.table_code) end,
     'live', private.live_table(p_crew),
@@ -354,7 +354,7 @@ begin
     'rows', case when p_scope <> 'alltime' and s.id is null then '[]'::jsonb else (select coalesce(jsonb_agg(jsonb_build_object('account_id', st.account_id, 'name', st.name,
       'games', st.games, 'bb', st.bb, 'points', st.points, 'avg', st.avg, 'wins', st.wins, 'top3', st.top3, 'busts', st.busts, 'rebuys', st.rebuys,
       'rank', st.rank, 'ranked', st.ranked, 'trend', st.trend, 'member', st.member, 'me', st.account_id = a) order by st.o), '[]'::jsonb)
-      from (select x.*, row_number() over () o from private.standings(p_crew, s.id, p_scope = 'alltime') x) st) end);
+      from (select x.*, row_number() over () o from private.league_standings(p_crew, s.id, p_scope = 'alltime') x) st) end);
 end $$;
 
 create or replace function public.crew_player(p_crew uuid, p_account uuid) returns jsonb
@@ -368,7 +368,7 @@ begin
   end if;
   nm := case when m is null then 'Former player' else (select name from public.accounts where id = p_account) end;
   select * into s from public.seasons where id = public.current_season(p_crew);
-  select * into st from private.standings(p_crew, s.id, false) x where x.account_id = p_account;
+  select * into st from private.league_standings(p_crew, s.id, false) x where x.account_id = p_account;
   select count(*)::int nights, sum(x.bb) bb, sum(x.hands)::int hands, sum(x.showdowns)::int sd, sum(x.showdowns_won)::int sdw,
     max(x.bb) best, min(x.bb) worst
     into n from private.nights(p_crew, s.id, false) x where x.account_id = p_account;
@@ -405,9 +405,9 @@ end $$;
 
 -- ---------------------------------------------------------------- who may call what
 revoke all on function private.season_length(public.crews), private.season_bounds(uuid, timestamptz), private.number_seasons(uuid),
-  private.night_points(int, int, numeric, int), private.nights(uuid, uuid, boolean), private.standings(uuid, uuid, boolean),
+  private.night_points(int, int, numeric, int), private.nights(uuid, uuid, boolean), private.league_standings(uuid, uuid, boolean),
   private.crew_json(public.crews), private.season_json(public.seasons) from public, anon, authenticated;
-revoke all on function public.crew_settings(uuid, text, text, text, int, text, boolean, boolean, jsonb, text, int, date),
+revoke all on function public.crew_settings_v2(uuid, text, text, text, int, text, boolean, boolean, jsonb, text, int, date),
   public.start_season_now(uuid, text), public.rename_season(uuid, uuid, text) from public, anon, authenticated;
-grant execute on function public.crew_settings(uuid, text, text, text, int, text, boolean, boolean, jsonb, text, int, date),
+grant execute on function public.crew_settings_v2(uuid, text, text, text, int, text, boolean, boolean, jsonb, text, int, date),
   public.start_season_now(uuid, text), public.rename_season(uuid, uuid, text) to authenticated;

@@ -71,19 +71,19 @@ select is((select rebuys from private.nights(:'crew', :'s1', false) where accoun
 select is((select place from private.nights(:'crew', :'s1', false) where account_id = :'b' and game_id = :'n3'), 3, 'no place recorded: ranked by net');
 select is((select string_agg(busted::text, ',' order by ended_at) from private.nights(:'crew', :'s1', false) where account_id = :'b'), 'false,false,true', 'last place is a bust');
 
-select is((select string_agg(coalesce(rank::text, '-') || ':' || name || ':' || points || ':' || avg || ':' || ranked, ' ') from private.standings(:'crew', :'s1', false)),
+select is((select string_agg(coalesce(rank::text, '-') || ':' || name || ':' || points || ':' || avg || ':' || ranked, ' ') from private.league_standings(:'crew', :'s1', false)),
   '1:Anil:13:4.33:true 2:Bina:12:4.00:true 3:Chirag:-2:-0.67:true -:Divya:1:0.50:false',
   'points: ranked by points per night; 2 nights is unranked and comes after, with its numbers');
-select is((select wins || '/' || top3 || '/' || busts || '/' || rebuys from private.standings(:'crew', :'s1', false) where account_id = :'a'), '2/3/0/0', 'Anil: 2 wins, 3 top-3, no busts or rebuys');
-select is((select wins || '/' || top3 || '/' || busts || '/' || rebuys from private.standings(:'crew', :'s1', false) where account_id = :'c'), '0/2/1/1', 'Chirag: 2 top-3, 1 bust, 1 rebuy');
-select is((select busts from private.standings(:'crew', :'s1', false) where account_id = :'d'), 1, 'chips at 0 is a bust');
+select is((select wins || '/' || top3 || '/' || busts || '/' || rebuys from private.league_standings(:'crew', :'s1', false) where account_id = :'a'), '2/3/0/0', 'Anil: 2 wins, 3 top-3, no busts or rebuys');
+select is((select wins || '/' || top3 || '/' || busts || '/' || rebuys from private.league_standings(:'crew', :'s1', false) where account_id = :'c'), '0/2/1/1', 'Chirag: 2 top-3, 1 bust, 1 rebuy');
+select is((select busts from private.league_standings(:'crew', :'s1', false) where account_id = :'d'), 1, 'chips at 0 is a bust');
 select is((select scoring from crews where id = :'crew'), 'points', 'every crew scores in points unless the leader changes it');
 
 update crews set scoring = 'bb' where id = :'crew';
-select is((select string_agg(coalesce(rank::text, '-') || ':' || name || ':' || bb, ' ') from private.standings(:'crew', :'s1', false)),
+select is((select string_agg(coalesce(rank::text, '-') || ':' || name || ':' || bb, ' ') from private.league_standings(:'crew', :'s1', false)),
   '1:Bina:221.00 2:Anil:89.00 3:Divya:-50.00 4:Chirag:-260.00', 'bb: total big blinds won, everyone ranked (as before)');
 update crews set scoring = 'average' where id = :'crew';
-select is((select string_agg(coalesce(rank::text, '-') || ':' || name || ':' || avg, ' ') from private.standings(:'crew', :'s1', false)),
+select is((select string_agg(coalesce(rank::text, '-') || ':' || name || ':' || avg, ' ') from private.league_standings(:'crew', :'s1', false)),
   '1:Bina:73.67 2:Anil:29.67 3:Chirag:-86.67 -:Divya:-25.00', 'average: big blinds per night, 3 nights to be ranked');
 select is(testing.one(:PB, format($$select public.crew_league(%L) ->> 'scoring'$$, :'crew')), 'average', 'the league says how it is scored');
 update crews set scoring = 'points' where id = :'crew';
@@ -92,7 +92,7 @@ update crews set scoring = 'points' where id = :'crew';
 select pg_temp.night(:'crew2', now() - interval '3 hours', array[:'e' || '|10|1000|1100|1', :'f' || '|5|1000|1050|2', :'g' || '|0|1000|1000|3']);
 select pg_temp.night(:'crew2', now() - interval '2 hours', array[:'e' || '|10|1000|1100|2', :'f' || '|0|1000|1000|3', :'g' || '|19|1000|1190|1']);
 select pg_temp.night(:'crew2', now() - interval '1 hour', array[:'e' || '|0|1000|1000|3', :'f' || '|19|1000|1190|1', :'g' || '|1|1000|1010|2']);
-select is((select string_agg(rank || ':' || name || ':' || avg || ':' || bb, ' ') from private.standings(:'crew2', public.current_season(:'crew2'), false)),
+select is((select string_agg(rank || ':' || name || ':' || avg || ':' || bb, ' ') from private.league_standings(:'crew2', public.current_season(:'crew2'), false)),
   '1:Farid:2.00:24.00 2:Esha:2.00:20.00 2:Gita:2.00:20.00', 'ties: bb won, then the name (equal both: the same rank)');
 
 -- ---------------------------------------------------------------- what the screens get
@@ -124,17 +124,17 @@ select is((select string_agg(a.name, ',') from trophies t join accounts a on a.i
 delete from trophies where season_id = :'s1';
 
 -- ---------------------------------------------------------------- settings: scoring and season length
-select is(testing.one(:PB, format('select public.crew_settings(%L, p_scoring => %L)', :'crew', 'bb')), 'Only the crew leader can do that', 'only the leader changes the scoring');
-select is(testing.one(:LEAD, format('select public.crew_settings(%L, p_scoring => %L)', :'crew', 'fun')), 'new row for relation "crews" violates check constraint "crews_scoring_check"', 'scoring is points, bb or average');
-select is(testing.one(:LEAD, format($$select public.crew_settings(%L, p_scoring => %L) ->> 'scoring'$$, :'crew', 'average')), 'average', 'the leader sets the scoring');
-select is(testing.one(:LEAD, format($$select public.crew_settings(%L, p_scoring => %L) ->> 'scoring'$$, :'crew', 'points')), 'points', 'and back');
-select is(testing.one(:LEAD, format($$select public.crew_settings(%L, p_season_weeks => 2) ->> 'season_length'$$, :'crew')), '2w', 'seasons of 2 weeks');
+select is(testing.one(:PB, format('select public.crew_settings_v2(%L, p_scoring => %L)', :'crew', 'bb')), 'Only the crew leader can do that', 'only the leader changes the scoring');
+select is(testing.one(:LEAD, format('select public.crew_settings_v2(%L, p_scoring => %L)', :'crew', 'fun')), 'new row for relation "crews" violates check constraint "crews_scoring_check"', 'scoring is points, bb or average');
+select is(testing.one(:LEAD, format($$select public.crew_settings_v2(%L, p_scoring => %L) ->> 'scoring'$$, :'crew', 'average')), 'average', 'the leader sets the scoring');
+select is(testing.one(:LEAD, format($$select public.crew_settings_v2(%L, p_scoring => %L) ->> 'scoring'$$, :'crew', 'points')), 'points', 'and back');
+select is(testing.one(:LEAD, format($$select public.crew_settings_v2(%L, p_season_weeks => 2) ->> 'season_length'$$, :'crew')), '2w', 'seasons of 2 weeks');
 select is((select season_months > 0 from crews where id = :'crew'), true, '(seasons stay on)');
-select is(testing.one(:LEAD, format($$select public.crew_settings(%L, p_season_weeks => 3)$$, :'crew')), 'new row for relation "crews" violates check constraint "crews_season_weeks_check"', 'weeks: only 2');
-select is(testing.one(:LEAD, format($$select public.crew_settings(%L, p_season_months => 2) ->> 'season_length'$$, :'crew')), '2m', '2 months (and months clear the weeks)');
-select is(testing.one(:LEAD, format($$select public.crew_settings(%L, p_season_weeks => 2, p_season_months => 0) ->> 'season_length'$$, :'crew')), '2w', '2 weeks switches seasons on');
-select is(testing.one(:LEAD, format($$select public.crew_settings(%L, p_season_months => 0) ->> 'season_length'$$, :'crew')), 'off', 'off');
-select is(testing.one(:LEAD, format($$select public.crew_settings(%L, p_season_months => 3) ->> 'season_length'$$, :'crew')), '3m', 'back to 3 months');
+select is(testing.one(:LEAD, format($$select public.crew_settings_v2(%L, p_season_weeks => 3)$$, :'crew')), 'new row for relation "crews" violates check constraint "crews_season_weeks_check"', 'weeks: only 2');
+select is(testing.one(:LEAD, format($$select public.crew_settings_v2(%L, p_season_months => 2) ->> 'season_length'$$, :'crew')), '2m', '2 months (and months clear the weeks)');
+select is(testing.one(:LEAD, format($$select public.crew_settings_v2(%L, p_season_weeks => 2, p_season_months => 0) ->> 'season_length'$$, :'crew')), '2w', '2 weeks switches seasons on');
+select is(testing.one(:LEAD, format($$select public.crew_settings_v2(%L, p_season_months => 0) ->> 'season_length'$$, :'crew')), 'off', 'off');
+select is(testing.one(:LEAD, format($$select public.crew_settings_v2(%L, p_season_months => 3) ->> 'season_length'$$, :'crew')), '3m', 'back to 3 months');
 
 -- the periods (a crew of its own, so only the arithmetic counts)
 select testing.as_phone(:LEAD, $$select public.create_crew_v3('Lengths', 'round', '#1f8a5b', true) ->> 'id' as id$$) -> 0 ->> 'id' as cl \gset
@@ -157,9 +157,9 @@ select is((select (s at time zone 'Asia/Kolkata')::date || ' ' || (e at time zon
   '2026-10-21 2026-11-04', '2 weeks from the anchor, before it too');
 
 -- ---------------------------------------------------------------- the next season's start date
-select is(testing.one(:LEAD, format($$select public.crew_settings(%L, p_season_start => %L)$$, :'crew', ((now() at time zone 'Asia/Kolkata')::date - 1)::text)), 'The next season starts today or later', 'not in the past');
-select is(testing.one(:PB, format($$select public.crew_settings(%L, p_season_start => %L)$$, :'crew', ((now() at time zone 'Asia/Kolkata')::date + 10)::text)), 'Only the crew leader can do that', 'only the leader');
-select testing.one(:LEAD, format($$select public.crew_settings(%L, p_season_months => 1, p_season_start => %L)$$, :'crew', ((now() at time zone 'Asia/Kolkata')::date + 10)::text));
+select is(testing.one(:LEAD, format($$select public.crew_settings_v2(%L, p_season_start => %L)$$, :'crew', ((now() at time zone 'Asia/Kolkata')::date - 1)::text)), 'The next season starts today or later', 'not in the past');
+select is(testing.one(:PB, format($$select public.crew_settings_v2(%L, p_season_start => %L)$$, :'crew', ((now() at time zone 'Asia/Kolkata')::date + 10)::text)), 'Only the crew leader can do that', 'only the leader');
+select testing.one(:LEAD, format($$select public.crew_settings_v2(%L, p_season_months => 1, p_season_start => %L)$$, :'crew', ((now() at time zone 'Asia/Kolkata')::date + 10)::text));
 select is((select (ends_at at time zone 'Asia/Kolkata') from seasons where id = :'s1'), ((now() at time zone 'Asia/Kolkata')::date + 10)::timestamp, 'the season now ends on the chosen day');
 select is((select season_anchor from crews where id = :'crew'), (now() at time zone 'Asia/Kolkata')::date + 10, 'seasons count from it');
 select private.season_for(:'crew', now() + interval '11 days') as s2 \gset

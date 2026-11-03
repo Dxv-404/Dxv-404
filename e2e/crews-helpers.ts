@@ -22,9 +22,9 @@ export async function call<T = unknown>(db: LocalDb, who: Person, fn: string, bo
 /** A crew made by `leader` with everyone else let straight in. Returns its id and code. */
 export async function crewWith(db: LocalDb, leader: Person, name: string, others: Person[], o: { badge?: string; color?: string; seasons?: boolean; autoAdmit?: boolean } = {}): Promise<{ id: string; code: string }> {
   const c = await call<{ id: string; code: string }>(db, leader, 'create_crew_v3', { p_name: name, p_badge: o.badge ?? 'shield', p_color: o.color ?? '#c0392b', p_seasons: o.seasons ?? true });
-  await call(db, leader, 'crew_settings', { p_crew: c.id, p_auto_admit: true });
+  await call(db, leader, 'crew_settings_v2', { p_crew: c.id, p_auto_admit: true });
   for (const p of others) await call(db, p, 'ask_to_join', { p_code: c.code });
-  if (!o.autoAdmit) await call(db, leader, 'crew_settings', { p_crew: c.id, p_auto_admit: false });
+  if (!o.autoAdmit) await call(db, leader, 'crew_settings_v2', { p_crew: c.id, p_auto_admit: false });
   return c;
 }
 

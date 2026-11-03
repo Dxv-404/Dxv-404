@@ -22,7 +22,7 @@ test('Casual off asks which crew, lists only crews I can host for, and tells the
   const mine = await crewWith(db, dev, 'Hostel 4B', [riya]); // Dev leads it
   const open = await crewWith(db, meera, 'Office Fridays', [dev]); // everyone may host
   const strict = await crewWith(db, meera, 'Cousins', [dev]); // only the leader hosts
-  await call(db, meera, 'crew_settings', { p_crew: strict.id, p_who_hosts: 'leader' });
+  await call(db, meera, 'crew_settings_v2', { p_crew: strict.id, p_who_hosts: 'leader' });
   for (const [w, h] of [[390, 844], [1440, 900]] as const) {
     const { ctx, page, errors } = await phone(browser, db, baseURL!, { width: w, height: h });
     await signInAs(ctx, dev);

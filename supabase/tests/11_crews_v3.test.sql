@@ -103,13 +103,13 @@ select is(testing.one(:ADM, format('select public.remove_member(%L, %L)', :'crew
 select is(testing.one(:OUT, format('select public.remove_member(%L, %L)', :'crew', :'new1')), 'Only the crew leader can do that', 'nor an outsider');
 
 -- ---------------------------------------------------------------- settings (leader only)
-select is(testing.one(:ADM, format('select public.crew_settings(%L, p_name => %L)', :'crew', 'Renamed')), 'Only the crew leader can do that', 'an admin cannot rename');
-select is(testing.one(:MEM, format('select public.crew_settings(%L, p_auto_admit => true)', :'crew')), 'Only the crew leader can do that', 'a member cannot let people in by themselves');
+select is(testing.one(:ADM, format('select public.crew_settings_v2(%L, p_name => %L)', :'crew', 'Renamed')), 'Only the crew leader can do that', 'an admin cannot rename');
+select is(testing.one(:MEM, format('select public.crew_settings_v2(%L, p_auto_admit => true)', :'crew')), 'Only the crew leader can do that', 'a member cannot let people in by themselves');
 select is(testing.one(:ADM, format('select public.update_crew(%L, p_require_approval => false)', :'crew')), 'Only the crew leader can do that', 'nor through the old way');
-select is(testing.one(:LEAD, format('select public.crew_settings(%L, p_name => %L)', :'crew', repeat('x', 25))), 'A crew name is 1 to 24 characters', 'a rename keeps to 24 characters');
-select is(testing.one(:LEAD, format('select public.crew_settings(%L, p_who_hosts => %L)', :'crew', 'nobody')), 'new row for relation "crews" violates check constraint "crews_who_hosts_check"', 'who hosts is everyone, admins or the leader');
-select is(testing.one(:LEAD, format('select public.crew_settings(%L, p_season_months => 4)', :'crew')), 'new row for relation "crews" violates check constraint "crews_season_months_check"', 'seasons are 1, 2, 3 or 6 months, or off (2 months since 0017)');
-select testing.as_phone(:LEAD, format('select public.crew_settings(%L, %L, %L, %L, 1, %L, false, true, %L) as s', :'crew', 'Friday Night', 'diamond', '#7d3cc8', 'admins', '{"startStack":1000,"sb":10,"bb":20,"rebuys":2}')) -> 0 -> 's' as st \gset
+select is(testing.one(:LEAD, format('select public.crew_settings_v2(%L, p_name => %L)', :'crew', repeat('x', 25))), 'A crew name is 1 to 24 characters', 'a rename keeps to 24 characters');
+select is(testing.one(:LEAD, format('select public.crew_settings_v2(%L, p_who_hosts => %L)', :'crew', 'nobody')), 'new row for relation "crews" violates check constraint "crews_who_hosts_check"', 'who hosts is everyone, admins or the leader');
+select is(testing.one(:LEAD, format('select public.crew_settings_v2(%L, p_season_months => 4)', :'crew')), 'new row for relation "crews" violates check constraint "crews_season_months_check"', 'seasons are 1, 2, 3 or 6 months, or off (2 months since 0017)');
+select testing.as_phone(:LEAD, format('select public.crew_settings_v2(%L, %L, %L, %L, 1, %L, false, true, %L) as s', :'crew', 'Friday Night', 'diamond', '#7d3cc8', 'admins', '{"startStack":1000,"sb":10,"bb":20,"rebuys":2}')) -> 0 -> 's' as st \gset
 select is(:'st'::jsonb ->> 'name', 'Friday Night', 'the leader renames');
 select is(:'st'::jsonb ->> 'badge', 'diamond', 'changes the badge');
 select is(:'st'::jsonb ->> 'season_months', '1', 'the season length');
@@ -133,7 +133,7 @@ select is((select uses from crew_codes where crew_id = :'crew'), 0, 'the new cod
 -- invitations from a link: only when the sender may invite
 select testing.one(:OUT, format('select public.note_invitation(%L, %L)', :'code2', :'mem'));
 select is(testing.one(:OUT, $$select jsonb_array_length(public.my_invitations())$$), '0', 'a member who may not invite sends no invitation');
-select testing.one(:LEAD, format('select public.crew_settings(%L, p_members_invite => true)', :'crew'));
+select testing.one(:LEAD, format('select public.crew_settings_v2(%L, p_members_invite => true)', :'crew'));
 select testing.one(:OUT, format('select public.note_invitation(%L, %L)', :'code2', :'mem'));
 select is(testing.one(:OUT, $$select r ->> 'invited_by' from jsonb_array_elements(public.my_invitations()) r$$), 'Dev', '"Dev invited you"');
 select is(testing.one(:NEW2, $$select count(*) from crew_invitations$$), '0', 'nobody else sees that invitation');
@@ -152,16 +152,16 @@ select is(testing.one(:OUT, $$select count(*) from crew_tables$$), '0', 'outside
 select is(testing.one(:MEM, format('select public.close_crew_table(%L, %s)', :'crew', :'hosted'::jsonb ->> 'id')), 'That table is not open', 'a member cannot close someone else''s table');
 select testing.one(:ADM, format('select public.close_crew_table(%L, %s)', :'crew', :'hosted'::jsonb ->> 'id'));
 select is(testing.one(:MEM, $$select r -> 'live' from jsonb_array_elements(public.my_crews()) r$$), null, 'closed: no longer LIVE');
-select testing.one(:LEAD, format('select public.crew_settings(%L, p_who_hosts => %L)', :'crew', 'leader'));
+select testing.one(:LEAD, format('select public.crew_settings_v2(%L, p_who_hosts => %L)', :'crew', 'leader'));
 select is(testing.one(:ADM, format('select public.host_crew_table(%L, %L)', :'crew', 'AB12')), 'Only the leader can host this crew''s tables', 'with "only me", admins cannot host either');
 select is(testing.one(:MEM, format('select public.crew_page(%L) ->> %L', :'crew', 'can_host')), 'false', 'and the crew page says so');
 select is(testing.one(:LEAD, format('select public.host_crew_table(%L, null, %L) ->> %L', :'crew', 'qr', 'notified')), '4', 'the leader hosts a QR table (no code)');
-select testing.one(:LEAD, format('select public.crew_settings(%L, p_who_hosts => %L)', :'crew', 'everyone'));
+select testing.one(:LEAD, format('select public.crew_settings_v2(%L, p_who_hosts => %L)', :'crew', 'everyone'));
 
 -- ---------------------------------------------------------------- the crew list and the crew page
 select is(testing.one(:LEAD, $$select r ->> 'requests' from jsonb_array_elements(public.my_crews()) r where r ->> 'name' = 'Friday Night'$$), '0', 'the leader''s card counts requests');
 select testing.one(:NEW2, format('select public.ask_to_join(%L)', :'code2'));
-select testing.one(:LEAD, format('select public.crew_settings(%L, p_auto_admit => false)', :'crew'));
+select testing.one(:LEAD, format('select public.crew_settings_v2(%L, p_auto_admit => false)', :'crew'));
 select is(testing.one(:LEAD, $$select count(*) from jsonb_array_elements(public.my_crews())$$), '2', 'the leader is in two crews');
 select is(testing.one(:MEM, $$select r ->> 'requests' from jsonb_array_elements(public.my_crews()) r$$), '0', 'a member''s card never shows requests');
 select is(testing.one(:OUT, format('select public.crew_page(%L)', :'crew')), 'Only crew members can open the crew', 'outsiders cannot open the crew page');
