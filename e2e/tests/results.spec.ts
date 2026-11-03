@@ -213,6 +213,10 @@ async function showdown(page: Page, W: number): Promise<void> {
   await expect(page.locator('.tp.live .act.nxt')).toContainText(/Next hand in \d+ · (tap|Space) to skip/);
   // then everyone else at the showdown, named; the folded hands never
   await reached(page, 'all');
+  // the winner's seat stays where it is while the rest turn over (it used to jump back and forth)
+  const seatAt = () => page.locator('.tp.live .seat.win').first().evaluate((e) => { const r = e.getBoundingClientRect(); return `${Math.round(r.left)},${Math.round(r.top)}`; });
+  const p0 = await seatAt();
+  for (let i = 0; i < 6; i++) { await page.waitForTimeout(120); expect(await seatAt(), 'winner seat moved').toBe(p0); }
   await expect(seat(page, 'Meera').locator('.shown .cd')).toHaveCount(2);
   await expect(seat(page, 'Meera')).toHaveClass(/\blose\b/);
   await expect(seat(page, 'Meera').locator('.tag')).toHaveText('Two pair');
