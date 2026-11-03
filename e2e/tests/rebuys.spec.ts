@@ -155,6 +155,15 @@ test.describe('rebuy controls when opening a table', () => {
       const outline = await p.page.locator('.s3-c2').evaluate((e) => getComputedStyle(e).boxShadow);
       expect(outline).toContain('1.5px');
       expect(await fits(p.page, '.screen.setup3')).toEqual([]);
+      // the dialog fits the laptop's screen: no page scroll at 1440×900 or 1280×720, with Rebuys close and a custom amount showing
+      await p.page.getByTestId('cfg-blinds-up').getByRole('radio', { name: '10 hands' }).click();
+      await p.page.getByTestId('rb-amt').getByRole('radio', { name: 'Custom' }).click();
+      for (const [w, hh] of [[1440, 900], [1280, 720]] as const) {
+        await p.page.setViewportSize({ width: w, height: hh });
+        const r = await p.page.evaluate(() => ({ scroll: document.documentElement.scrollHeight - innerHeight, go: document.querySelector('.s3-foot .btn')!.getBoundingClientRect().bottom }));
+        expect(r.scroll, `${w}×${hh}: the page scrolls`).toBeLessThanOrEqual(0);
+        expect(r.go, `${w}×${hh}: Open the table below the fold`).toBeLessThanOrEqual(hh);
+      }
       // the phone layout at 390 is one column
       await p.page.setViewportSize({ width: 390, height: 844 });
       const one = await p.page.evaluate(() => ['.s3-c1', '.s3-c2'].map((s) => document.querySelector(s)!.getBoundingClientRect().top));

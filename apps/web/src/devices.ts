@@ -24,8 +24,10 @@ export interface DevCtx {
 
 let modP: Promise<Mod> | null = null;
 const mod = (): Promise<Mod> => (modP ??= import('@tp/account'));
-/** The kit's toast, at the top of the screen as the design shows it. */
-export const toast = (msg: string, ms?: number): void => kitToast(msg, ms ?? 2600, { top: true });
+/** The kit's toast, at the top of the screen as the design shows it (v3kit.py: a solid bar with a check). */
+export const toast = (msg: string, ms?: number, icon: 'check' | 'warn' | 'info' = 'check'): void => kitToast(msg, ms ?? 2600, { top: true, icon });
+/** Something went wrong: the same toast with the warning icon, a little longer. */
+const oops = (err: unknown): void => toast((err as Error).message, 4000, 'warn');
 
 // ---------------------------------------------------------------- small pieces
 const SVG = {
@@ -120,11 +122,11 @@ function deviceSheet(ctx: DevCtx, a: Account, d: Device, label: string, redraw: 
     h('button', { class: 'btn secondary', 'data-testid': 'device-rename', onclick: async () => {
       const name = await ask('Name this device', { yes: 'Save', input: { value: d.name ?? '', max: 30, placeholder: label } });
       if (name === null || name === undefined) return;
-      try { await a.renameDevice(d.device, String(name)); s.close(); toast('Renamed'); redraw(); } catch (err) { toast((err as Error).message); }
+      try { await a.renameDevice(d.device, String(name)); s.close(); toast('Renamed'); redraw(); } catch (err) { oops(err); }
     } }, 'Rename'),
     h('button', { class: 'btn danger', 'data-testid': 'device-logout', onclick: async () => {
       if (!(await ask(`Log out ${label}? It stops being your account at once.`, { yes: 'Log out', danger: true }))) return;
-      try { await a.logoutPhone(d.device); s.close(); toast(`${label} is logged out`); redraw(); } catch (err) { toast((err as Error).message); }
+      try { await a.logoutPhone(d.device); s.close(); toast(`${label} is logged out`); redraw(); } catch (err) { oops(err); }
     } }, 'Log out')), { label });
 }
 
@@ -542,7 +544,7 @@ export async function drawDeviceNotices(a: Account, box: HTMLElement, after?: ()
       h('p', { class: 'hint' }, `${n.detail ? `${n.detail} · ` : ''}${m.lastUsed(n.at)}. If that wasn’t you, log it out: it stops being your account at once.`),
       h('div', { class: 'two' },
         h('button', { class: 'btn danger', 'data-testid': 'notice-not-me', onclick: async () => {
-          try { await a.logoutPhone(n.device); await a.dismissDeviceNotice(n.id); toast(`The new ${n.kind} is logged out`); card.remove(); after?.(); } catch (err) { toast((err as Error).message); }
+          try { await a.logoutPhone(n.device); await a.dismissDeviceNotice(n.id); toast(`The new ${n.kind} is logged out`); card.remove(); after?.(); } catch (err) { oops(err); }
         } }, 'Not me? Log it out'),
         h('button', { class: 'btn ghost', 'data-testid': 'notice-ok', onclick: async () => { card.remove(); try { await a.dismissDeviceNotice(n.id); } catch { /* shown again next time */ } } }, 'That was me')));
     return card;
