@@ -2,6 +2,7 @@
 // into actions. Used for online tables and offline (host app) tables alike.
 import type { Action, GameEvent } from '@tp/engine';
 import type { ScreenView } from '../net-table';
+import { fitPill } from './pill';
 import { renderTable, sprite, fmt, winnerCardHtml, THEME_KEYS, THEMES, type ThemeKey, type Frame } from './render';
 import { sfx, buzz, settings } from '../legacy/fx.js';
 import { ask } from '../legacy/ui.js';
@@ -228,6 +229,10 @@ export class TableScreen {
     const frame = renderTable(v, currentTheme(), W, H, { peek: this.peek || !settings.holdToPeek, bubble: this.bubble, code: this.o.code, net: this.net, res: v.hand?.results ? this.res : null });
     if (frame.html === this.frame?.html) return; // nothing changed on screen
     try { this.drawParts(frame); } finally { this.drainBar(); }
+    // the result pill clear of the seats and their cards (again once the theme's fonts are in: its size changes)
+    const tp = this.stage.firstElementChild as HTMLElement | null;
+    fitPill(tp);
+    if (tp?.querySelector('.wpill') && document.fonts.status !== 'loaded') void document.fonts.ready.then(() => { if (this.stage.firstElementChild === tp) fitPill(tp); });
   }
 
   /** The next-hand bar drains from where it is now to the deal (a still bar when motion is off). */

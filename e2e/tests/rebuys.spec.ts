@@ -77,6 +77,22 @@ async function chooseRebuys(page: Page): Promise<void> {
   await page.getByTestId('cfg-blinds-up').getByRole('radio', { name: 'Never' }).click();
   await expect(page.getByTestId('rb-close')).toBeHidden();
   await expect(sum).toContainText('Rebuys stay open all night');
+  // the switch's whole row is the target (at least 44 px tall, the block's width): a tap on its words, in the gap
+  // or just above the switch turns it off and on; the switch itself keeps its 50 x 30 look
+  const sw = block.getByTestId('rb-on'), head = block.locator('.rb-head');
+  await head.scrollIntoViewIfNeeded();
+  const row0 = (await head.boundingBox())!, sw0 = (await sw.boundingBox())!, bb = (await block.boundingBox())!;
+  expect(row0.height).toBeGreaterThanOrEqual(44);
+  expect(row0.width).toBeGreaterThan(bb.width - 40);
+  expect([Math.round(sw0.width), Math.round(sw0.height)]).toEqual([50, 30]);
+  // (where in the row: x from its left, or from the switch's left when negative; y from its top, or bottom when negative)
+  for (const [x, y, on] of [[4, 0.5, false], [-6, 0.5, true], [25, 2, false], [25, -2, true]] as const) {
+    await head.scrollIntoViewIfNeeded();
+    const row = (await head.boundingBox())!, swb = (await sw.boundingBox())!;
+    const px = x < 0 ? swb.x + x : x === 25 ? swb.x + 25 : row.x + x, py = y === 0.5 ? row.y + row.height / 2 : y < 0 ? row.y + row.height + y : row.y + y;
+    await page.mouse.click(px, py);
+    await expect(sw, `tap at ${Math.round(px - row.x)},${Math.round(py - row.y)} in the row`).toBeChecked({ checked: on });
+  }
   // the switch: off hides the rest and says so
   await block.getByTestId('rb-on').uncheck();
   await expect(page.getByTestId('rb-max')).toBeHidden();

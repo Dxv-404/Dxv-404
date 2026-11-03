@@ -5,6 +5,8 @@
 /* ---------- the Rebuys block (outlined, as the design's .rbp) ---------- */
 .tp.app .block.rbp{box-shadow:inset 0 0 0 1.5px var(--acc),var(--panelsh,inset 0 0 0 1px var(--line))}
 .tp.app .block.rbp.off{box-shadow:var(--panelsh,inset 0 0 0 1px var(--line))}
+/* the whole row (a label around the switch, at least 48 px tall) is the tap target; the switch keeps its 50 x 30 look */
+.tp.app .rb-head{min-height:48px;cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation}
 .tp.app .rb-head .rb-t{font:var(--dspw,700) 17px var(--dsp);color:var(--tx)}
 .tp.app .rb-body{display:grid;gap:12px}
 .tp.app .rb-body[hidden],.tp.app .rb-custom[hidden],.tp.app .rbp .field[hidden]{display:none}

@@ -7,6 +7,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { LocalDb, pgUp } from '../localdb';
 import { THEMES, answer, call, crewWith, game, layoutOk, person, phone, signInAs, targetsOk, type Person } from '../crews-helpers';
 import { textContrast } from '../contrast';
+import { avatarLetters } from '../avatars';
 
 test.skip(!pgUp(), 'needs the local Postgres (pnpm test:db uses the same one)');
 test.describe.configure({ mode: 'default' });
@@ -559,4 +560,35 @@ test('crews text contrast in all nine themes: bb figures, league headings, podiu
     await ctx.close();
   }
   expect(low).toEqual([]);
+});
+
+// avatars (table/render.ts avatar(), reused here): each one shows the letters of the name next to it, in every theme
+test('avatar letters on the crews screens belong to the person, in all nine themes', async ({ browser }) => {
+  test.setTimeout(600_000);
+  await seedWorld();
+  for (const theme of THEMES) {
+    const { ctx, page, errors } = await phone(browser, db, base, { theme });
+    await signInAs(ctx, dev);
+    await crewsTab(page);
+    await page.getByTestId('crew-card').filter({ hasText: 'Friday Night Table' }).click();
+    await expect(page.getByTestId('your-season')).toBeVisible();
+    await page.getByTestId('crew-tab-members').click();
+    await expect(page.getByTestId('member-row')).toHaveCount(8);
+    const members = await page.evaluate(avatarLetters, { rows: '[data-testid=member-row]', attr: 'data-name' });
+    expect(members.bad, `${theme} members`).toEqual([]);
+    expect(members.read).toBe(8);
+    await page.getByTestId('crew-tab-league').click();
+    await expect(page.getByTestId('league-row').first()).toBeVisible();
+    const league = await page.evaluate(avatarLetters, { rows: '[data-testid=league-row]', nameSel: 'b' });
+    expect(league.bad, `${theme} league`).toEqual([]);
+    expect(league.read).toBeGreaterThan(3);
+    // a player's card
+    await page.getByTestId('league-row').filter({ hasText: 'Riya' }).click();
+    await expect(page.getByTestId('player-name')).toHaveText('Riya');
+    const card = await page.evaluate(avatarLetters, { rows: '.pcard', nameSel: '[data-testid=player-name]' });
+    expect(card.bad, `${theme} player card`).toEqual([]);
+    expect(card.read).toBe(1);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }
 });
