@@ -108,6 +108,8 @@ select is((select status from games where id = :'G2'), 'void', 'a voided game');
 select is(testing.one(:OWNER, $$select count(*) from public.league('$$ || :'crew' || $$', '$$ || (select season_id from games where id = :'G2') || $$')$$), '0', 'leaves the league');
 
 -- season close: winner and iron chair; once
+-- (this check is of the 'bb' scoring, most big blinds won; the default 'points' scoring is in 14_league_scoring)
+update crews set scoring = 'bb' where id = :'crew';
 update seasons set ends_at = now() - interval '1 minute' where id = (select season_id from games where id = :'G1');
 select is(pg_temp.rec('close_due_seasons', '{"at":"now"}'), '1', 'the due season closes');
 select is(pg_temp.rec('close_due_seasons', '{"at":"again"}'), '0', 'and only once');

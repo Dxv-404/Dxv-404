@@ -5,8 +5,8 @@
 // tablets (two panes over the bar), laptops (a rail with the logo, the crews column, the crew) and desktops (and
 // a members column).
 import screensJson from '../ui/screens.json';
-import type { Account, Badge, CrewCard, CrewGame, CrewLeague, CrewMemberV3, CrewPage, CrewPreview, Invitation, JoinRequest, PendingRequest, PlayerCard, SeasonMonths, TableRules, WhoHosts } from '@tp/account';
-import { cleanCrewCode, crewLink, formatCrewCode, isCrewCode, parseCrewLink, restSeconds } from '@tp/account/crews';
+import type { Account, Badge, CrewCard, CrewGame, CrewLeague, CrewMemberV3, CrewPage, CrewPreview, Invitation, JoinRequest, LeagueRowV3, PendingRequest, PlayerCard, Scoring, SeasonLength, TableRules, WhoHosts } from '@tp/account';
+import { cleanCrewCode, crewLink, formatCrewCode, isCrewCode, parseCrewLink, restSeconds, seasonLabel, seasonLengthArgs, seasonLengthOf } from '@tp/account/crews';
 import { evalBest, parseCard, cardStr } from '@tp/engine';
 import type { TableSettings } from '@tp/protocol';
 import { navBar, type MenuActions } from '../ui/shell';
@@ -642,7 +642,7 @@ export function crewsUi(deps: CrewsDeps) {
     if (!tabs.includes(tab)) tab = big ? (tab === 'home' ? 'overview' : tab) : tab === 'overview' || tab === 'trophies' ? 'home' : tab;
     const staff = p.role !== 'member';
     const c = p.crew;
-    const seasonLine = c.season_months === 0 ? 'All-time league' : p.season ? `Season ${p.season.number}${p.season.ends_at ? ` · ${endsIn(p.season.ends_at)}` : ''}` : `Season ${p.next_season} starts with your first game`;
+    const seasonLine = c.season_months === 0 ? 'All-time league' : p.season ? `${seasonLabel(p.season)}${p.season.ends_at ? ` · ${endsIn(p.season.ends_at)}` : ''}` : `Season ${p.next_season} starts with your first game`;
     const tabLabel = (t: Tab): string => ({ home: 'Home', overview: 'Overview', league: 'League', games: 'Games', members: 'Members', trophies: 'Trophies' })[t];
     const tabsHtml = `<div class="ktabs" role="tablist">${tabs.map((t) => `<button role="tab" aria-selected="${t === tab}" class="${t === tab ? 'on' : ''}" data-tab="${t}" data-testid="crew-tab-${t}">${tabLabel(t)}</button>`).join('')}</div>`;
     let header: string;
@@ -674,6 +674,7 @@ export function crewsUi(deps: CrewsDeps) {
       if (x === 'host') return hostSheet(p);
       if (x === 'join-live' && p.live) return joinLive(p.live.table, p.live.mode);
       if (x === 'to-league') return setTab('league');
+      if (x === 'how') return howSheet(scoringOf(p));
       if (x === 'to-games') return setTab('games');
       if (x === 'to-members') return setTab('members');
       if (x === 'game') return deps.openGame(b.dataset.id!, () => enter(undefined, true));
@@ -711,16 +712,28 @@ export function crewsUi(deps: CrewsDeps) {
     + `<button class="mb n" data-x="req-no" data-id="${r.id}" aria-label="Decline ${esc(r.name)}" data-testid="req-no">✕</button><button class="mb y" data-x="req-yes" data-id="${r.id}" aria-label="Let ${esc(r.name)} in" data-testid="req-yes">${ICON.check}</button></div>`;
   function seasonHtml(p: CrewPage): string {
     const m = p.me;
-    const chip = `<span class="chipt">${m.games} game${m.games === 1 ? '' : 's'}</span>`;
+    const sc = scoringOf(p);
+    const chip = `<span class="chipt">${m.games} ${sc === 'bb' ? 'game' : 'night'}${m.games === 1 ? '' : 's'}</span>`;
+    const span = p.crew.season_months === 0 ? 'league' : 'season';
+    const unranked = sc !== 'bb' && m.games > 0 && m.ranked === false;
+    const rk = `<div class="rk"><b>${m.rank ? ordinal(m.rank) : '–'}</b><small>${unranked ? `${m.games} of 3 nights` : `of ${m.of}`}</small></div>`;
+    const main = sc === 'points'
+      ? `<div class="nb"><b data-testid="my-avg">${m.avg == null ? '–' : ptsText(m.avg)}</b><small>points per night</small></div>`
+      : sc === 'average'
+        ? `<div class="nb"><b class="${upDown(m.avg)}" data-testid="my-avg">${m.avg == null ? '–' : bbText(m.avg)}</b><small>per night this ${span}</small></div>`
+        : `<div class="nb"><b class="${upDown(m.bb)}">${bbText(m.bb ?? 0)}</b><small>won this ${span}</small></div>`;
     return `<div class="pnl" data-testid="your-season"><div class="hrow"><span class="klbl">${p.crew.season_months === 0 ? 'Your league' : 'Your season'}</span><span class="sp"></span>${chip}</div>`
-      + `<div class="hrow"><div class="rk"><b>${m.rank ? ordinal(m.rank) : '–'}</b><small>of ${m.of}</small></div><div class="nb"><b class="${upDown(m.bb)}">${bbText(m.bb ?? 0)}</b><small>won this ${p.crew.season_months === 0 ? 'league' : 'season'}</small></div>`
+      + `<div class="hrow">${rk}${main}`
       + `<span class="sp"></span><span class="acc">${spark([0, ...m.spark.map(Number)])}</span></div></div>`;
   }
-  function podiumHtml(rows: { account_id: string; name: string; bb: number }[], big: boolean): string {
-    if (!rows.length) return '<p class="hint" style="text-align:center">The podium fills after the first game.</p>';
+  /** the podium's figure for a row in the crew's scoring */
+  const podiumFig = (r: { bb: number; avg?: number | null }, sc: Scoring): string => (sc === 'points' ? `${ptsText(r.avg ?? 0)} pts` : sc === 'average' ? `${bbText(r.avg ?? 0)}/night` : bbText(r.bb));
+  function podiumHtml(all: { account_id: string; name: string; bb: number; avg?: number | null; ranked?: boolean }[], big: boolean, sc: Scoring): string {
+    const rows = all.filter((r) => r.ranked !== false);
+    if (!rows.length) return `<p class="hint" style="text-align:center">${all.length ? 'The podium fills once players have 3 nights.' : 'The podium fills after the first game.'}</p>`;
     const order = [rows[1], rows[0], rows[2]];
     const cls = ['p2', 'p1', 'p3'];
-    return `<div class="podium${big ? ' big' : ''}">${order.map((r, i) => (r ? `<button class="pd ${cls[i]}" data-x="player" data-id="${r.account_id}">${av({ id: r.account_id, name: r.name }, big ? (i === 1 ? 52 : 42) : i === 1 ? 44 : 36)}<b>${esc(r.name)}</b><small>${bbText(r.bb)}</small><i>${i === 1 ? 1 : i === 0 ? 2 : 3}</i></button>` : '<span></span>')).join('')}</div>`;
+    return `<div class="podium${big ? ' big' : ''}">${order.map((r, i) => (r ? `<button class="pd ${cls[i]}" data-x="player" data-id="${r.account_id}">${av({ id: r.account_id, name: r.name }, big ? (i === 1 ? 52 : 42) : i === 1 ? 44 : 36)}<b>${esc(r.name)}</b><small>${podiumFig(r, sc)}</small><i>${i === 1 ? 1 : i === 0 ? 2 : 3}</i></button>` : '<span></span>')).join('')}</div>`;
   }
   function lastGameHtml(p: CrewPage): string {
     const g = p.last_game;
@@ -730,7 +743,7 @@ export function crewsUi(deps: CrewsDeps) {
   }
   function homeHtml(p: CrewPage, side: boolean): string {
     const host = p.can_host && !p.live ? `<button class="bb p hz" data-x="host" data-testid="host-crew">${ic('cards')}Host a crew table</button>` : '';
-    const league = `<div class="pnl"><div class="hrow"><span class="klbl">League</span><span class="sp"></span><button class="lnk" data-x="to-league">Full table ›</button></div>${podiumHtml(p.podium, false)}</div>`;
+    const league = `<div class="pnl"><div class="hrow"><span class="klbl">League</span><span class="sp"></span><button class="lnk" data-x="to-league">Full table ›</button></div>${podiumHtml(p.podium, false, scoringOf(p))}</div>`;
     if (side) return liveHtml(p) + requestsHtml(p, false) + host + seasonHtml(p);
     return liveHtml(p) + requestsHtml(p, false) + host + seasonHtml(p) + league + lastGameHtml(p);
   }
@@ -783,17 +796,45 @@ export function crewsUi(deps: CrewsDeps) {
     opts.push(['alltime', 'All-time']);
     return `<div class="seg" role="radiogroup" aria-label="League view">${opts.map(([k, t]) => `<button role="radio" aria-checked="${k === scope}" class="${k === scope ? 'on' : ''}" data-scope="${k}" data-testid="league-${k}">${t}</button>`).join('')}</div>`;
   }
-  function leagueRows(lg: CrewLeague, from: number, limit = 99): string {
-    return lg.rows.filter((r) => r.rank >= from).slice(0, limit).map((r) => {
+  /** League rows: the ranked ones (from the `skip`th on, at most `limit` rows in all), then the unranked under
+   *  a "Fewer than 3 nights" divider. Columns follow the crew's scoring. */
+  function leagueRows(lg: CrewLeague, sc: Scoring, skip = 0, limit = 99): string {
+    const ranked = lg.rows.filter((r) => r.ranked !== false).slice(skip, skip + limit);
+    const unranked = lg.rows.filter((r) => r.ranked === false).slice(0, Math.max(limit - ranked.length, 0));
+    const row = (r: LeagueRowV3): string => {
       const tr = r.trend ? `<span class="trend ${r.trend === 'up' ? 'tu' : 'td'}">${r.trend === 'up' ? ICON.up : ICON.down}</span>` : '<span class="trend"></span>';
-      return `<button class="lrow${r.me ? ' me' : ''}" data-x="player" data-id="${r.account_id}" data-testid="league-row"><span class="n">${r.rank}</span>${av({ id: r.account_id, name: r.name }, 30)}<b>${esc(r.name)}${r.me ? ' (you)' : ''}</b>${tr}<span class="g">${r.games}</span><span class="v ${upDown(r.bb)}">${bbText(r.bb, false)}</span></button>`;
-    }).join('');
+      const lead = sc === 'points' ? `<span class="v pt">${ptsText(r.avg ?? 0)}</span>` : sc === 'average' ? `<span class="v pt ${upDown(r.avg)}">${bbText(r.avg ?? 0, false)}</span>` : '';
+      return `<button class="lrow${r.me ? ' me' : ''}${r.ranked === false ? ' ur' : ''}" data-x="player" data-id="${r.account_id}" data-testid="league-row"><span class="n">${r.rank ?? '–'}</span>${av({ id: r.account_id, name: r.name }, 30)}<b>${esc(r.name)}${r.me ? ' (you)' : ''}</b>${tr}${lead}<span class="g">${r.games}</span><span class="v ${upDown(r.bb)}">${bbText(r.bb, false)}</span></button>`;
+    };
+    return ranked.map(row).join('') + (unranked.length ? `<div class="ldiv" data-testid="unranked-divider"><span>Fewer than 3 nights</span></div>${unranked.map(row).join('')}` : '');
   }
-  const lhead = '<div class="lhead" aria-hidden="true"><span>#</span><span style="flex:1;padding-left:40px">Player</span><span>Games</span><span style="width:58px;text-align:right">Won (bb)</span></div>';
+  const lhead = (sc: Scoring): string => '<div class="lhead" aria-hidden="true" data-testid="league-head"><span>#</span><span style="flex:1;padding-left:40px">Player</span>'
+    + (sc === 'points' ? '<span class="hpt">Pts/night</span><span class="hg">Nights</span>' : sc === 'average' ? '<span class="hpt">Avg bb</span><span class="hg">Nights</span>' : '<span>Games</span>')
+    + '<span style="width:58px;text-align:right">Won (bb)</span></div>';
+  const HOW_LINE: Record<Scoring, string> = {
+    points: 'Points per night: finish, big blinds won, −1 a rebuy.',
+    average: 'Big blinds won per night; 3 nights to be ranked.',
+    bb: 'Ranked by big blinds won, so different blinds count fairly.',
+  };
+  const howHtml = (sc: Scoring): string => `<div class="howpts" data-testid="how-points"><span>${HOW_LINE[sc]}</span><button class="ib info" data-x="how" aria-label="How points work" data-testid="how-info">i</button></div>`;
+  function howSheet(sc: Scoring): void {
+    const box = sheetBox();
+    const li = (t: string): string => `<li>${t}</li>`;
+    const body = sc === 'points'
+      ? `<ul class="howl">${li('<b>+1</b> for playing the night.')}${li('<b>Finish:</b> one point for every player you finish above. 1st of 9 gets 8, last gets 0.')}${li('<b>Big blinds:</b> +1 for every 20 bb you win, −1 for every 20 you lose, at most 5 either way.')}${li('<b>Rebuys:</b> −1 for each.')}</ul>`
+        + '<p class="hint flat">The season ranks by average points per night, and every night counts. Fewer than 3 nights: not ranked yet. A tie goes to whoever won more big blinds.</p>'
+      : sc === 'average'
+        ? '<p class="hint flat">Big blinds won, divided by the nights played. Every night counts; fewer than 3 nights is not ranked yet. A tie goes to whoever won more big blinds.</p>'
+        : '<p class="hint flat">Total big blinds won this season. Big blinds, not chips, so a 5/10 night and a 10/20 night count the same.</p>';
+    box.innerHTML = `<div class="hrow"><b class="sh2">${sc === 'points' ? 'How points work' : 'How the league ranks'}</b></div>${body}<p class="hint flat">The crew leader picks the scoring in Crew settings.</p>`;
+    deps.openSheet(box, { label: 'How points work' });
+  }
   function leagueBlock(p: CrewPage, lg: CrewLeague, scope: string, n: number): string {
-    const title = scope === 'alltime' ? 'All-time' : `Season ${lg.season?.number ?? p.season?.number ?? p.next_season}`;
+    const sc = lg.scoring ?? scoringOf(p);
+    const s = lg.season ?? p.season;
+    const title = scope === 'alltime' ? 'All-time' : s ? seasonLabel(s) : `Season ${p.next_season}`;
     return `<div class="pnl" data-slot="league"><div class="hrow"><h2 class="ttl">League · ${esc(title)}</h2><span class="sp"></span>${leagueSeg(p, scope).replace('class="seg"', 'class="seg" style="width:250px"')}</div>`
-      + (lg.rows.length ? lhead + `<div class="ltable">${leagueRows(lg, 1, n)}</div>` : '<p class="hint">No league games yet.</p>') + '</div>';
+      + (lg.rows.length ? lhead(sc) + `<div class="ltable">${leagueRows(lg, sc, 0, n)}</div>` + howHtml(sc) : '<p class="hint">No league games yet.</p>') + '</div>';
   }
   function wireLeagueSeg(body: HTMLElement, p: CrewPage, my: number, n = size === 'desk' ? 10 : 8): void {
     body.querySelectorAll<HTMLElement>('[data-scope]').forEach((b) => b.addEventListener('click', async (e) => {
@@ -815,10 +856,13 @@ export function crewsUi(deps: CrewsDeps) {
     let lg: CrewLeague;
     try { lg = await a.crewLeague(p.crew.id, scope); } catch (e) { if (live(my)) body.innerHTML = failHtml(e); return; }
     if (!live(my)) return;
-    const ends = p.season?.ends_at ? ` Season ends ${dayMonth(p.season.ends_at)}; the winner gets the season trophy.` : '';
+    const sc = lg.scoring ?? scoringOf(p);
+    const ends = p.season?.ends_at ? `${seasonLabel(p.season)} ${endsIn(p.season.ends_at)}; the winner gets the season trophy.` : '';
+    const ranked = lg.rows.filter((r) => r.ranked !== false);
+    const rest = lg.rows.length - Math.min(ranked.length, 3);
     body.innerHTML = leagueSeg(p, scope)
-      + (lg.rows.length ? podiumHtml(lg.rows.slice(0, 3), true) + (lg.rows.length > 3 ? lhead + `<div class="ltable" data-testid="league">${leagueRows(lg, 4)}</div>` : '') : '<p class="hint">No league games yet. Every crew table counts.</p>')
-      + `<p class="hint flat">Ranked by big blinds won, so tables with different blinds count fairly.${scope === 'season' ? ends : ''}</p>`;
+      + (lg.rows.length ? podiumHtml(lg.rows, true, sc) + (rest > 0 ? lhead(sc) + `<div class="ltable" data-testid="league">${leagueRows(lg, sc, ranked.length ? 3 : 0)}</div>` : '') + howHtml(sc) : '<p class="hint">No league games yet. Every crew table counts.</p>')
+      + (scope === 'season' && ends ? `<p class="hint flat" data-testid="season-ends">${esc(ends)}</p>` : '');
     body.querySelectorAll<HTMLElement>('[data-scope]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); leagueScope.set(p.crew.id, b.dataset.scope as 'season'); void leagueTab(body, p, my); }));
   }
 
@@ -1055,14 +1099,22 @@ export function crewsUi(deps: CrewsDeps) {
     const lead = p.role === 'owner';
     const c = p.crew;
     const dis = lead ? '' : 'disabled';
-    const seg = <T extends string | number>(name: string, opts: [T, string][], on: T): string => `<div class="seg" role="radiogroup" aria-label="${name}">${opts.map(([v, t]) => `<button role="radio" aria-checked="${v === on}" class="${v === on ? 'on' : ''}" data-set="${name}" data-v="${v}" ${dis}>${t}</button>`).join('')}</div>`;
-    const ends = p.season?.ends_at ? `Season ${p.season.number} ends ${dayMonth(p.season.ends_at)}` : c.season_months === 0 ? 'No seasons: one all-time league' : `Season ${p.next_season} starts with the next game`;
+    const seg = <T extends string | number>(name: string, opts: [T, string, string?][], on: T, label = name): string => `<div class="seg" role="radiogroup" aria-label="${label}">${opts.map(([v, t, al]) => `<button role="radio" aria-checked="${v === on}" class="${v === on ? 'on' : ''}" data-set="${name}" data-v="${v}"${al ? ` aria-label="${al}"` : ''} ${dis}>${t}</button>`).join('')}</div>`;
+    const len = seasonLengthOf(c);
+    const today = new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
+    const anchor = c.season_anchor && c.season_anchor >= today ? c.season_anchor : '';
+    const ends = p.season?.ends_at ? `${seasonLabel(p.season)} ${endsIn(p.season.ends_at)} (${dayMonth(p.season.ends_at)})` : c.season_months === 0 ? 'No seasons: one all-time league' : `Season ${p.next_season} starts with the next game`;
     pane.innerHTML = head('Crew settings', lead ? 'Only you and admins see this' : 'Only the leader changes the name, badge, hosting and seasons')
       + `<div class="pnl"><div class="hrow">${emblem(c, 54)}<label class="fld" style="flex:1"><span>Name</span><span class="inp"><input type="text" maxlength="24" value="${esc(c.name)}" ${dis} data-testid="set-name" aria-label="Crew name"></span></label></div>`
       + `<div class="hrow" style="font-size:12.5px"><span class="mut">Badge and colour</span><span class="sp"></span>${lead ? '<button class="lnk" data-x="badge" data-testid="set-badge">Change ›</button>' : ''}</div></div>`
       + `<div class="pnl"><span class="klbl">Who can host crew tables</span>${seg<WhoHosts>('hosts', [['everyone', 'Everyone'], ['admins', 'Admins'], ['leader', 'Only me']], c.who_hosts)}`
-      + `<span class="klbl" style="margin-top:4px">Season length</span>${seg<SeasonMonths>('season', [[1, '1 month'], [3, '3 months'], [6, '6 months'], [0, 'Off']], c.season_months)}`
-      + `<div class="hrow" style="font-size:12.5px"><span class="mut">${esc(ends)}</span><span class="sp"></span>${lead && p.season ? '<button class="lnk" data-x="endnow" data-testid="end-season">End it now ›</button>' : ''}</div>`
+      + `<span class="klbl" style="margin-top:4px">League scoring</span>${seg<Scoring>('scoring', [['points', 'Points'], ['bb', 'Big blinds won'], ['average', 'Average']], scoringOf(p), 'League scoring')}`
+      + `<p class="hint flat" data-testid="scoring-hint">${HOW_LINE[scoringOf(p)]}</p>`
+      + `<span class="klbl" style="margin-top:4px">Season length</span>${seg<SeasonLength>('season', [['2w', '2 wk', '2 weeks'], ['1m', '1 mo', '1 month'], ['2m', '2 mo', '2 months'], ['3m', '3 mo', '3 months'], ['6m', '6 mo', '6 months'], ['off', 'Off']], len, 'Season length')}`
+      + `<div class="hrow" style="font-size:12.5px"><span class="mut" data-testid="season-ends-set">${esc(ends)}</span></div>`
+      + (len !== 'off' ? `<div class="two sctl"><label class="fld"><span>Next season starts</span><span class="inp"><input type="date" min="${today}" value="${anchor}" ${dis} data-testid="set-season-start" aria-label="Next season starts"></span></label>`
+        + (p.season ? `<label class="fld"><span>Season ${p.season.number} name</span><span class="inp"><input type="text" maxlength="24" placeholder="e.g. Monsoon" value="${esc(p.season.title ?? '')}" ${dis} data-testid="set-season-name" aria-label="Season ${p.season.number} name"></span></label>` : '') + '</div>' : '')
+      + (lead && len !== 'off' ? `<div class="hrow sbtns">${p.season ? '<button class="lnk" data-x="endnow" data-testid="end-season">End it now ›</button>' : ''}<span class="sp"></span><button class="lnk" data-x="startnow" data-testid="start-season">Start a new season now ›</button></div>` : '')
       + `<label class="swrow"><span>Members can invite<small>Off: only you and admins see the code</small></span><input type="checkbox" role="switch" ${c.members_invite ? 'checked' : ''} ${dis} data-testid="set-invite"></label></div>`
       + `<div class="pnl" style="gap:8px"><button class="row" data-x="disputes" data-testid="set-disputes"><span class="txt"><b>Seat disputes</b><small>${p.disputes ? `${p.disputes} open · someone says a seat wasn’t them` : 'None open'}</small></span>${p.disputes ? `<span class="chipt a">${p.disputes}</span>` : ''}<span class="go">›</span></button>`
       + `<button class="row" data-x="correct" data-testid="set-correct"><span class="txt"><b>Correct a result</b><small>Move chips between players, everyone sees why</small></span><span class="go">›</span></button></div>`
@@ -1073,11 +1125,21 @@ export function crewsUi(deps: CrewsDeps) {
     const name = pane.querySelector<HTMLInputElement>('[data-testid=set-name]')!;
     name.addEventListener('change', () => { const n = name.value.trim(); if (n && n !== c.name) void save({ name: n }, 'Name saved'); });
     pane.querySelector<HTMLInputElement>('[data-testid=set-invite]')!.addEventListener('change', (e) => void save({ membersInvite: (e.target as HTMLInputElement).checked }));
+    pane.querySelector<HTMLInputElement>('[data-testid=set-season-start]')?.addEventListener('change', (e) => { const v = (e.target as HTMLInputElement).value; if (v) void save({ seasonStart: v }, `Next season starts ${dayMonth(v)}`); });
+    const sn = pane.querySelector<HTMLInputElement>('[data-testid=set-season-name]');
+    sn?.addEventListener('change', async () => { if (!p.season) return; try { const a = await existing(); await a!.renameSeason(id, p.season.id, sn.value.trim()); pages.delete(id); cwToast('Season name saved'); paint(); } catch (err) { toast(msgOf(err)); paint(); } });
     pane.onclick = async (e) => {
       const b = (e.target as HTMLElement).closest('[data-x],[data-set]') as HTMLElement | null;
       if (!b) return;
       if (b.dataset.set === 'hosts') return void save({ whoHosts: b.dataset.v as WhoHosts });
-      if (b.dataset.set === 'season') return void save({ seasonMonths: Number(b.dataset.v) as SeasonMonths }, 'Season length saved: it applies from the next season');
+      if (b.dataset.set === 'season') return void save(seasonLengthArgs(b.dataset.v as SeasonLength), 'Season length saved: it applies from the next season');
+      if (b.dataset.set === 'scoring') return void save({ scoring: b.dataset.v as Scoring }, 'League scoring saved');
+      if (x0(b) === 'startnow') {
+        const nm = await ask(p.season ? `End ${seasonLabel(p.season)} and start a new season now?` : 'Start a new season now?', { yes: 'Start it', detail: 'The standings so far are final and the season trophy is given. Name the new season if you like.', input: { placeholder: 'Season name (optional)', max: 24 } });
+        if (nm === false || nm == null) return;
+        try { const a = await existing(); const ns = await a!.startSeasonNow(id, typeof nm === 'string' && nm.trim() ? nm.trim() : null); pages.delete(id); forget(); cwToast(`${seasonLabel(ns)} started`); paint(); } catch (err) { toast(msgOf(err)); }
+        return;
+      }
       const x = b.dataset.x;
       if (x === 'back') return back();
       if (x === 'badge') return badgeSheet(p, (badge, color) => void save({ badge, color }, 'Badge saved'));
@@ -1135,6 +1197,18 @@ export function crewsUi(deps: CrewsDeps) {
   }
 
   // ---------------------------------------------------------------- a player's card
+  /** The season in numbers: a compact grid (league scoring, 20261103000017). */
+  function statsGrid(pc: PlayerCard): string {
+    if (pc.nights == null) return '';
+    const n = (v: number | null | undefined, f: (x: number) => string = String): string => (v == null ? '–' : f(Number(v)));
+    const cells: [string, string, string?][] = [
+      [n(pc.nights), 'nights'], [n(pc.avg_points, ptsText), 'pts/night'], [n(pc.wins), 'wins'],
+      [n(pc.top3), 'top 3'], [n(pc.rebuys), 'rebuys'], [n(pc.busts), 'busts'],
+      [n(pc.bb_night, (x) => bbText(x, false)), 'bb/night', upDown(pc.bb_night)], [n(pc.bb100, (x) => bbText(x, false)), 'bb/100 hands', upDown(pc.bb100)], [n(pc.sd_won, (x) => `${x}%`), 'showdowns won'],
+      [n(pc.best_night, (x) => bbText(x, false)), 'biggest night', upDown(pc.best_night)], [n(pc.worst_night, (x) => bbText(x, false)), 'worst night', upDown(pc.worst_night)],
+    ];
+    return `<div class="pnl"><span class="klbl">This season</span><div class="sgrid" data-testid="player-stats">${cells.map(([v, l, c]) => `<div><b class="${c ?? ''}">${v}</b><small>${l}</small></div>`).join('')}</div></div>`;
+  }
   async function drawPlayer(pane: HTMLElement, crewId: string, accountId: string, my: number): Promise<void> {
     pane.innerHTML = '<p class="hint" role="status">Loading…</p>';
     const a = await existing(); if (!a) return;
@@ -1153,9 +1227,10 @@ export function crewsUi(deps: CrewsDeps) {
     const pct = pc.hands ? Math.round((100 * pc.won) / pc.hands) : null;
     pane.innerHTML = head(pc.name, `${p.crew.name} · ${role}`)
       + `<div class="pcard">${av({ id: pc.account_id, name: pc.name }, 86)}<b data-testid="player-name">${esc(pc.name)}</b><span class="mut" style="font-size:12.5px">${esc(sub)}</span></div>`
-      + `<div class="three"><div class="stat"><b>${pc.games}</b><small>games</small></div><div class="stat"><b class="${upDown(pc.bb)}">${pc.bb == null ? '–' : bbText(pc.bb, false)}</b><small>bb this season</small></div><div class="stat"><b>${pct == null ? '–' : `${pct}%`}</b><small>hands won</small></div></div>`
+      + `<div class="three"><div class="stat"><b>${pc.games}</b><small>${scoringOf(p) === 'bb' ? 'games' : 'nights'}</small></div><div class="stat"><b class="${upDown(pc.bb)}">${pc.bb == null ? '–' : bbText(pc.bb, false)}</b><small>bb this season</small></div><div class="stat"><b>${pct == null ? '–' : `${pct}%`}</b><small>hands won</small></div></div>`
+      + statsGrid(pc)
       + `<div class="pnl"><span class="klbl">Best hand this season</span>${best}</div>`
-      + `<div class="pnl"><div class="hrow"><span class="klbl">Last ${pc.form.length || 8} games</span><span class="sp"></span><span class="acc">${spark([0, ...pc.form.map(Number)], 140)}</span></div></div>`
+      + `<div class="pnl"><div class="hrow"><span class="klbl">Last ${pc.form.length || 8} games</span><span class="sp"></span><span class="acc">${spark([0, ...pc.form.map(Number)], 140)}</span></div>${pc.form_points?.length ? `<div class="formp" data-testid="form-points" aria-label="Points, last ${pc.form_points.length} nights">${pc.form_points.map((v) => `<span class="${v > 0 ? 'tu' : v < 0 ? 'td' : ''}">${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v)}</span>`).join('')}</div>` : ''}</div>`
       + `<div class="pnl"><span class="klbl">Trophies</span>${pc.trophies.length ? `<div class="troph">${pc.trophies.slice(0, 6).map((t) => `<span><i>${TROPHY[t.kind]?.[0] ?? '🏅'}</i><small>${t.kind === 'season_winner' && t.season ? `Season ${t.season}` : TROPHY[t.kind]?.[1] ?? t.kind}</small></span>`).join('')}</div>` : '<p class="hint flat">None yet.</p>'}</div>`;
     pane.onclick = (e) => { if ((e.target as HTMLElement).closest('[data-x=back]')) back(); };
   }
@@ -1196,3 +1271,9 @@ function failHtml(e: unknown): string {
   const off = navigator.onLine === false;
   return `<p class="hint" role="alert">${off ? 'This needs the internet. Games still work offline.' : `Something went wrong: ${esc(msgOf(e))}`}</p><button class="bb g sm" data-x="retry">Try again</button>`;
 }
+
+/** the crew's scoring (older answers have none: big blinds won) */
+const scoringOf = (p: CrewPage): Scoring => p.crew.scoring ?? 'bb';
+/** points per night: 4.33 → "4.3", 4 → "4.0" */
+const ptsText = (n: number | string): string => { const v = Number(n); return `${v < 0 ? '−' : ''}${Math.abs(v).toFixed(1)}`; };
+const x0 = (b: HTMLElement): string | undefined => b.dataset.x;

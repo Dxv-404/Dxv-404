@@ -317,6 +317,100 @@ test('the leader’s settings: name, badge and colour, who can host, season leng
   await ctx.close();
 });
 
+// ---------------------------------------------------------------- league scoring and season control (20261103000017)
+// (people of their own, so the other tests' crews and counts stay as they are; a crew for each size, since
+//  "Start a new season now" empties the league)
+async function seedMonsoon(name: string): Promise<{ crew: { id: string; code: string }; lead: Person }> {
+  const [lead, omar, pia, sam] = await Promise.all(['Leela', 'Omar', 'Pia', 'Sam'].map((n) => person(db, n))) as [Person, Person, Person, Person];
+  const crew = await crewWith(db, lead, name, [omar, pia, sam], { badge: 'round', color: '#1f8a5b' });
+  // three nights for Leela, Omar and Pia; one for Sam (unranked: fewer than 3 nights)
+  await game(db, crew.id, 'MC01', 30, [[lead, 600], [omar, 100], [pia, -300], [sam, -400]]);
+  await game(db, crew.id, 'MC02', 20, [[omar, 500], [lead, 100], [pia, -600]]);
+  await game(db, crew.id, 'MC03', 10, [[pia, 900], [lead, -400], [omar, -500]]);
+  return { crew, lead };
+}
+
+for (const [w, h] of [[390, 844], [1440, 900]] as const) {
+  test(`league scoring and season control at ${w} x ${h} (classic, pixel, ivory): columns, unranked, how points work, settings`, async ({ browser }) => {
+    test.setTimeout(600_000);
+    const { crew: mc, lead } = await seedMonsoon(`Monsoon Club ${w}`);
+    for (const theme of ['classic', 'pixel', 'ivory'] as const) {
+      const { ctx, page, errors } = await phone(browser, db, base, { width: w, height: h, theme });
+      await signInAs(ctx, lead);
+      await crewsTab(page);
+      await page.getByTestId('crew-card').filter({ hasText: `Monsoon Club ${w}` }).click();
+      await expect(page.getByTestId('crew-title')).toHaveText(`Monsoon Club ${w}`);
+      // your season in points per night
+      await expect(page.getByTestId('your-season')).toContainText('points per night');
+      // the league: Pts/night · Nights · Won (bb), the unranked under their divider, the explainer
+      await page.getByTestId('crew-tab-league').click();
+      await expect(page.locator('.hint[role=status]')).toHaveCount(0);
+      const headTxt = await page.getByTestId('league-head').first().innerText();
+      expect(headTxt.replace(/\s+/g, ' ').toLowerCase()).toContain('pts/night nights won (bb)');
+      await expect(page.getByTestId('unranked-divider')).toHaveText(/Fewer than 3 nights/i);
+      await expect(page.getByTestId('league-row').filter({ hasText: 'Sam' }).locator('.n')).toHaveText('–');
+      await expect(page.getByTestId('how-points').first()).toContainText('Points per night');
+      await layoutOk(page, `${theme} ${w} league points`); await targetsOk(page, `${theme} ${w} league points`);
+      await shot(page, `scoring-${w}-${theme}-league`);
+      await page.getByTestId('how-info').first().click();
+      await expect(page.locator('.sheet.open .cw-sheet')).toContainText('How points work');
+      await expect(page.locator('.sheet.open .cw-sheet')).toContainText('1st of 9 gets 8');
+      await targetsOk(page, `${theme} ${w} how sheet`);
+      await shot(page, `scoring-${w}-${theme}-how`);
+      await page.locator('.sheet.open .sheet-close').click();
+      await expect(page.locator('.sheet.open')).toHaveCount(0);
+      // a player's card: the season in a compact grid and the points form line
+      await page.getByTestId('league-row').filter({ hasText: 'Sam' }).click();
+      await expect(page.getByTestId('player-stats')).toContainText('pts/night');
+      await expect(page.getByTestId('player-stats')).toContainText('bb/100 hands');
+      await expect(page.getByTestId('form-points')).toBeVisible();
+      await layoutOk(page, `${theme} ${w} player`); await targetsOk(page, `${theme} ${w} player`);
+      await shot(page, `scoring-${w}-${theme}-player`);
+      await page.getByRole('button', { name: 'Back' }).first().click();
+      // settings: League scoring and the season controls (the gear on phones, More › Crew settings on big screens)
+      await expect(page.getByTestId('crew-title')).toBeVisible();
+      if (await page.getByTestId('crew-gear').count()) await page.getByTestId('crew-gear').click();
+      else { await page.getByTestId('crew-more').click(); await page.locator('.sheet.open').getByText('Crew settings').click(); }
+      await expect(page.getByRole('radiogroup', { name: 'League scoring' })).toBeVisible();
+      await expect(page.getByTestId('start-season')).toBeVisible();
+      await layoutOk(page, `${theme} ${w} settings`); await targetsOk(page, `${theme} ${w} settings`);
+      await shot(page, `scoring-${w}-${theme}-settings`);
+      if (theme === 'ivory') { // (last: a new season empties the league)
+        await page.getByRole('radio', { name: 'Average' }).click();
+        await expect.poll(() => db.sqlSync(`select scoring from crews where id = '${mc.id}'`)).toBe('average');
+        await page.getByRole('radio', { name: 'Big blinds won' }).click();
+        await expect.poll(() => db.sqlSync(`select scoring from crews where id = '${mc.id}'`)).toBe('bb');
+        await page.getByRole('radio', { name: 'Points' }).click();
+        await expect.poll(() => db.sqlSync(`select scoring from crews where id = '${mc.id}'`)).toBe('points');
+        await page.getByRole('radio', { name: '2 weeks' }).click();
+        await expect.poll(() => db.sqlSync(`select season_weeks || '/' || season_months from crews where id = '${mc.id}'`)).toBe('2/1');
+        await page.getByRole('radio', { name: '2 months' }).click();
+        await expect.poll(() => db.sqlSync(`select coalesce(season_weeks::text, '-') || '/' || season_months from crews where id = '${mc.id}'`)).toBe('-/2');
+        const day = db.sqlSync(`select ((now() at time zone 'Asia/Kolkata')::date + 20)::text`);
+        await page.getByTestId('set-season-start').fill(day);
+        await page.getByTestId('set-season-start').dispatchEvent('change');
+        await expect.poll(() => db.sqlSync(`select season_anchor::text from crews where id = '${mc.id}'`)).toBe(day);
+        // start a new season now, with a name; then rename it
+        const before = Number(db.sqlSync(`select count(*) from seasons where crew_id = '${mc.id}'`));
+        await answer(page, 'Monsoon');
+        await page.getByTestId('start-season').click();
+        await expect.poll(() => db.sqlSync(`select count(*) from seasons where crew_id = '${mc.id}'`)).toBe(String(before + 1));
+        await expect.poll(() => db.sqlSync(`select title from seasons where id = public.current_season('${mc.id}')`)).toBe('Monsoon');
+        await expect(page.getByTestId('set-season-name')).toHaveValue('Monsoon');
+        await page.getByTestId('set-season-name').fill('Monsoon Cup');
+        await page.getByTestId('set-season-name').press('Enter');
+        await page.getByTestId('set-season-name').blur();
+        await expect.poll(() => db.sqlSync(`select title from seasons where id = public.current_season('${mc.id}')`)).toBe('Monsoon Cup');
+        await expect(page.getByTestId('season-ends-set')).toContainText('Monsoon Cup');
+        await expect(page.getByTestId('season-ends-set')).toContainText(/ends in \d+ days|ends tomorrow|ends today/);
+        await layoutOk(page, `${theme} ${w} settings after`);
+      }
+      expect(errors).toEqual([]);
+      await ctx.close();
+    }
+  });
+}
+
 test('inviting (QR, code, share, a new code, auto-admit) and hosting a crew table (rules filled in, the crew told)', async ({ browser }) => {
   await seedWorld();
   const { ctx, page, errors } = await phone(browser, db, base);
@@ -586,7 +680,7 @@ test('avatar letters on the crews screens belong to the person, in all nine them
     expect(league.bad, `${theme} league`).toEqual([]);
     expect(league.read).toBeGreaterThan(3);
     // a player's card
-    await page.getByTestId('league-row').filter({ hasText: 'Riya' }).click();
+    await page.locator('.cw [data-x=player]').filter({ hasText: 'Riya' }).first().click(); // (on points per night Riya is on the podium)
     await expect(page.getByTestId('player-name')).toHaveText('Riya');
     const card = await page.evaluate(avatarLetters, { rows: '.pcard', nameSel: '[data-testid=player-name]' });
     expect(card.bad, `${theme} player card`).toEqual([]);

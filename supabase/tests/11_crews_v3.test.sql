@@ -108,7 +108,7 @@ select is(testing.one(:MEM, format('select public.crew_settings(%L, p_auto_admit
 select is(testing.one(:ADM, format('select public.update_crew(%L, p_require_approval => false)', :'crew')), 'Only the crew leader can do that', 'nor through the old way');
 select is(testing.one(:LEAD, format('select public.crew_settings(%L, p_name => %L)', :'crew', repeat('x', 25))), 'A crew name is 1 to 24 characters', 'a rename keeps to 24 characters');
 select is(testing.one(:LEAD, format('select public.crew_settings(%L, p_who_hosts => %L)', :'crew', 'nobody')), 'new row for relation "crews" violates check constraint "crews_who_hosts_check"', 'who hosts is everyone, admins or the leader');
-select is(testing.one(:LEAD, format('select public.crew_settings(%L, p_season_months => 2)', :'crew')), 'new row for relation "crews" violates check constraint "crews_season_months_check"', 'seasons are 1, 3 or 6 months, or off');
+select is(testing.one(:LEAD, format('select public.crew_settings(%L, p_season_months => 4)', :'crew')), 'new row for relation "crews" violates check constraint "crews_season_months_check"', 'seasons are 1, 2, 3 or 6 months, or off (2 months since 0017)');
 select testing.as_phone(:LEAD, format('select public.crew_settings(%L, %L, %L, %L, 1, %L, false, true, %L) as s', :'crew', 'Friday Night', 'diamond', '#7d3cc8', 'admins', '{"startStack":1000,"sb":10,"bb":20,"rebuys":2}')) -> 0 -> 's' as st \gset
 select is(:'st'::jsonb ->> 'name', 'Friday Night', 'the leader renames');
 select is(:'st'::jsonb ->> 'badge', 'diamond', 'changes the badge');
@@ -176,6 +176,8 @@ select format('{"id":"%s","crew":"%s","table":"QK7P","server":"test","startStack
        format('{"id":"%s","crew":"%s","table":"J2RM","server":"test","startStack":1000,"bigBlind":10,"startedAt":"%s"}', '33333333-3333-4333-8333-000000000002', :'crew', to_char(now() - interval '2 hours', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')) as g2 \gset
 select format('{"game":%s,"hand":{"no":1,"playedAt":"%s","deckCommit":"c","pot":200,"replay":{"v":1,"keys":["%s","%s","%s"],"frames":[{"board":["Kd","7c","2s"]},{"board":["Kd","7c","2s","Ks","7d"],"cards":[["Kh","9c"],null,null]}]},"full":{"inputs":[]},"players":[{"key":"%s","account":"%s","name":"Meera","net":100,"showdown":true,"won":true,"bestHand":6},{"key":"%s","account":"%s","name":"Dev","net":-60,"showdown":true},{"key":"%s","account":"%s","name":"Aditya","net":-40}]}}',
   :'g1', to_char(now() - interval '170 minutes', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), :'lead', :'mem', :'adm', :'lead', :'lead', :'mem', :'mem', :'adm', :'adm') as h1 \gset
+-- these league checks are of the 'bb' scoring (total big blinds won); 'points', the default since 0017, is in 14_league_scoring
+update crews set scoring = 'bb' where id = :'crew';
 select is(pg_temp.rec('record_hand', :'h1'), 'ok', 'a hand at the crew table');
 select is(pg_temp.rec('record_game_end', format('{"game":%s,"endedAt":"%s","players":[{"key":"%s","account":"%s","name":"Meera","buyins":1000,"final":1400},{"key":"%s","account":"%s","name":"Dev","buyins":1000,"final":800},{"key":"%s","account":"%s","name":"Aditya","buyins":1000,"final":800}]}',
   :'g1', to_char(now() - interval '150 minutes', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), :'lead', :'lead', :'mem', :'mem', :'adm', :'adm')), 'ok', 'the first game ends');
