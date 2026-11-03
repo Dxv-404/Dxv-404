@@ -59,6 +59,8 @@ async function openUse(page: Page): Promise<void> {
   await page.getByTestId('open-profile').click();
   await page.getByTestId('use-account').click();
   await expect(page.getByTestId('code-boxes')).toBeVisible();
+  // typing goes to the first box once it has focus
+  await expect(page.locator('[data-testid=code-boxes] input').first()).toBeFocused();
 }
 async function pad(page: Page, digits: string): Promise<void> {
   for (const d of digits) await page.locator(`.dv-pad [data-k="${d}"]`).click();
@@ -327,12 +329,19 @@ test('Not me? Log it out: from the notice, and from the device list (⋯), with 
   await thief.page.keyboard.type(code);
   await expect(thief.page.getByTestId('welcome')).toBeVisible();
   // the phone's profile shows the notice; "Not me" logs the laptop out
+  // (on the menu it may first drop in at the top, over the menu: answered there, it is the same notice)
   await a.page.goto('/');
-  await a.page.getByTestId('open-profile').click();
-  const notice = a.page.getByTestId('device-notice');
+  const top = a.page.getByTestId('device-notice-top');
+  await a.page.waitForTimeout(1500);
+  const notice = (await top.isVisible()) ? top : a.page.getByTestId('device-notice');
+  if (notice === top) await expect(top).toContainText('Signed in on a new laptop');
+  else await a.page.getByTestId('open-profile').click();
   await expect(notice).toContainText('Signed in on a new laptop');
   await notice.getByTestId('notice-not-me').click();
   await expect(a.page.locator('#toast')).toContainText('The new laptop is logged out');
+  await expect(a.page.getByTestId('device-notice-top')).toHaveCount(0);
+  await a.page.getByTestId('open-profile').click();
+  await expect(a.page.getByTestId('device-notice')).toHaveCount(0);
   await expect(a.page.getByTestId('device-other')).toHaveCount(0);
   // the laptop is a stranger again: its own (new, empty) account, none of Zoya's devices
   await thief.page.goto('/');
