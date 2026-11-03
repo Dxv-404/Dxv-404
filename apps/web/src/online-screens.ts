@@ -48,6 +48,15 @@ export async function pickServer(): Promise<'oracle' | 'cloudflare'> {
 interface Seat { id: string; name: string; token?: string; getTicket?: (fresh: boolean) => Promise<string> }
 /** Who sits: the account (with a table ticket) when this phone is signed in, else a guest seat kept on this phone. */
 async function mySeat(code: string, sitting = true): Promise<Seat> {
+  // a player sitting down without a profile makes one now (just a name), so the game reaches their history
+  // and replays; offline or if it fails, they play as a guest (and those games join the profile later)
+  // (tp-guest-only: the test suites, which play against local table servers with no accounts project)
+  if (sitting && !store.get('tp-me') && !localStorage.getItem('tp-guest-only')) {
+    try {
+      const { ensure } = await import('./crews/data');
+      await Promise.race([ensure(), new Promise((_r, no) => setTimeout(() => no(new Error('slow')), 8000))]);
+    } catch { /* guest */ }
+  }
   const me = store.get<{ account: string; name: string }>('tp-me');
   if (me?.account) {
     try {

@@ -470,6 +470,9 @@ function resumeHost() {
 // first touch unlocks audio on iOS
 document.addEventListener('pointerdown', () => unlockAudio(), { once: true });
 
+// games this phone played as a guest join its profile (once)
+void import('../crews/data.ts').then((m) => m.claimGuestGames()).catch(() => {});
+
 // service worker for offline use
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   navigator.serviceWorker.register('sw.js').then((reg) => {

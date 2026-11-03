@@ -68,6 +68,9 @@ export class Account {
     return this.profile;
   }
 
+  /** Games this phone played as a guest (before it had a profile) become this account's: history and replays. */
+  claimGuestGames(guest: string): Promise<{ games: number; taken: boolean }> { return this.rpc('claim_guest_games', { p_guest: guest }); }
+
   async rename(name: string): Promise<Profile> {
     const { data, error } = await this.db.from('accounts').update({ name: name.trim() }).eq('id', this.need().id).select().single();
     if (error) throw new AccountError(error.message, error.code);

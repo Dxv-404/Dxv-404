@@ -71,6 +71,7 @@ function becameAccount(p: { id: string; name: string }): void {
   try {
     localStorage.setItem('tp-name', p.name);
     localStorage.setItem('tp-me', JSON.stringify({ account: p.id, name: p.name }));
+    void import('./crews/data').then((m) => m.claimGuestGames()).catch(() => undefined);
     localStorage.removeItem('tp-recovery-code'); // the old account's code, if this device had one
     localStorage.removeItem('tp-crews'); // the menu fetches the account's crews again
   } catch { /* storage blocked */ }

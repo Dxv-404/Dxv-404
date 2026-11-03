@@ -78,6 +78,7 @@ export function accountScreens({ screen, openSheet, home, nav, crews = null }) {
     const p = a.profile;
     // kept on this phone for nights with no internet (offline tables): who I am
     try { localStorage.setItem('tp-me', JSON.stringify({ account: p.id, name: p.name })); } catch { /* storage full or blocked */ }
+    void import('../crews/data.ts').then((m) => m.claimGuestGames()).catch(() => {});
     const th = THEMES[currentTheme()] ?? THEMES.classic;
     const nameEl = h('b', { 'data-testid': 'profile-name' }, p.name);
     const avEl = h('span', { class: 'av', style: { '--av': '78px' }, html: avatar(th, p.id, p.name) });

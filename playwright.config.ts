@@ -12,7 +12,7 @@ export default defineConfig({
   reporter: [['list'], ['json', { outputFile: 'test-results/e2e.json' }], ['html', { open: 'never' }]],
   use: {
     baseURL: `http://localhost:${PORT}`,
-    storageState: { cookies: [], origins: [{ origin: `http://localhost:${PORT}`, localStorage: [{ name: 'tp-loaded', value: '1' }] }] },
+    storageState: { cookies: [], origins: [{ origin: `http://localhost:${PORT}`, localStorage: [{ name: 'tp-loaded', value: '1' }, { name: 'tp-guest-only', value: '1' }] }] },
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     launchOptions: {

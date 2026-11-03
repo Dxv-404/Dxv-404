@@ -15,7 +15,28 @@ async function load(): Promise<Account> {
 }
 
 const getName = (): string | null => { try { return localStorage.getItem('tp-name'); } catch { return null; } };
-const keepMe = (a: Account): void => { try { localStorage.setItem('tp-me', JSON.stringify({ account: a.profile!.id, name: a.profile!.name })); } catch { /* storage blocked */ } };
+const keepMe = (a: Account): void => { try { localStorage.setItem('tp-me', JSON.stringify({ account: a.profile!.id, name: a.profile!.name })); } catch { /* storage blocked */ } void claimGuest(a); };
+
+/** The games this phone played as a guest join its profile (once per profile; quietly, in the background). */
+async function claimGuest(a: Account): Promise<void> {
+  try {
+    const guest = localStorage.getItem('tp-guest-id');
+    const id = a.profile?.id;
+    if (!guest || !id || localStorage.getItem('tp-guest-claimed') === id) return;
+    await a.claimGuestGames(JSON.parse(guest) as string);
+    localStorage.setItem('tp-guest-claimed', id);
+  } catch { /* next time */ }
+}
+/** On every open: a phone with a profile and an unclaimed guest seat claims it. */
+export async function claimGuestGames(): Promise<void> {
+  try {
+    if (!localStorage.getItem('tp-me') || !localStorage.getItem('tp-guest-id')) return;
+    const me = JSON.parse(localStorage.getItem('tp-me')!) as { account?: string };
+    if (localStorage.getItem('tp-guest-claimed') === me.account) return;
+    const a = await existing();
+    if (a) await claimGuest(a);
+  } catch { /* offline: next time */ }
+}
 
 /** The account if this phone has one (null for a new player: nothing is made just by looking). */
 export async function existing(): Promise<Account | null> {
