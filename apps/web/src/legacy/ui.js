@@ -96,15 +96,65 @@ export function chipStack(amount, bb) {
   return el;
 }
 
-/** @param {string} msg @param {number} [ms] @param {{ top?: boolean }} [o] top: shown at the top of the screen (v3 screens) */
+// the v3 toast's icons (v3kit.py ICON)
+const TOAST_ICON = {
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5v.01"/></svg>',
+  info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.5v.01"/></svg>',
+};
+// what a top toast must not cover: the screen's title row, the table's top bar and the watching bar
+const TOAST_AVOID = '.page-head, .tp.live header.top, .tp-watching';
+/** Top toasts sit under the title / bars at the top of the screen (only those in the top band count). */
+function placeTop(t) {
+  if (!t.classList.contains('top')) return;
+  let y = 0; // nothing to avoid: the CSS's place (18 px under the safe area)
+  for (const el of document.querySelectorAll(TOAST_AVOID)) {
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height || r.top > 160) continue; // hidden, or not at the top (a dialog's title mid-screen)
+    y = Math.max(y, r.bottom + 8);
+  }
+  t.style.top = y ? `${Math.round(y)}px` : '';
+}
+/** The screen a toast was shown on: when another screen replaces it, the toast goes with it. */
+let toastScreen = null;
+let toastWatch = null;
+const GRACE = 800; // a toast shown just before the screen changes ("Renamed", then the list redraws) is for the next screen
+function bindScreen(t) {
+  toastWatch?.disconnect(); toastWatch = null;
+  toastScreen = document.querySelector('#app main.screen');
+  const parent = toastScreen?.parentElement;
+  if (!parent) return;
+  toastWatch = new MutationObserver(() => {
+    if (!toastScreen || toastScreen.isConnected) return;
+    if (Date.now() - (t._at || 0) < GRACE) { bindScreen(t); setTimeout(() => placeTop(t), 0); return; }
+    toastWatch?.disconnect(); toastWatch = null; toastScreen = null;
+    clearTimeout(t._h); t.classList.remove('show');
+  });
+  toastWatch.observe(parent, { childList: true });
+}
+
+/**
+ * @param {string} msg @param {number} [ms]
+ * @param {{ top?: boolean, icon?: 'check' | 'warn' | 'info' | null }} [o] top: the v3 toast (v3kit.py), a solid bar at the
+ * top of the screen under its title, with an icon (default check)
+ */
 export function toast(msg, ms = 2600, o = {}) {
   let t = document.getElementById('toast');
   if (!t) { t = h('div', { id: 'toast', role: 'status', 'aria-live': 'polite' }); (document.getElementById('app') ?? document.body).append(t); }
   t.classList.toggle('top', !!o.top);
-  t.textContent = msg;
+  const icon = o.top ? TOAST_ICON[o.icon === undefined ? 'check' : o.icon ?? ''] : null;
+  if (icon) t.replaceChildren(h('i', { class: 'ico', html: icon }), h('span', {}, msg));
+  else t.textContent = msg;
+  if (!o.top) t.style.top = '';
+  t._at = Date.now();
+  placeTop(t);
+  // the screen may still be laying out (or a bar may just have arrived): place it again once it has
+  requestAnimationFrame(() => placeTop(t));
+  setTimeout(() => placeTop(t), 250);
   t.classList.add('show');
   clearTimeout(t._h);
-  t._h = setTimeout(() => t.classList.remove('show'), ms);
+  t._h = setTimeout(() => { t.classList.remove('show'); toastWatch?.disconnect(); toastWatch = null; }, ms);
+  bindScreen(t);
 }
 
 export const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;

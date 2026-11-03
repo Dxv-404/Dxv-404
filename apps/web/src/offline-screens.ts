@@ -185,19 +185,39 @@ export function playNet(ui: Ui, net: NetTable, o: { offline: boolean; me?: Me; c
     let watchBar: HTMLElement | null = null;
     let justWatch = false;
     const where = (d: SeatDevice): string => (d.name ? d.name : `your ${d.kind}`);
+    // your seat while it plays on the other device: your name, your stack and where the seat is (v3devices.py seatmove:
+    // "Dev · 1,840 · Your seat is on your laptop"), in place of the table's "Watching · watching"
+    let elsewhere: SeatDevice | null = null;
+    const heroElsewhere = (): void => {
+      if (!elsewhere || net.seated) return;
+      const m = el.querySelector('.tp-stage .hero .hmeta') as HTMLElement | null;
+      const p = net.view?.players.find((x) => x.id === net.me);
+      if (!m || !p) return;
+      const want = [p.name, fmt(p.stack), `Your seat is on ${where(elsewhere)}`];
+      if (m.dataset.elsewhere === want.join('\n')) return; // already says so (and keeps the observer quiet)
+      m.dataset.elsewhere = want.join('\n');
+      m.dataset.testid = 'hero-elsewhere';
+      m.replaceChildren(h('span', { class: 'hname' }, want[0]), h('span', { class: 'hstack' }, want[1]),
+        h('span', { class: 'hhint' }, h('span', { class: 's1' }, want[2])));
+    };
+    const stage = el.querySelector('.tp-stage');
+    const heroWatch = new MutationObserver(heroElsewhere);
+    if (stage) heroWatch.observe(stage, { childList: true, subtree: true });
     const showWatching = (d: SeatDevice): void => {
+      elsewhere = d;
       watchBar?.remove();
       const bar: HTMLElement = h('div', { class: 'tp-watching', role: 'status', 'data-testid': 'watching-elsewhere' },
         h('span', {}, `Watching · your seat is on ${where(d)}`),
         h('button', { class: 'btn small primary', 'data-testid': 'move-seat', onclick: () => net.moveSeat() }, 'Move seat here'));
       watchBar = bar;
       el.querySelector('.tp-over')?.append(bar);
+      heroElsewhere();
     };
     const offSeat = net.onSeat((what, d) => {
       showWatching(d);
       if (what === 'moved') {
         justWatch = true;
-        toast(`Your seat moved to ${where(d)}. This device watches now.`, 5000, { top: true });
+        toast(`Your seat moved to ${where(d)}. This device watches now.`, 5000, { top: true, icon: 'info' });
         return;
       }
       if (justWatch) return;
@@ -208,7 +228,8 @@ export function playNet(ui: Ui, net: NetTable, o: { offline: boolean; me?: Me; c
     });
     let ended = false;
     const offView = net.subscribe((_events, v) => {
-      if (watchBar && net.seated) { watchBar.remove(); watchBar = null; }
+      if (watchBar && net.seated) { watchBar.remove(); watchBar = null; elsewhere = null; }
+      heroElsewhere();
       if (v.phase === 'ended' && !ended) { ended = true; standings(ui, v, o); }
     });
     const offErr = net.onError((code, m) => {
@@ -232,7 +253,7 @@ export function playNet(ui: Ui, net: NetTable, o: { offline: boolean; me?: Me; c
       if (!o.offline || lostSince === null || sheetOpen || Date.now() - lostSince < 15_000) return;
       sheetOpen = lostHost(ui, o.me!, () => { sheetOpen = null; });
     }, 1000);
-    return () => { clearInterval(watch); offSeat(); offView(); offErr(); offNotice(); offStatus(); table.destroy(); net.close(); delete document.body.dataset.playing; };
+    return () => { clearInterval(watch); heroWatch.disconnect(); offSeat(); offView(); offErr(); offNotice(); offStatus(); table.destroy(); net.close(); delete document.body.dataset.playing; };
   });
 }
 

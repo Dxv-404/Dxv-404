@@ -34,9 +34,11 @@
 /* ---------- laptops: one dialog, three columns ---------- */
 @media (min-width:1100px){
   .tp.app .screen.setup3:not(.tp-screen):not(.table-screen){
-    max-width:1180px;width:calc(100vw - 80px);min-height:0;margin:max(24px,calc(50vh - 380px)) auto 24px;padding:30px;
+    max-width:1180px;width:calc(100vw - 80px);min-height:0;margin:0 auto 24px;top:max(24px,calc(50vh - 380px));padding:30px;
     display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr) minmax(0,1fr);gap:18px 16px;align-items:start;
     background:var(--bg);border-radius:var(--r-panel,20px);box-shadow:var(--panelsh,inset 0 0 0 1px var(--line)),0 30px 80px rgba(0,0,0,.6);position:relative}
+  /* (the gap above the dialog is an offset, not a margin: a top margin collapses through the app's full-height frame and
+     made the page scroll by that much) */
   .tp.app .screen.setup3::before{content:"";position:fixed;inset:0;z-index:-1;background:rgba(0,0,0,.5);backdrop-filter:blur(2px);pointer-events:none}
   .tp.app .screen.setup3>*{grid-column:1/-1}
   .tp.app .screen.setup3>.s3-c1{grid-column:1}

@@ -90,6 +90,40 @@ async function layoutOk(page: Page, what: string): Promise<void> {
   expect(r.small, `${what}: small touch targets`).toEqual([]);
 }
 
+/**
+ * The top toast as designed (v3kit.py .toast): a solid bar in the theme's text colour with an icon, its words readable,
+ * and never on top of the screen's title, the table's top bar or the watching bar.
+ */
+async function toastOk(page: Page, what: string): Promise<void> {
+  const t = page.locator('#toast.top.show');
+  await expect(t, `${what}: the toast`).toBeVisible();
+  await page.waitForTimeout(400); // in place (it slides in, and is placed again once the screen has laid out)
+  const r = await page.evaluate(() => {
+    const el = document.getElementById('toast')!;
+    const st = getComputedStyle(el);
+    // (rgb(…) in 0–255, or color(srgb …) in 0–1 for a color-mix)
+    const rgb = (c: string) => { const n = (c.match(/[\d.]+/g) ?? []).map(Number); return c.startsWith('color(') ? [...n.slice(0, 3).map((v) => v * 255), ...n.slice(3)] : n; };
+    const lum = (c: string) => { const [r, g, b] = rgb(c).map((v) => v / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)); return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!; };
+    const ratio = (a: string, b: string) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+    const icon = el.querySelector('.ico svg');
+    const box = el.getBoundingClientRect();
+    const covers = Array.from(document.querySelectorAll('.page-head, .tp.live header.top, .tp-watching')).filter((o) => {
+      const b = o.getBoundingClientRect();
+      return b.width > 0 && b.height > 0 && b.top < 160 && b.bottom > box.top + 1 && b.top < box.bottom - 1 && b.right > box.left && b.left < box.right;
+    }).map((o) => `${o.className} ${JSON.stringify(o.getBoundingClientRect())} toast ${JSON.stringify(box)} ${el.textContent}`);
+    return {
+      alpha: rgb(st.backgroundColor)[3] ?? 1,
+      text: ratio(st.color, st.backgroundColor), icon: icon ? ratio(getComputedStyle(icon).color, st.backgroundColor) : 0,
+      covers, inside: box.left >= 0 && box.right <= innerWidth && box.top >= 0,
+    };
+  });
+  expect(r.alpha, `${what}: a solid toast`).toBe(1);
+  expect(r.text, `${what}: toast text contrast`).toBeGreaterThanOrEqual(4.5);
+  expect(r.icon, `${what}: the toast's icon shows`).toBeGreaterThanOrEqual(3);
+  expect(r.covers, `${what}: the toast covers the title or a bar`).toEqual([]);
+  expect(r.inside, `${what}: the toast is on screen`).toBe(true);
+}
+
 test('phone adds a laptop: the code on the phone, typed on the laptop; signed in; the phone gets a notice', async ({ browser, baseURL }) => {
   const phone = await device(browser, baseURL!, 'Phone', MODELS.pixel7);
   const laptop = await device(browser, baseURL!, 'Laptop', MODELS.laptop);
@@ -110,13 +144,18 @@ test('phone adds a laptop: the code on the phone, typed on the laptop; signed in
   await expect(laptop.page.locator('#toast')).toHaveClass(/top/); // at the top, as designed
   expect((await laptop.page.locator('#toast').boundingBox())!.y).toBeLessThan(120);
   await expect(laptop.page.getByTestId('moved')).toContainText('0crews');
+  await toastOk(laptop.page, 'laptop: signed in');
+  // the laptop's menu knows who it is now; the welcome screen's toast goes with the screen
+  await laptop.page.waitForTimeout(500);
+  await expect(laptop.page.locator('#toast.show')).toHaveCount(1);
+  await laptop.page.getByTestId('go-menu').click();
+  await expect(laptop.page.locator('#toast.show')).toHaveCount(0, { timeout: 500 });
+  await expect(laptop.page.getByTestId('open-profile')).toContainText('Dev');
   // the phone sees the laptop join, and lists it
   await expect(phone.page.locator('#toast')).toContainText('Your laptop is signed in', { timeout: 15_000 });
+  await toastOk(phone.page, 'phone: profile');
   await expect(phone.page.getByTestId('device-other')).toContainText('Dev’s laptop');
   await expect(phone.page.getByTestId('devices')).toContainText('2');
-  // the laptop's menu knows who it is now
-  await laptop.page.getByTestId('go-menu').click();
-  await expect(laptop.page.getByTestId('open-profile')).toContainText('Dev');
   // next time the phone opens the app: "Signed in on a new laptop"
   await phone.page.goto('/');
   await expect(phone.page.getByTestId('device-notice-top')).toContainText('Signed in on a new laptop');
@@ -345,6 +384,7 @@ test('one seat per player: a second device asks; Just watch; Move seat here; the
   await expect(askBox).toContainText('You’re playing on your phone');
   await expect(askBox).toContainText('Only one device can play it at a time');
   await layoutOk(laptop.page, 'seat ask');
+  await expect(laptop.page.locator('#toast.show')).toHaveCount(0); // nothing from the screens before follows into the table
   await laptop.page.waitForTimeout(600); await laptop.page.screenshot({ path: info.outputPath('seat-ask-laptop.png') });
   await laptop.page.getByTestId('ask-no').click(); // Just watch
   await expect(laptop.page.getByTestId('watching-elsewhere')).toContainText('your seat is on your phone');
@@ -357,6 +397,13 @@ test('one seat per player: a second device asks; Just watch; Move seat here; the
   await laptop.page.getByTestId('move-seat').click();
   await expect(laptop.page.getByTestId('watching-elsewhere')).toHaveCount(0);
   await expect(phone.page.locator('#toast')).toContainText('Your seat moved to your laptop. This device watches now.');
+  await toastOk(phone.page, 'seat moved');
+  // your seat while it plays on the laptop: your name, your stack, and where the seat is
+  const heroMeta = phone.page.getByTestId('hero-elsewhere');
+  await expect(heroMeta.locator('.hname')).toHaveText('Dev');
+  await expect(heroMeta.locator('.hstack')).toHaveText(/^[\d,]+$/);
+  await expect(heroMeta.locator('.hhint')).toHaveText('Your seat is on your laptop');
+  await expect(phone.page.locator('.hero')).not.toContainText('Watching · watching');
   await phone.page.screenshot({ path: info.outputPath('seat-moved-phone.png') });
   await layoutOk(phone.page, 'watching bar');
   const bar = await phone.page.getByTestId('watching-elsewhere').boundingBox();
@@ -460,6 +507,7 @@ for (const theme of THEMES) {
     await shot(owner.page, 'phone-add-qr');
     await owner.page.getByTestId('show-code').click();
     for (const [size, model] of SIZES) {
+      await owner.page.evaluate(() => { const t = document.getElementById('toast'); if (t) { t.textContent = ''; t.classList.remove('show'); } });
       const p = await device(browser, baseURL!, `${size} device`, model, theme);
       await openUse(p.page);
       await layoutOk(p.page, `${size}: enter`);
@@ -473,7 +521,12 @@ for (const theme of THEMES) {
       } else await pad(p.page, code);
       await expect(p.page.getByTestId('welcome')).toBeVisible();
       await layoutOk(p.page, `${size}: signed in`);
-      await shot(p.page, `${size}-signed-in`);
+      await toastOk(p.page, `${theme} ${size}: signed in`);
+      await p.page.screenshot({ path: info.outputPath(`${theme}-${size}-signed-in.png`) }); // (with its toast)
+      // the owner's Profile says so at once, with the same toast (checked now: the laptop's steps below outlast it)
+      await expect(owner.page.locator('#toast.show')).toContainText('is signed in', { timeout: 15_000 });
+      await toastOk(owner.page, `${theme}: profile`);
+      await owner.page.screenshot({ path: info.outputPath(`${theme}-phone-profile-toast-${size}.png`) });
       if (size === 'laptop') {
         await p.page.getByTestId('go-menu').click();
         await p.page.getByTestId('open-profile').click();
@@ -482,7 +535,6 @@ for (const theme of THEMES) {
         await shot(p.page, 'laptop-add');
       }
       // the owner's screen sees the new device and goes back to the list; the next size needs a fresh code
-      await expect(owner.page.locator('#toast')).toContainText('is signed in', { timeout: 15_000 });
       await expect(owner.page.getByTestId('device-this')).toBeVisible();
       if (size === 'small') { await layoutOk(owner.page, 'profile with devices'); await shot(owner.page, 'phone-profile-2'); }
       code = await showCode(owner.page);
