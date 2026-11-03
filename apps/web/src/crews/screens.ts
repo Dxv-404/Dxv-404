@@ -68,6 +68,7 @@ export function crewsUi(deps: CrewsDeps) {
   let token = 0;
   const pages = new Map<string, CrewPage>();
   let stopPoll: (() => void) | null = null;
+  let shown: View | null = null; // the view last painted: a new one opens at the top
 
   const top = (): View => views[views.length - 1]!;
   const wide = (): boolean => size !== 'phone';
@@ -119,6 +120,7 @@ export function crewsUi(deps: CrewsDeps) {
     root.replaceChildren(...nodes);
     root.dataset.view = v.k;
     root.dataset.size = size;
+    if (v !== shown) { shown = v; scrollTo(0, 0); root.scrollTop = 0; }
     if (showList) void drawList(listCol, my);
     if (pane.isConnected) void drawView(pane, v, my);
   }
@@ -172,7 +174,8 @@ export function crewsUi(deps: CrewsDeps) {
   function fillList(col: HTMLElement, L: Lists): void {
     const v = top();
     const empty = !L.crews.length && !L.invites.length && !L.requests.length;
-    if (!wide() && empty) { col.replaceChildren(emptyState()); return; }
+    // (kept when it is already showing, so a code being typed survives the fresh lists arriving)
+    if (!wide() && empty) { if (!col.querySelector(':scope > .cw-empty')) col.replaceChildren(emptyState()); return; }
     const sel = v.k === 'crew' ? v.id : v.k === 'list' ? selected : null;
     const cards = L.crews.map((c, i) => crewCardHtml(c, sel === c.id, i)).join('');
     const inv = L.invites.map(inviteRowHtml).join('');
@@ -223,7 +226,13 @@ export function crewsUi(deps: CrewsDeps) {
       + `<div class="hrow">${emblem(c, 50)}<div class="txt"><b>${esc(c.name)}</b><small>${esc(meta)}</small></div>${roleChip(c.role)}</div>`
       + `<div class="hrow ft">${stack(c.faces, 28)}${more > 0 ? `<span class="mut">+${more}</span>` : ''}<span class="sp"></span>${extra}</div></div>`;
   }
-  const inviteRowHtml = (i: Invitation): string => `<div class="row invite" data-testid="invite-row">${emblem(i, wide() ? 32 : 36)}<span class="txt"><b>${esc(i.invited_by ?? 'A friend')} invited you to ${esc(i.name)}</b><small>${i.members} member${i.members === 1 ? '' : 's'}${i.seasons_on && i.season ? ` · Season ${i.season}` : ''}</small></span><button class="bb p sm" data-x="invite" data-id="${i.crew_id}">View</button></div>`;
+  // phones: "Arjun invited you to Office Fridays" over the crew's size; the crews column on big screens: the crew's
+  // name over "Arjun invited you" (v3sizes.py)
+  const inviteRowHtml = (i: Invitation): string => `<div class="row invite" data-testid="invite-row">${emblem(i, wide() ? 32 : 36)}<span class="txt">`
+    + (wide()
+      ? `<b>${esc(i.name)}</b><small>${esc(i.invited_by ?? 'A friend')} invited you</small>`
+      : `<b>${esc(i.invited_by ?? 'A friend')} invited you to ${esc(i.name)}</b><small>${i.members} member${i.members === 1 ? '' : 's'}${i.seasons_on && i.season ? ` · Season ${i.season}` : ''}</small>`)
+    + `</span><button class="bb p sm" data-x="invite" data-id="${i.crew_id}">View</button></div>`;
   const requestRowHtml = (r: JoinRequest): string => `<div class="row" data-testid="request-row">${emblem(r, 36)}<span class="txt"><b>${esc(r.name)}</b><small>Request sent · waiting for ${esc(r.leader ?? 'the leader')}</small></span><button class="bb s sm" data-x="request" data-id="${r.crew_id}">Open</button></div>`;
 
   function joinLive(table: string | null, mode: string): void {
@@ -325,7 +334,7 @@ export function crewsUi(deps: CrewsDeps) {
         } catch (err) { (b as HTMLButtonElement).disabled = false; toast(msgOf(err)); }
       }
     };
-    setTimeout(() => input.focus(), 60);
+    setTimeout(() => input.focus({ preventScroll: true }), 60);
   }
 
   function drawMade(pane: HTMLElement, v: Extract<View, { k: 'made' }>): void {
@@ -482,7 +491,7 @@ export function crewsUi(deps: CrewsDeps) {
         else { boxes.input.value = ''; boxes.set(''); boxes.input.focus(); }
       }
     };
-    setTimeout(() => { if (!code) boxes.input.focus(); }, 60);
+    setTimeout(() => { if (!code) boxes.input.focus({ preventScroll: true }); }, 60);
   }
 
   async function pasteLink(boxes: Boxes | null): Promise<void> {
@@ -521,7 +530,7 @@ export function crewsUi(deps: CrewsDeps) {
       + `<div class="invh">${emblem(p, 96, 'stamp')}<span class="klbl">You’re invited to</span><b data-testid="preview-name">${esc(p.name)}</b>`
       + `<div class="hrow" style="justify-content:center">${stack(p.faces, 30)}<span class="mut">${p.members} member${p.members === 1 ? '' : 's'}</span></div></div>`
       + `<div class="three"><div class="stat"><b>${p.seasons_on ? p.season : '∞'}</b><small>${p.seasons_on ? 'season' : 'all-time'}</small></div><div class="stat"><b>${p.games}</b><small>games played</small></div><div class="stat"><b>${esc(p.usual_day ?? '–')}</b><small>usually plays</small></div></div>`
-      + (p.leader ? `<div class="row">${av(p.leader, 34)}<span class="txt"><b>${esc(leader)} leads this crew</b><small>${p.auto_admit ? 'Anyone with the code gets straight in' : `${esc(leader)} sees your request and lets you in`}</small></span></div>` : '')
+      + (p.leader ? `<div class="row">${av(p.leader, 34)}<span class="txt"><b>${esc(leader)} leads this crew</b><small>${p.auto_admit ? 'Anyone with the code gets straight in' : 'They’ll see your request and let you in'}</small></span></div>` : '')
       + `<div class="pnl wyj"><span class="klbl">When you join</span><span>· Your games at crew tables count in the league</span><span>· Members see your name, picture and results</span><span>· You can leave any time; your results stay</span></div>`
       + `<div class="two bottom"><button class="bb g" data-x="later">Not now</button><button class="bb p" data-x="ask" data-testid="ask-join">${p.auto_admit ? 'Join' : 'Ask to join'}</button></div>`;
     pane.onclick = async (e) => {
@@ -639,7 +648,9 @@ export function crewsUi(deps: CrewsDeps) {
     } else {
       const right = (p.can_invite ? `<button class="ib" data-x="invite" aria-label="Invite" data-testid="crew-invite">${ICON.share}</button>` : '')
         + (staff ? `<button class="ib" data-x="settings" aria-label="Crew settings" data-testid="crew-gear">${ICON.gear}</button>` : '');
-      header = `<header class="v3h crh">${size === 'phone' ? '<button class="ib" data-x="back" aria-label="Back">‹</button>' : ''}${emblem(c, 44)}<div><h1 class="t" data-testid="crew-title">${esc(c.name)}</h1><small>${esc(seasonLine)}</small></div><span class="sp"></span>${right}</header>`;
+      // the tablet: the big screens' header, a size smaller (v3sizes.py tablet)
+      if (size === 'tab') header = `<div class="cmh">${emblem(c, 52)}<div class="txt"><h1 class="t" data-testid="crew-title">${esc(c.name)}</h1><small>${esc(seasonLine)}</small></div>${right}</div>`;
+      else header = `<header class="v3h crh">${size === 'phone' ? '<button class="ib" data-x="back" aria-label="Back">‹</button>' : ''}${emblem(c, 44)}<div><h1 class="t" data-testid="crew-title">${esc(c.name)}</h1><small>${esc(seasonLine)}</small></div><span class="sp"></span>${right}</header>`;
     }
     pane.innerHTML = header + tabsHtml + '<div class="tabbody" data-slot="body"></div>';
     const body = pane.querySelector('[data-slot=body]') as HTMLElement;
@@ -666,7 +677,8 @@ export function crewsUi(deps: CrewsDeps) {
       if (x === 'req-yes' || x === 'req-no') return void decide(b, p, x === 'req-yes');
       if (x === 'member-more') return memberSheet(p, b.dataset.id!);
     };
-    if (tab === 'home') body.innerHTML = homeHtml(p, false);
+    if (tab === 'home' && size === 'tab') void tabletHome(body, p, my);
+    else if (tab === 'home') body.innerHTML = homeHtml(p, false);
     else if (tab === 'overview') { body.innerHTML = '<p class="hint" role="status">Loading…</p>'; void overview(body, p, my); }
     else if (tab === 'league') void leagueTab(body, p, my);
     else if (tab === 'games' || tab === 'trophies') void gamesTab(body, p, my, tab === 'trophies' ? 'trophies' : 'all');
@@ -718,6 +730,21 @@ export function crewsUi(deps: CrewsDeps) {
     return liveHtml(p) + requestsHtml(p, false) + host + seasonHtml(p) + league + lastGameHtml(p);
   }
 
+  /** The tablet's home: the live table, requests and your season, then the full league with its Season / All-time
+   *  switch (v3sizes.py tablet) in place of the phone's podium and last game. */
+  async function tabletHome(body: HTMLElement, p: CrewPage, my: number): Promise<void> {
+    body.innerHTML = homeHtml(p, true) + '<p class="hint" role="status">Loading…</p>';
+    const a = await existing();
+    if (!a) return;
+    const scope = leagueScope.get(p.crew.id) ?? (p.crew.season_months === 0 ? 'alltime' : 'season');
+    try {
+      const lg = await a.crewLeague(p.crew.id, scope);
+      if (!live(my)) return;
+      body.innerHTML = homeHtml(p, true) + leagueBlock(p, lg, scope, 6);
+      wireLeagueSeg(body, p, my, 6);
+    } catch (e) { if (live(my)) body.innerHTML = homeHtml(p, true) + failHtml(e); }
+  }
+
   async function overview(body: HTMLElement, p: CrewPage, my: number): Promise<void> {
     const a = await existing();
     if (!a) return;
@@ -763,7 +790,7 @@ export function crewsUi(deps: CrewsDeps) {
     return `<div class="pnl" data-slot="league"><div class="hrow"><h2 class="ttl">League · ${esc(title)}</h2><span class="sp"></span>${leagueSeg(p, scope).replace('class="seg"', 'class="seg" style="width:250px"')}</div>`
       + (lg.rows.length ? lhead + `<div class="ltable">${leagueRows(lg, 1, n)}</div>` : '<p class="hint">No league games yet.</p>') + '</div>';
   }
-  function wireLeagueSeg(body: HTMLElement, p: CrewPage, my: number): void {
+  function wireLeagueSeg(body: HTMLElement, p: CrewPage, my: number, n = size === 'desk' ? 10 : 8): void {
     body.querySelectorAll<HTMLElement>('[data-scope]').forEach((b) => b.addEventListener('click', async (e) => {
       e.stopPropagation();
       const scope = b.dataset.scope as 'season' | 'previous' | 'alltime';
@@ -772,7 +799,7 @@ export function crewsUi(deps: CrewsDeps) {
       const lg = await a.crewLeague(p.crew.id, scope).catch(() => null);
       if (!lg || !live(my)) return;
       const slot = body.querySelector('[data-slot=league]');
-      if (slot) { const t = el('div'); t.innerHTML = leagueBlock(p, lg, scope, size === 'desk' ? 10 : 8); slot.replaceWith(t.firstElementChild!); wireLeagueSeg(body, p, my); }
+      if (slot) { const t = el('div'); t.innerHTML = leagueBlock(p, lg, scope, n); slot.replaceWith(t.firstElementChild!); wireLeagueSeg(body, p, my, n); }
     }));
   }
 

@@ -6,6 +6,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { LocalDb, pgUp } from '../localdb';
 import { THEMES, answer, call, crewWith, game, layoutOk, person, phone, signInAs, targetsOk, type Person } from '../crews-helpers';
+import { textContrast } from '../contrast';
 
 test.skip(!pgUp(), 'needs the local Postgres (pnpm test:db uses the same one)');
 test.describe.configure({ mode: 'default' });
@@ -117,6 +118,7 @@ test('joining with a code: the wrong code shakes and counts down, five in a minu
   await page.getByTestId('crew-code').fill(`${fnt.code.slice(0, 3).toLowerCase()}-${fnt.code.slice(3)}`);
   await expect(page.getByTestId('preview-name')).toHaveText('Friday Night Table');
   await expect(page.getByText('Meera leads this crew')).toBeVisible();
+  await expect(page.getByText('They’ll see your request and let you in')).toBeVisible();
   await expect(page.getByText('Members see your name, picture and results')).toBeVisible();
   await layoutOk(page, 'preview'); await targetsOk(page, 'preview');
   await shot(page, 'preview');
@@ -441,7 +443,28 @@ for (const [w, h, label] of [[360, 740, 'small phone'], [844, 390, 'sideways'], 
         if (size === 'lap' || size === 'desk') await expect(page.locator('.rail .rlogo > *')).toBeVisible();
         if (size === 'tab') await expect(page.locator('.nav')).toBeVisible();
         if (size === 'desk') await expect(page.locator('.mcol .mlist .mrow')).not.toHaveCount(0);
+        // the rail ends with your picture (sideways too)
+        if (size !== 'tab') expect((await page.locator('.rail .rme .av').boundingBox())?.width ?? 0).toBeGreaterThan(30);
+        // the tablet's home is the live table and your season, then the whole league with Season / All-time
+        if (size === 'tab') {
+          await expect(page.locator('.cmain [data-slot=league] .lrow')).not.toHaveCount(0);
+          await expect(page.getByTestId('league-alltime')).toBeVisible();
+          await expect(page.getByTestId('your-season')).toBeVisible();
+          await page.getByTestId('league-alltime').click();
+          await expect(page.locator('.cmain [data-slot=league] h2')).toHaveText('League · All-time');
+          await page.getByTestId('league-season').click();
+          await expect(page.locator('.cmain [data-slot=league] h2')).toContainText('League · Season');
+        }
+        // the crews column: an invitation shows the crew, then who invited you
+        await expect(page.getByTestId('invite-row').locator('.txt b')).toHaveText('Office Fridays');
+        await expect(page.getByTestId('invite-row').locator('.txt small')).toHaveText('Aditya invited you');
+        // the header line (members, season, leader) is shown whole on laptops and desktops
+        if (size === 'lap' || size === 'desk') expect(await page.locator('.cmh .txt small').evaluate((e) => e.scrollWidth <= e.clientWidth + 1)).toBe(true);
       }
+      // crew names, the crew title and the LIVE strip's lines wrap instead of cutting off
+      const cut = await page.evaluate(() => Array.from(document.querySelectorAll<HTMLElement>('.ccard .txt b, .cmh h1, .crh h1, .lvbar .txt b, .lvbar .txt small'))
+        .filter((e) => e.getClientRects().length && (e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 8)).map((e) => e.textContent)); // (+8: a tall font's ink may pass its line box; a hidden line is ~20 px)
+      expect(cut, `${label} ${theme} names`).toEqual([]);
       await expect(page.locator('.hint[role=status]')).toHaveCount(0);
       await layoutOk(page, `${label} ${theme}`); await targetsOk(page, `${label} ${theme}`);
       await shot(page, `size-${w}x${h}-${theme}`);
@@ -455,3 +478,85 @@ for (const [w, h, label] of [[360, 740, 'small phone'], [844, 390, 'sideways'], 
     }
   });
 }
+
+// ---------------------------------------------------------------- the smallest phone, and contrast in every theme
+test('crews on the smallest phone (320 x 568): Create opens at the top, the leader header reads whole, the host sheet fits', async ({ browser }) => {
+  test.setTimeout(600_000);
+  await seedWorld();
+  const ishaan = await person(db, 'Ishaan'), asker = await person(db, 'Farhan');
+  const tnp = await crewWith(db, ishaan, 'Thursday Night Poker', [riya, kabir], { badge: 'round', color: '#7b3fb8' });
+  await call(db, asker, 'ask_to_join', { p_code: tnp.code });
+  for (const theme of ['classic', 'pixel', 'train'] as const) {
+    const { ctx, page, errors } = await phone(browser, db, base, { width: 320, height: 568, theme });
+    await signInAs(ctx, ishaan);
+    await crewsTab(page);
+    await expect(page.getByTestId('crew-card')).toHaveCount(1);
+    await layoutOk(page, `${theme} 320 list`); await targetsOk(page, `${theme} 320 list`);
+    // a scrolled list, then Create: the new screen starts at its top (Back and "Step 1 of 2" on screen)
+    await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
+    await page.getByTestId('crews-create').last().click();
+    await expect(page.getByTestId('crew-name')).toBeFocused();
+    const back = await page.getByRole('button', { name: 'Back' }).boundingBox();
+    expect(back!.y, `${theme} back on screen`).toBeGreaterThanOrEqual(0);
+    await expect(page.locator('.v3h small')).toHaveText('Step 1 of 2');
+    expect(await page.evaluate(() => scrollY), `${theme} create at the top`).toBe(0);
+    await layoutOk(page, `${theme} 320 create`); await targetsOk(page, `${theme} 320 create`);
+    await shot(page, `x320-${theme}-create`);
+    await page.getByRole('button', { name: 'Back' }).click();
+    // the leader's crew home: badge, name, line and two buttons fit; the name is shown whole
+    await page.getByTestId('crew-card').click();
+    await expect(page.getByTestId('requests')).toContainText('Farhan');
+    const title = await page.getByTestId('crew-title').evaluate((e) => ({ w: e.scrollWidth <= e.clientWidth + 1, h: e.scrollHeight <= e.clientHeight + 8, text: e.textContent }));
+    expect(title, `${theme} title`).toEqual({ w: true, h: true, text: 'Thursday Night Poker' });
+    expect(await page.locator('.crh small').evaluate((e) => e.scrollWidth <= e.clientWidth + 1 && e.scrollHeight <= e.clientHeight + 8), `${theme} subtitle`).toBe(true);
+    await layoutOk(page, `${theme} 320 leader home`); await targetsOk(page, `${theme} 320 leader home`);
+    await shot(page, `x320-${theme}-leader`);
+    // the host sheet stays inside the screen, its ✕ included
+    await page.getByTestId('host-crew').click();
+    await expect(page.locator('.sheet.open')).toBeVisible();
+    await page.waitForTimeout(400);
+    const fit = await page.evaluate(() => {
+      const W = document.documentElement.clientWidth, out: string[] = [];
+      if (document.documentElement.scrollWidth > W + 1) out.push(`page ${document.documentElement.scrollWidth}`);
+      for (const e of Array.from(document.querySelectorAll('.sheet.open, .sheet.open .sheet-close, .sheet.open .chipt, .sheet.open .bb'))) {
+        const r = e.getBoundingClientRect();
+        if (r.left < -0.5 || r.right > W + 0.5) out.push(`${e.className} ${Math.round(r.left)}..${Math.round(r.right)}`);
+      }
+      return out;
+    });
+    expect(fit, `${theme} host sheet`).toEqual([]);
+    await targetsOk(page, `${theme} 320 host sheet`); // (layoutOk would count the page's buttons under the sheet)
+    await shot(page, `x320-${theme}-host`);
+    expect(errors, theme).toEqual([]);
+    await ctx.close();
+  }
+});
+
+test('crews text contrast in all nine themes: bb figures, league headings, podium, tabs, invitations (4.5 : 1)', async ({ browser }) => {
+  test.setTimeout(1_200_000);
+  await seedWorld();
+  // (podium names are left out: their text box reaches into the avatar above, so the measure reads the avatar)
+  const SEL = '.cw .td, .cw .tu, .cw .lhead, .cw .pd small, .cw .ktabs button, .cw .row.invite .txt, .cw .ccard .txt, .cw .lrow b, .cw .lrow .g, .cw .grow .txt, .cw .nb small, .cw .rk small';
+  const low: string[] = [];
+  const check = async (page: Page, where: string): Promise<void> => {
+    await page.evaluate(() => scrollTo(0, 0));
+    for (const r of await textContrast(page, SEL)) if (r.ratio < 4.5) low.push(`${where}: ${r.what} "${r.text.slice(0, 24)}" ${r.ratio} (${r.color} on ${r.bg})`);
+  };
+  for (const theme of THEMES) {
+    const { ctx, page } = await phone(browser, db, base, { theme });
+    await signInAs(ctx, dev);
+    await crewsTab(page);
+    await expect(page.getByTestId('crew-card')).toHaveCount(2);
+    await check(page, `${theme} list`);
+    await page.getByTestId('crew-card').filter({ hasText: 'Friday Night Table' }).click();
+    await expect(page.getByTestId('your-season')).toBeVisible();
+    await check(page, `${theme} home`);
+    for (const tab of ['league', 'games'] as const) {
+      await page.getByTestId(`crew-tab-${tab}`).click();
+      await expect(page.locator('.tabbody .hint[role=status]')).toHaveCount(0);
+      await check(page, `${theme} ${tab}`);
+    }
+    await ctx.close();
+  }
+  expect(low).toEqual([]);
+});

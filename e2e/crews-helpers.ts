@@ -124,12 +124,18 @@ export async function layoutOk(page: Page, where: string): Promise<void> {
   expect(bad, where).toEqual([]);
 }
 
-/** Touch targets: every visible button in the crews screens is at least 44 px tall and wide (or a link-sized
- *  text button inside a row of its own). */
+/** Touch targets: every visible button in the crews screens (and a crews sheet's ✕) is at least 44 px tall and
+ *  wide; a switch counts by the row it sits in (the whole row toggles it). */
 export async function targetsOk(page: Page, where: string): Promise<void> {
-  const small = await page.evaluate(() => Array.from(document.querySelectorAll('.cw button, .nav button')).filter((e) => {
-    const r = e.getBoundingClientRect();
-    return r.width > 0 && r.height > 0 && (r.height < 31.5 || r.width < 31.5) && !(e as HTMLElement).closest('.ktabs');
-  }).map((e) => `${(e.textContent ?? e.getAttribute('aria-label') ?? '').trim().slice(0, 20)} ${Math.round(e.getBoundingClientRect().width)}x${Math.round(e.getBoundingClientRect().height)}`));
+  const small = await page.evaluate(() => {
+    const els = [
+      ...Array.from(document.querySelectorAll('.cw button, .nav button, .sheet:has(.cw-sheet) .sheet-close')),
+      ...Array.from(document.querySelectorAll('.cw input[role=switch]')).map((e) => e.closest('label') ?? e),
+    ];
+    return els.filter((e) => {
+      const r = e.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && (r.height < 43.5 || r.width < 43.5) && !(e as HTMLElement).closest('.ktabs');
+    }).map((e) => `${(e.textContent || e.getAttribute('aria-label') || '').trim().slice(0, 20)} ${Math.round(e.getBoundingClientRect().width)}x${Math.round(e.getBoundingClientRect().height)}`);
+  });
   expect(small, where).toEqual([]);
 }

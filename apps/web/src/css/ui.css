@@ -188,7 +188,7 @@ html:has(#app.tp.app),body:has(#app.tp.app){background:var(--app-bg,#1b120d)}
 .tp.app .seat-row .status{position:static;display:inline-flex;align-items:center;height:auto;width:auto;min-width:0;line-height:1.2;inset:auto;transform:none;padding:6px 10px;border-radius:99px;font:700 12px var(--ui);background:var(--acc);color:var(--acctx);white-space:nowrap}
 /* the theme's question box (in place of the browser's confirm and prompt) */
 .ask-wrap{position:fixed;inset:0;z-index:940;display:grid;place-items:center;padding:20px;background:rgba(0,0,0,0);transition:background .18s}
-.ask-wrap.on{background:rgba(0,0,0,.55)}
+.ask-wrap.on{background:rgba(0,0,0,.62);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}
 .tp.app .ask,.tp .ask{width:min(360px,100%);display:grid;gap:14px;padding:20px;border-radius:var(--r-panel,18px);background:linear-gradient(var(--panel,var(--chipbg)),var(--panel,var(--chipbg))),var(--bg);box-shadow:var(--panelsh,inset 0 0 0 1px var(--line)),0 24px 60px rgba(0,0,0,.5);color:var(--tx);transform:translateY(12px) scale(.97);opacity:0;transition:transform .2s cubic-bezier(.2,.8,.3,1),opacity .18s}
 .ask-wrap.on .ask{transform:none;opacity:1}
 .tp .ask-q{font:600 16px/1.4 var(--ui);margin:0}
