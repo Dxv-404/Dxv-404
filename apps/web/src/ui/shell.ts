@@ -6,6 +6,7 @@ import { THEMES, THEME_KEYS, sprite, renderTable, avatar, card, back, type Theme
 import { currentTheme, setTheme, loadDesignCss } from '../table/screen';
 import type { ScreenView } from '../net-table';
 import { Engine, sha256hex } from '@tp/engine';
+import { settings } from '../legacy/fx.js';
 
 interface Piece { bg: string; logo: string; extra: string; css: string }
 interface ThemeScreens { name: string; tagline: string; swatch: { bg: string; felt: string; rim: string; acc: string; tx: string }; loading: Piece; menu: Piece; lapBg: string }
@@ -129,6 +130,7 @@ type Tab = 'play' | 'crews' | 'replays' | 'theme';
  *  belongs to a crew). The Crews tab carries the number of invitations and requests waiting. */
 export function navBar(on: Tab, a: MenuActions): HTMLElement {
   const n = el('nav', 'nav'); n.setAttribute('aria-label', 'Main');
+  if (settings.motion === 'off') n.dataset.motion = 'off'; // the tab underline appears at once
   const items: [Tab, string, string, () => void][] = [['play', '♠', 'Play', a.play ?? (() => undefined)], ['crews', '⬢', 'Crews', a.crews], ['replays', '↺', 'Replays', a.replays], ['theme', '◐', 'Theme', a.theme]];
   const waiting = store.get<number>('tp-crews-badge') ?? 0;
   for (const [k, icon, label, go] of items) {

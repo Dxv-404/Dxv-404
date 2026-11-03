@@ -62,6 +62,8 @@
 .tp.app .nav button{position:relative}
 .tp.app .nav button.on::after{content:"";position:absolute;bottom:-7px;left:50%;width:22px;height:3px;margin-left:-11px;border-radius:2px;background:var(--acc);animation:cwnavin calc(.45s * var(--cw-k,1)) var(--cw-ease,ease) both}
 @keyframes cwnavin{from{transform:scaleX(0);opacity:0}}
+.tp.app .nav[data-motion=off] button.on::after{animation:none}
+@media (prefers-reduced-motion:reduce){.tp.app .nav button.on::after{animation:none}}
 .tp.app .nav .bdg{position:absolute;top:-2px;right:14px;min-width:16px;height:16px;border-radius:8px;background:var(--red,#d33);color:#fff;font:800 9.5px/16px var(--num);text-align:center;padding:0 4px}
 
 /* ---------------------------------------------------------------- the kit */

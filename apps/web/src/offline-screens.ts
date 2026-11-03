@@ -186,7 +186,7 @@ export function playNet(ui: Ui, net: NetTable, o: { offline: boolean; me?: Me; c
     let justWatch = false;
     const where = (d: SeatDevice): string => (d.name ? d.name : `your ${d.kind}`);
     // your seat while it plays on the other device: the table's hero shows your name, stack and where it is
-    const heroElsewhere = (d: SeatDevice | null): void => { if (net.me) table.setElsewhere(d && !net.seated ? { pid: net.me, where: where(d) } : null); };
+    const heroElsewhere = (d: SeatDevice | null): void => { if (net.me) table.setElsewhere(d ? { pid: net.me, where: where(d) } : null); }; // (the table shows it only while I have no seat)
     const showWatching = (d: SeatDevice): void => {
       watchBar?.remove();
       const bar: HTMLElement = h('div', { class: 'tp-watching', role: 'status', 'data-testid': 'watching-elsewhere' },
