@@ -84,6 +84,9 @@ importers:
       '@tp/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
+      '@tp/research':
+        specifier: workspace:*
+        version: link:../../packages/research
       '@tp/table':
         specifier: workspace:*
         version: link:../../packages/table
@@ -118,6 +121,9 @@ importers:
       '@tp/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
+      '@tp/research':
+        specifier: workspace:*
+        version: link:../../packages/research
       '@tp/table':
         specifier: workspace:*
         version: link:../../packages/table
@@ -139,6 +145,12 @@ importers:
         specifier: 4.1.12
         version: 4.1.12
 
+  packages/research:
+    dependencies:
+      '@tp/engine':
+        specifier: workspace:*
+        version: link:../engine
+
   packages/table:
     dependencies:
       '@tp/engine':
@@ -147,6 +159,9 @@ importers:
       '@tp/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@tp/research':
+        specifier: workspace:*
+        version: link:../research
     devDependencies:
       '@tp/bots':
         specifier: workspace:*

@@ -13,6 +13,7 @@
     "@tp/engine": "workspace:*",
     "@tp/protocol": "workspace:*",
     "@tp/account": "workspace:*",
-    "@tp/table": "workspace:*"
+    "@tp/table": "workspace:*",
+    "@tp/research": "workspace:*"
   }
 }

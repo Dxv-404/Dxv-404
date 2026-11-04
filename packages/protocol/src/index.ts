@@ -71,6 +71,8 @@ export const ClientMessage = z.discriminatedUnion('t', [
     claim: OfflineClaim.optional(),
     /** Offline: fingerprint of the last table checkpoint this phone holds (checked when a table is continued on another phone). */
     cp: z.string().regex(/^[0-9a-f]{64}$/).optional(),
+    /** Research: this app's device id and recording session (newer apps; older servers ignore it). */
+    rs: z.object({ d: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/), s: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/) }).optional(),
   }),
   z.object({ t: z.literal('act'), actionId: id, handNo: z.number().int().positive(), action }),
   z.object({ t: z.literal('sit'), actionId: id, out: z.boolean(), postNow: z.boolean().optional() }),

@@ -12,6 +12,7 @@ import { Engine, TABLE_DEFAULTS, clampRebuyAmount, isSeed, randomSeed, seedCommi
 import { PROTOCOL_VERSION, encode, isAvatarId, parseClient, versionOk, type ClientMessage, type DeviceInfo, type ServerMessage, type TableSettings } from '@tp/protocol';
 import { handPlayers, publicReplay, slimRecord, type EndPlayerRow, type GameInfo } from './record';
 import { FOLD_PAUSE_MS, resultsPauseMs, runoutStreets } from './pause';
+import { RoomTap, type ResearchSink } from './research-tap';
 
 export interface Conn {
   send(text: string): void;
@@ -109,12 +110,16 @@ export interface RoomOptions {
   shuffleWaitMs?: number;
   /** Checks an account ticket (phones that are signed in send one). Needed for crew-only tables. */
   identify?: (ticket: string, table: string) => Promise<Identity | null>;
+  /** Research recording (servers): every connection, message and hand, as research events. */
+  research?: ResearchSink;
 }
 
 interface ConnState {
   pid: PlayerId | null; hello: boolean; spectator: boolean; hidden?: boolean; windowStart: number; count: number; lastReact: number; lastSeen: number; checking?: boolean;
   /** Signed-in devices: which device this is, the account it is signed in as (also while it watches), and what it is called. */
   device?: string; account?: string; info?: DeviceInfo;
+  /** Research: the app's device and session ids (newer apps send them with hello), and when this socket opened. */
+  rs?: { d: string; s: string }; openedAt?: number;
 }
 
 /** Who a ticket belongs to, as the accounts database answers (see check_ticket). */
@@ -176,7 +181,9 @@ export class TableRoom {
   /** Inside one incoming message or wake-up, saves are collected into one at the end. */
   private batchDepth = 0;
   private needSave = false;
-  private readonly opt: Required<Omit<RoomOptions, 'push' | 'handPauseMs'>> & Pick<RoomOptions, 'push' | 'handPauseMs'>;
+  private readonly opt: Required<Omit<RoomOptions, 'push' | 'handPauseMs' | 'research'>> & Pick<RoomOptions, 'push' | 'handPauseMs' | 'research'>;
+  /** Research recording (null when the server does not record). */
+  private tap: RoomTap | null = null;
 
   constructor(code: string, private clock: RoomClock, private store: RoomStore, saved?: Persisted | null, opt: RoomOptions = {}) {
     this.code = code;
@@ -184,6 +191,24 @@ export class TableRoom {
     if (this.opt.offline) this.opt.maxConnections = Math.min(this.opt.maxConnections, OFFLINE_MAX_PLAYERS + 4);
     this.createdAt = clock.now();
     if (saved) this.restore(saved);
+    if (opt.research) {
+      try {
+        this.tap = new RoomTap(opt.research, {
+          code, server: this.opt.server,
+          gameId: () => this.game?.id ?? null,
+          handNo: () => (this.engine && this.engine.s.handNo > 0 ? this.engine.s.handNo : null),
+          street: () => (this.engine?.s.phase === 'hand' ? this.engine.s.hand?.street ?? null : this.engine ? 'between' : null),
+          isAccount: (pid) => this.accountSeats.has(pid),
+          deviceOf: (pid) => { for (const st of this.conns.values()) if (st.pid === pid) return st.rs?.d ?? st.device ?? null; return null; },
+        }, () => this.clock.now());
+      } catch { this.tap = null; }
+    }
+  }
+
+  /** Research: run fn with the tap, if recording; nothing it does may reach the game. */
+  private R(fn: (t: RoomTap) => void): void {
+    if (!this.tap) return;
+    try { fn(this.tap); } catch { /* never into the game */ }
   }
 
   // ---------------- doors in ----------------
@@ -192,7 +217,8 @@ export class TableRoom {
       this.send(conn, { t: 'error', code: 'table_full', message: 'This table has too many phones connected' });
       return conn.close(4000, 'table_full');
     }
-    this.conns.set(conn, { pid: null, hello: false, spectator: false, windowStart: this.clock.now(), count: 0, lastReact: 0, lastSeen: this.clock.now() });
+    this.conns.set(conn, { pid: null, hello: false, spectator: false, windowStart: this.clock.now(), count: 0, lastReact: 0, lastSeen: this.clock.now(), openedAt: this.clock.now() });
+    this.R((t) => t.emit('conn.open', { c: t.conn(conn), n: this.conns.size }, null));
     this.reschedule();
   }
 
@@ -200,6 +226,7 @@ export class TableRoom {
     const st = this.conns.get(conn);
     if (!st) return;
     this.conns.delete(conn);
+    this.R((t) => t.emit('conn.close', { c: t.conn(conn), pid: st.pid, hello: st.hello, spectator: st.spectator, account: st.account ?? null, ms: this.clock.now() - (st.openedAt ?? this.clock.now()), n: this.conns.size }, st.pid, { d: st.rs?.d ?? st.device ?? null, ...(st.pid ? {} : { a: st.account ?? null }) }));
     if (st.pid && this.engine?.player(st.pid) && !this.connsOf(st.pid).length) {
       this.goingOffline.set(st.pid, this.clock.now() + this.opt.offlineAfterMs);
       this.trackEmpty();
@@ -225,14 +252,24 @@ export class TableRoom {
     if (m.t === 'hello') return this.hello(conn, st, m);
     if (!st.hello) return this.send(conn, { t: 'error', code: 'need_hello', message: 'Say hello first' });
     if (m.t === 'react') return this.react(conn, st, m.reaction);
-    if (m.t === 'bg') { st.hidden = m.hidden; return; }
+    if (m.t === 'bg') { st.hidden = m.hidden; this.R((t) => t.emit('conn.bg', { c: t.conn(conn), pid: st.pid, hidden: m.hidden }, st.pid, { d: st.rs?.d ?? st.device ?? null })); return; }
     if (m.t === 'seed') return this.onSeed(st, m.handNo, m.seed);
     if (m.t === 'moveSeat') return this.moveSeat(conn, st);
-    if (!st.pid || !this.engine) return this.ack(conn, null, m.actionId, 'Spectators cannot play');
+    if (!st.pid || !this.engine) { this.tapMsg(conn, st, m, now, 'Spectators cannot play', false); return this.ack(conn, null, m.actionId, 'Spectators cannot play'); }
     const pid = st.pid;
     const done = this.acks.get(pid)?.get(m.actionId);
-    if (done) return this.send(conn, done); // a resend: same answer, applied once
-    this.ack(conn, pid, m.actionId, this.handle(pid, m, now));
+    if (done) { this.tapMsg(conn, st, m, now, done.ok ? null : done.error ?? 'refused', true); return this.send(conn, done); } // a resend: same answer, applied once
+    const result = this.handle(pid, m, now);
+    this.tapMsg(conn, st, m, now, result, false);
+    this.ack(conn, pid, m.actionId, result);
+  }
+
+  /** Research: a player's message, when it arrived (server clock), and what the table answered. */
+  private tapMsg(conn: Conn, st: ConnState, m: Extract<ClientMessage, { actionId: string }>, rx: number, error: string | null, dup: boolean): void {
+    this.R((t) => {
+      const { actionId, t: kind, ...rest } = m;
+      t.emit('msg.in', { c: t.conn(conn), pid: st.pid, kind, actionId, msg: rest, ok: error === null, error, dup, rx, lag: this.clock.now() - rx }, st.pid, { d: st.rs?.d ?? st.device ?? null, ...(st.pid ? {} : { a: st.account ?? null }) });
+    });
   }
 
   /** The clock door: called at (or after) the time last passed to clock.schedule. */
@@ -276,7 +313,8 @@ export class TableRoom {
 
   // ---------------- messages ----------------
   private hello(conn: Conn, st: ConnState, m: Extract<ClientMessage, { t: 'hello' }>): void {
-    const fail = (code: Extract<ServerMessage, { t: 'error' }>['code'], message: string) => { this.send(conn, { t: 'error', code, message }); conn.close(4000, code); };
+    if (m.rs) st.rs = m.rs;
+    const fail = (code: Extract<ServerMessage, { t: 'error' }>['code'], message: string) => { this.tapHello(conn, st, m, { ok: false, code, message }); this.send(conn, { t: 'error', code, message }); conn.close(4000, code); };
     if (!versionOk(m.v)) return fail('version', 'Please update the app');
     if (m.table !== this.code) return fail('no_table', 'Wrong table');
     if (st.hello || st.checking) return this.send(conn, { t: 'error', code: 'bad_message', message: 'Already said hello' });
@@ -305,7 +343,7 @@ export class TableRoom {
   /** Seat (or watch) after the hello is checked. `who` is set for signed-in phones. */
   private seat(conn: Conn, st: ConnState, m: Extract<ClientMessage, { t: 'hello' }>, who: Identity | null): void {
     const now = this.clock.now();
-    const fail = (code: Extract<ServerMessage, { t: 'error' }>['code'], message: string) => { this.send(conn, { t: 'error', code, message }); conn.close(4000, code); };
+    const fail = (code: Extract<ServerMessage, { t: 'error' }>['code'], message: string) => { this.tapHello(conn, st, m, { ok: false, code, message, account: who?.account ?? null }); this.send(conn, { t: 'error', code, message }); conn.close(4000, code); };
     const crew = this.engine ? this.crew : (m.settings?.crew ?? null);
     if (crew && !who?.crews.includes(crew)) return fail('not_allowed', 'This table is for crew members');
     if (who && m.player !== who.account) return fail('not_allowed', 'That seat belongs to another account');
@@ -314,6 +352,7 @@ export class TableRoom {
       if (!this.engine) return fail('no_table', 'This table has not started');
       if ([...this.conns.values()].filter((o) => o.hello && o.spectator).length >= MAX_WATCHERS) return fail('table_full', `${MAX_WATCHERS} people are already watching this table`);
       st.hello = true; st.spectator = true; st.pid = null;
+      this.tapHello(conn, st, m, { ok: true, watch: true, asked: !!m.spectate, account: who?.account ?? null });
       this.welcome(conn, null, m.lastSeq);
     };
     if (m.spectate || (!m.token && !who)) return watch();
@@ -330,6 +369,7 @@ export class TableRoom {
       const holder = this.connsOf(m.player).map((c) => this.conns.get(c)!).find((o) => o.device && o.device !== who.device);
       if (holder) {
         watch();
+        this.R((t) => t.emit('seat.move', { kind: 'elsewhere', c: t.conn(conn), pid: m.player, heldBy: holder.rs?.d ?? holder.device ?? null, heldInfo: holder.info ?? null }, m.player, { d: st.rs?.d ?? st.device ?? null }));
         if (st.hello) this.send(conn, { t: 'seatElsewhere', device: holder.info ?? PLAIN_DEVICE });
         return;
       }
@@ -337,7 +377,10 @@ export class TableRoom {
     // only the host's hello (it carries the table's settings) creates the table; a friend who connects
     // first must not create it with default settings and become the host
     if (!this.engine && !m.settings) return fail('no_table', 'This table has not started yet');
-    if (!this.engine) { this.create(m.settings, now); this.crew = crew; }
+    if (!this.engine) {
+      this.create(m.settings, now); this.crew = crew;
+      this.R((t) => t.emit('table.open', { by: m.player, settings: m.settings ?? null, cfg: this.engine!.s.cfg, crew, casual: !!m.settings?.casual, gameId: this.game?.id ?? null, server: this.opt.server, offline: this.opt.offline, createdAt: this.createdAt, openedAt: now }, m.player));
+    }
     const e = this.engine!;
     // the player's avatar (before a join, so the join's update already carries it): set on every hello that
     // says (null = initials); an older app that does not say keeps what the seat had
@@ -352,6 +395,7 @@ export class TableRoom {
       if (m.token && !who) this.tokens[m.player] = hashToken(m.token);
       if (who) this.accountSeats.add(m.player);
       if (!this.host) this.host = m.player;
+      this.R((t) => { const pl = e.player(m.player)!; t.emit('seat.join', { pid: m.player, name: pl.name, chair: pl.chair, seat: pl.seat, joinIndex: e.s.players.length - 1, ever: e.s.players.length + (e.s.departed?.length ?? 0), stack: pl.stack, waitForBB: pl.waitForBB, host: this.host === m.player, account: !!who, avatar: this.avatars[m.player] ?? null, phase: e.s.phase, handNo: e.s.handNo }, m.player, { d: st.rs?.d ?? who?.device ?? null }); });
       this.persist();
     }
     // one live connection per seat: a newer one (another tab, a reconnect racing the old socket) wins
@@ -365,6 +409,7 @@ export class TableRoom {
     const wasAway = !e.player(m.player)!.connected;
     if (wasAway) this.apply({ t: 'presence', pid: m.player, connected: true, now });
     st.hello = true; st.pid = m.player;
+    this.tapHello(conn, st, m, { ok: true, watch: false, isNew, wasAway, account: who?.account ?? null });
     this.trackEmpty();
     this.welcome(conn, m.player, m.lastSeq);
     if (avChanged && !isNew && !wasAway) this.announce(); // a new picture on a seat nobody saw leave: everyone else is told
@@ -384,6 +429,7 @@ export class TableRoom {
     if (!pid || !e || !e.player(pid) || e.player(pid)!.leaving) return this.send(conn, { t: 'error', code: 'bad_message', message: 'There is no seat of yours at this table' });
     if (st.pid === pid) return; // already here (a resend)
     const now = this.clock.now();
+    this.R((t) => t.emit('seat.move', { kind: 'moved', c: t.conn(conn), pid, to: st.rs?.d ?? st.device ?? null, toInfo: st.info ?? null, from: this.connsOf(pid).map((c) => { const o = this.conns.get(c)!; return { c: t.conn(c), d: o.rs?.d ?? o.device ?? null, info: o.info ?? null }; }) }, pid, { d: st.rs?.d ?? st.device ?? null }));
     for (const old of this.connsOf(pid)) {
       const o = this.conns.get(old)!;
       o.pid = null; o.spectator = true;
@@ -435,7 +481,7 @@ export class TableRoom {
         const r = this.apply(input);
         if (!r && m.cmd === 'remove') {
           for (const c of this.connsOf(m.pid!)) { const st = this.conns.get(c)!; st.pid = null; st.spectator = true; }
-          if (this.host === m.pid) this.host = this.pickHost(m.pid);
+          if (this.host === m.pid) { this.host = this.pickHost(m.pid); this.R((t) => t.emit('table.host', { from: m.pid, to: this.host, why: 'removed' }, this.host)); }
         }
         if (!r && m.cmd === 'end') { this.running = false; this.nextDealAt = null; this.endToLeague(); }
         if (!r && m.cmd === 'resume') this.tryDeal(now);
@@ -445,11 +491,20 @@ export class TableRoom {
     }
   }
 
+  /** Research: a hello and how it ended (seated, watching, or refused). */
+  private tapHello(conn: Conn, st: ConnState, m: Extract<ClientMessage, { t: 'hello' }>, r: Record<string, unknown>): void {
+    this.R((t) => t.emit('conn.hello', {
+      c: t.conn(conn), ...r, player: m.player, v: m.v, lastSeq: m.lastSeq, spectate: !!m.spectate, ticket: !!m.ticket, token: !!m.token, settings: !!m.settings,
+      avatar: m.avatar ?? null, rs: m.rs ?? null, device: st.device ?? null, info: st.info ?? null, offlineClaim: !!m.claim,
+    }, r.ok && !r.watch ? m.player : null, { d: m.rs?.d ?? st.device ?? null, ...(r.ok && !r.watch ? {} : { a: st.account ?? null }) }));
+  }
+
   private react(conn: Conn, st: ConnState, reaction: Extract<ClientMessage, { t: 'react' }>['reaction']): void {
     if (!st.pid) return;
     const now = this.clock.now();
     if (now - st.lastReact < REACT_GAP_MS) return this.send(conn, { t: 'error', code: 'rate_limited', message: 'One reaction at a time' });
     st.lastReact = now;
+    this.R((t) => t.emit('react.send', { pid: st.pid, reaction }, st.pid));
     this.broadcastRaw({ t: 'react', from: st.pid, reaction, at: now });
   }
 
@@ -479,6 +534,7 @@ export class TableRoom {
     // the shuffle seed stays on the server (it would let any phone work out folded hands); the database keeps it
     // for a fairness check on request
     const events = r.events.filter((ev) => ev.t !== 'deckReveal');
+    if (!HAND_INPUTS.has(input.t)) this.R((t) => t.emit('game.input', gameInput(e, input, events), 'pid' in input ? input.pid : input.t === 'join' ? input.id : null, { at: input.now }));
     if (e.s.phase === 'hand') this.inputs.push(input);
     else { this.base = e.snapshot(); this.inputs = []; }
     this.seq++;
@@ -490,6 +546,11 @@ export class TableRoom {
       this.lastRecord = rec;
       this.store.appendHand(rec);
       this.toLeague(rec);
+      this.R((t) => {
+        t.hand(rec);
+        // a player out of chips is offered a rebuy (or told why not): the offer, as the table sees it
+        for (const p of e.s.players) if (p.stack === 0) t.emit('rebuy.offer', { pid: p.id, handNo: rec.handNo, rebuy: e.rebuyView(p.id), at: input.now }, p.id, { at: input.now });
+      });
       if (this.running && e.s.phase !== 'ended') {
         const res = e.s.hand?.results;
         this.nextDealAt = input.now + (this.opt.handPauseMs ?? (res ? resultsPauseMs(res, runoutStreets(r.events, !!e.s.hand?.runout)) : FOLD_PAUSE_MS));
@@ -590,6 +651,7 @@ export class TableRoom {
     if (this.crew && this.game && !this.game.announced && e.s.handNo >= 1) {
       this.game.announced = true;
       const hostName = e.player(this.host ?? '')?.name ?? 'Someone';
+      this.R((t) => t.emit('push.sent', { kind: 'crewTable', crew: this.crew, except: [...this.accountSeats].length }, this.host));
       this.opt.push({ kind: 'crewTable', crew: this.crew, except: [...this.accountSeats], title: 'A crew table just started', body: `${hostName} is playing at table ${this.code}. Tap to join.`, url: `/#/t/${this.code}`, tag: `table-${this.code}` });
     }
     const h = e.s.phase === 'hand' && !e.s.paused ? e.s.hand : null;
@@ -601,6 +663,7 @@ export class TableRoom {
     if (tp.sent || now < tp.at) return;
     tp.sent = true;
     const looking = this.connsOf(pid).some((c) => !this.conns.get(c)!.hidden);
+    this.R((t) => t.emit('push.sent', { kind: 'turn', looking, waitedMs: this.opt.turnPushMs }, pid));
     if (!looking) this.opt.push({ kind: 'turn', accounts: [pid], title: 'Your turn', body: `Table ${this.code} is waiting for you.`, url: `/#/t/${this.code}`, tag: `turn-${this.code}` });
   }
 
@@ -618,6 +681,7 @@ export class TableRoom {
     // nobody here to take over: look again later (the game ends by itself if everyone stays gone)
     if (!next) { this.hostHandoverAt = now + this.opt.hostHandoverMs; return; }
     this.hostHandoverAt = null;
+    this.R((t) => t.emit('table.host', { from: this.host, to: next.id, why: 'away' }, next.id));
     this.host = next.id;
     this.announce();
   }
@@ -732,6 +796,7 @@ export class TableRoom {
       players.push({ key: p.id, account: this.accountOf(p.id), name: p.name, buyins: p.buyins, final: p.stack, minStack: Math.min(this.minStacks[p.id] ?? p.stack, p.stack) });
     }
     this.store.league('end', `${this.game.id}:end`, { game: this.gameInfo(), endedAt: new Date(this.clock.now()).toISOString(), players });
+    this.R((t) => t.emit('game.end', { game: this.gameInfo(), endedAt: this.clock.now(), hands: e.s.handNo, players }, null));
     this.persist();
   }
 
@@ -883,6 +948,21 @@ export class TableRoom {
 
   /** Has this connection introduced itself? (Servers close connections that never do.) */
   hasSaidHello(conn: Conn): boolean { return !!this.conns.get(conn)?.hello; }
+}
+
+/** Inputs that are part of a hand: recorded with the whole hand once it ends (research hand.* events). */
+const HAND_INPUTS = new Set(['act', 'tick', 'start', 'vote', 'show']);
+/** Research: an input outside a hand's play (seats, rebuys, presence, host commands), and what it changed. */
+function gameInput(e: Engine, input: Input, events: GameEvent[]): Record<string, unknown> {
+  const { now: _now, ...rest } = input as Input & { now: number };
+  const pid = 'pid' in input ? input.pid : input.t === 'join' ? input.id : null;
+  const p = pid ? e.player(pid) ?? e.s.departed?.find((x) => x.id === pid) ?? null : null;
+  return {
+    input: input.t === 'join' ? { ...rest, name: (rest as { name?: string }).name } : rest,
+    events: events.map((ev) => (ev.t === 'win' ? { t: 'win' } : ev)),
+    player: p ? { pid: p.id, stack: p.stack, chair: p.chair, seat: p.seat, sittingOut: p.sittingOut, away: p.away, connected: p.connected, busted: p.busted, leaving: p.leaving, buyins: p.buyins, rebuysUsed: p.rebuysUsed, waitForBB: p.waitForBB, missedSB: p.missedSB, missedBB: p.missedBB, postMissed: p.postMissed, wantsStraddle: p.wantsStraddle, bank: p.bank } : null,
+    phase: e.s.phase, handNo: e.s.handNo, level: e.s.level, paused: e.s.paused, pendingLevel: e.s.pendingLevel,
+  };
 }
 
 /** A device we know nothing more about (offline claims, older tickets). */

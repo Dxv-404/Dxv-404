@@ -13,7 +13,8 @@
   },
   "dependencies": {
     "@tp/engine": "workspace:*",
-    "@tp/protocol": "workspace:*"
+    "@tp/protocol": "workspace:*",
+    "@tp/research": "workspace:*"
   },
   "devDependencies": {
     "@tp/bots": "workspace:*",
