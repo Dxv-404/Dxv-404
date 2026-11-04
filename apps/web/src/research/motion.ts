@@ -8,6 +8,7 @@ import { R } from './capture';
 
 type Perm = 'granted' | 'denied' | 'unsupported' | 'not-required' | 'error' | 'unknown';
 let perm: Perm = 'unknown';
+let silentSaid = false;
 let asked = false;
 
 const MotionEv = (): { requestPermission?: () => Promise<string> } | undefined => (window as unknown as { DeviceMotionEvent?: { requestPermission?: () => Promise<string> } }).DeviceMotionEvent;
@@ -49,11 +50,12 @@ let win: { why: string; stream: SampleStream; started: number; ctx: { tb?: strin
 
 const onMotion = (e: DeviceMotionEvent): void => {
   if (!win) return;
-  win.events++;
   const g = e.accelerationIncludingGravity, a = e.acceleration, r = e.rotationRate;
+  if (g?.x == null && a?.x == null && r?.alpha == null) return; // (desktop browsers send empty events: no sensor)
+  win.events++;
   Object.assign(win.last, { ax: g?.x ?? null, ay: g?.y ?? null, az: g?.z ?? null, lx: a?.x ?? null, ly: a?.y ?? null, lz: a?.z ?? null, ra: r?.alpha ?? null, rb: r?.beta ?? null, rg: r?.gamma ?? null });
 };
-const onOrient = (e: DeviceOrientationEvent): void => { if (win) Object.assign(win.last, { oa: e.alpha, ob: e.beta, og: e.gamma }); };
+const onOrient = (e: DeviceOrientationEvent): void => { if (win && (e.alpha !== null || e.beta !== null)) Object.assign(win.last, { oa: e.alpha, ob: e.beta, og: e.gamma }); };
 
 /** Start recording (cards dealt, or my turn). Ignored if already on. */
 export const motionStart = R.guard((why: string) => {
@@ -73,6 +75,8 @@ export const motionStop = R.guard((why: string) => {
   removeEventListener('devicemotion', onMotion);
   removeEventListener('deviceorientation', onOrient);
   const b = w.stream.take();
+  // a device that says it has sensors but sends nothing (laptops): said once, then no empty windows
+  if (!w.events) { if (!silentSaid) { silentSaid = true; R.emit('motion.perm', { state: 'no-events', api: perm, window: w.why }, w.ctx); } return; }
   R.emit('motion.samples', { from: w.why, to: why, ms: Math.round(performance.now() - w.started), rawEvents: w.events, hz: 10, batch: b }, w.ctx);
 });
 

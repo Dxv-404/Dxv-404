@@ -47,7 +47,8 @@ export async function startFakeSupabase(): Promise<FakeSupabase> {
   await psql(['-d', db, '-f', join(ROOT, 'supabase/tests/local-shim.sql')]);
   for (const m of readdirSync(join(ROOT, 'supabase/migrations')).filter((f) => f.endsWith('.sql')).sort()) await psql(['-d', db, '-f', join(ROOT, 'supabase/migrations', m)]);
   const retset = new Map<string, boolean>();
-  const one = async (q: string): Promise<string> => (await psql(['-d', db, '-tA', '-c', q])).replace(/\n$/, '');
+  // (a long query goes in on stdin: a command-line argument is limited to 128 KB)
+  const one = async (q: string): Promise<string> => (await (q.length > 60_000 ? psql(['-d', db, '-tA'], q.endsWith(';') ? q : `${q};`) : psql(['-d', db, '-tA', '-c', q]))).replace(/\n$/, '');
 
   /** Run a query as the device `user` (null: not signed in); the rows as JSON, or a Supabase-style error. */
   async function asDevice(user: string | null, q: string): Promise<{ rows?: unknown[]; error?: { message: string; code: string } }> {

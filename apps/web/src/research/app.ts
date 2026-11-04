@@ -42,6 +42,7 @@ export function installResearch(): void {
 }
 
 function install(): void {
+  (window as unknown as { __tpResearch: unknown }).__tpResearch = R; // (tests flush the queue through this)
   R.start();
   installApiTrace();
   // ---- the device
