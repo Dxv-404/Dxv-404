@@ -178,7 +178,6 @@ export const EVENT_TYPES = {
   'ui.key': { v: 1, src: 'c' },
   'ui.scroll': { v: 1, src: 'c' },
   'ui.orient': { v: 1, src: 'c' },
-  'ui.tab': { v: 1, src: 'c' },
   'turn.start': { v: 1, src: 'c' },
   'act.send': { v: 1, src: 'c' },
   'act.ack': { v: 1, src: 'c' },
