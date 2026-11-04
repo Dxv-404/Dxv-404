@@ -14,6 +14,7 @@ import { setTheme, currentTheme, TableScreen } from '../table/screen.ts';
 import { settingsScreen, installErrorReporting, noteScreen } from '../more-screens.ts';
 import { rebuyBlock, withRebuyDefaults, setupHead, setupFoot, blindsSeg, rulesContent, rebuysUsedText } from '../rebuys-setup.ts';
 import { crewsUi } from '../crews/screens.ts';
+import { noteScreenView, noteSheet } from '../research/app.ts';
 import { newCode, pickServer, playOnline as openOnline, hostOnline as openTableScreen } from '../online-screens.ts';
 import { joinCode as offlineJoin } from '../offline-screens.ts';
 
@@ -27,7 +28,11 @@ let current = null; // cleanup for the active screen
 
 // ---------------- sheets ----------------
 function openSheet(content, { label = 'Panel', onClose, tall = false } = {}) {
+  const openedAt = performance.now();
+  noteSheet(label, true);
+  let closed = false;
   const close = () => {
+    if (!closed) { closed = true; noteSheet(label, false, Math.round(performance.now() - openedAt)); }
     sheet.classList.remove('open');
     scrim.classList.remove('open');
     setTimeout(() => { wrap.remove(); }, 260);
@@ -81,6 +86,7 @@ function screen(build) {
   app.append(el);
   const cleanup = build(el);
   noteScreen(el.className.replace(/^screen\s*/, '') || 'screen');
+  noteScreenView(el.className.replace(/^screen\s*/, '') || 'screen');
   current = typeof cleanup === 'function' ? cleanup : null;
   window.scrollTo(0, 0);
 }

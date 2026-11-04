@@ -20,6 +20,7 @@ import { BADGES, COLORS, COLOR_NAMES, ICON, applyFeel, ago, av, bbText, btn, car
 import { DEFAULT_RULES, rulesText, sizeOf, type Size } from './format';
 export { rulesText, sizeOf };
 import { cachedLists, ensure, existing, fetchLists, forget, type Lists } from './data';
+import { R } from '../research/capture';
 
 type Sheet = { close(): void; sheet: HTMLElement };
 export interface CrewsDeps {
@@ -646,6 +647,7 @@ export function crewsUi(deps: CrewsDeps) {
     const tabs: Tab[] = big ? ['overview', 'league', 'games', 'members', 'trophies'] : ['home', 'league', 'games', 'members'];
     let tab = v.tab;
     if (!tabs.includes(tab)) tab = big ? (tab === 'home' ? 'overview' : tab) : tab === 'overview' || tab === 'trophies' ? 'home' : tab;
+    R.emit('crew.view', { kind: 'tab', crew: v.id, tab, size, role: p.role, cached: !!had });
     const staff = p.role !== 'member';
     const c = p.crew;
     const seasonLine = c.season_months === 0 ? 'All-time league' : p.season ? `${seasonLabel(p.season)}${p.season.ends_at ? ` · ${endsIn(p.season.ends_at)}` : ''}` : `Season ${p.next_season} starts with your first game`;
@@ -1219,6 +1221,7 @@ export function crewsUi(deps: CrewsDeps) {
     return `<div class="pnl"><span class="klbl">This season</span><div class="sgrid" data-testid="player-stats">${cells.map(([v, l, c]) => `<div><b class="${c ?? ''}">${v}</b><small>${l}</small></div>`).join('')}</div></div>`;
   }
   async function drawPlayer(pane: HTMLElement, crewId: string, accountId: string, my: number): Promise<void> {
+    R.emit('crew.view', { kind: 'card', crew: crewId, account: accountId, size });
     pane.innerHTML = '<p class="hint" role="status">Loading…</p>';
     const a = await existing(); if (!a) return;
     let pc: PlayerCard, p: CrewPage;

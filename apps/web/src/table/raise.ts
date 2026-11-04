@@ -20,6 +20,8 @@ export interface RaiseOpts {
   over: HTMLElement; stage: HTMLElement;
   go(a: RaiseAction): void;
   close(): void;
+  /** Research: opened, every amount shown, the gestures (presets, steps, drag, typing), and how it closed. */
+  trace?(kind: string, d: Record<string, unknown>): void;
 }
 
 const ICON = {
@@ -45,9 +47,12 @@ export class RaiseSheet {
   private drag: number | null = null;
   private off: (() => void)[] = [];
   private restore: { el: HTMLElement; html: string } | null = null;
+  private traced = false;
+  private tr(kind: string, d: Record<string, unknown>): void { try { this.o.trace?.(kind, d); } catch { /* never into the sheet */ } }
 
   constructor(private o: RaiseOpts, frame: Frame) {
     this.to = o.spot.minTo;
+    this.tr('open', { spot: o.spot, to: this.to });
     this.el = document.createElement('div');
     this.el.className = 'tp-raise';
     const stop = () => this.stopHold();
@@ -129,6 +134,7 @@ export class RaiseSheet {
     const typing = this.digits !== null;
     const t = typing ? M.typedTo(s, this.digits!) : null;
     const to = t ? t.to : this.to;
+    this.tr('value', { to });
     const all = to >= s.maxTo;
     this.el.classList.toggle('allin', all);
     this.el.classList.toggle('typing', typing);
@@ -174,6 +180,7 @@ export class RaiseSheet {
     const prev = this.value();
     this.digits = null; this.pad = false;
     this.to = M.clampTo(s, to);
+    if (how !== 'drag') this.tr(how, { v: how === 'step' ? dir : this.picked ?? 'key' });
     const sl = this.box.querySelector('.rsl') as HTMLElement;
     sl.classList.toggle('snap', how === 'snap');
     this.update();
@@ -231,12 +238,13 @@ export class RaiseSheet {
     if (sl && e.button === 0) {
       e.preventDefault();
       this.drag = e.pointerId;
+      this.tr('drag', { v: `start:${e.pointerType}` });
       try { sl.setPointerCapture(e.pointerId); } catch { /* synthetic */ }
       this.dragTo(e);
     }
   }
   private move(e: PointerEvent): void { if (this.drag === e.pointerId) this.dragTo(e); }
-  private up(e: PointerEvent): void { if (this.drag === e.pointerId) { this.drag = null; } }
+  private up(e: PointerEvent): void { if (this.drag === e.pointerId) { this.drag = null; this.tr('drag', { v: 'end' }); } }
   private dragTo(e: PointerEvent): void {
     const trk = (this.box.querySelector('.trk') as HTMLElement).getBoundingClientRect();
     this.picked = null;
@@ -262,7 +270,7 @@ export class RaiseSheet {
     }
     if (x === 'cancel') return this.o.close();
     if (x === 'go') return this.commit();
-    if (x === 'type') { this.pad = !this.pad; this.digits = this.pad ? '' : null; this.update(); return; }
+    if (x === 'type') { this.pad = !this.pad; this.tr('pad', { v: this.pad ? 'open' : 'shut' }); this.digits = this.pad ? '' : null; this.update(); return; }
     if (b.dataset.p) { this.picked = b.dataset.p as PresetKey; this.set(Number(b.dataset.to), 'snap'); return; }
     if (b.dataset.k) { this.type(b.dataset.k === '00' ? '00' : b.dataset.k); }
   }
@@ -274,11 +282,16 @@ export class RaiseSheet {
     for (const c of k === '⌫' || k === 'Backspace' ? [k] : k.split('')) d = M.typeKey(this.spot, d, c);
     this.digits = d;
     this.picked = null;
+    this.tr('type', { v: k });
     this.update();
     if (this.value() !== prev) (this.box.querySelector('.rsl') as HTMLElement).classList.remove('snap');
   }
 
-  commit(): void { this.o.go(M.actionFor(this.spot, this.value())); }
+  commit(): void {
+    const a = M.actionFor(this.spot, this.value());
+    if (!this.traced) { this.traced = true; this.tr('close', { result: 'go', to: this.value(), action: a }); }
+    this.o.go(a);
+  }
 
   /** Keys while the raise is open (laptops). Returns true when the key was the raise's. */
   key(e: KeyboardEvent): boolean {
@@ -345,6 +358,7 @@ export class RaiseSheet {
   }
 
   destroy(): void {
+    if (!this.traced) { this.traced = true; this.tr('close', { result: 'cancel', to: this.value() }); }
     this.stopHold();
     this.unlabelDock();
     for (const f of this.off) f();

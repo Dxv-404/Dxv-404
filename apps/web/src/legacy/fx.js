@@ -1,3 +1,4 @@
+import { noteSetting } from '../research/app.ts';
 // Sound (synthesised with WebAudio, no files) and haptics.
 const prefs = (() => { try { return JSON.parse(localStorage.getItem('tp-prefs') || '{}'); } catch { return {}; } })();
 export const settings = {
@@ -12,7 +13,16 @@ export const settings = {
   /** table labels 115% */
   largeText: prefs.largeText ?? false,
 };
-export function saveSettings() { try { localStorage.setItem('tp-prefs', JSON.stringify(settings)); } catch {} }
+// research: every change, old and new value (what was saved last is the old value)
+let savedSnapshot = null;
+export function saveSettings() {
+  try {
+    const before = savedSnapshot ?? JSON.parse(localStorage.getItem('tp-prefs') || 'null') ?? {};
+    for (const k of new Set([...Object.keys(before), ...Object.keys(settings)])) if (JSON.stringify(before[k]) !== JSON.stringify(settings[k])) noteSetting(k, before[k], settings[k]);
+  } catch {}
+  try { savedSnapshot = JSON.parse(JSON.stringify(settings)); } catch {}
+  try { localStorage.setItem('tp-prefs', JSON.stringify(settings)); } catch {}
+}
 
 let ctx = null;
 let noiseBuf = null;

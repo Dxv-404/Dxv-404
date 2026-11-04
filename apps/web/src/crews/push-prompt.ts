@@ -5,6 +5,7 @@ import type { Account } from '@tp/account';
 import { enablePush, pushSupported } from '../more-screens';
 import { cwToast } from './kit';
 import { isIos, pushPromptKind, type PushEnv } from './push-env';
+import { R } from '../research/capture';
 
 export { isIos, pushPromptKind };
 
@@ -47,16 +48,20 @@ export async function mountPushPrompt(host: HTMLElement, before: Node | null, ac
     : `${head}<p class="mut">On iPhone, notifications work once Train Poker is on your Home Screen:</p>`
       + `<ol class="psteps" data-testid="push-ios-steps"><li>Tap <b>Share</b> at the bottom of Safari</li><li>Tap <b>Add to Home Screen</b></li><li>Open Train Poker from the new icon</li><li>Turn on notifications in <b>Settings</b></li></ol>`
       + `<button class="bb g" data-p="later" data-testid="push-later">Got it</button>`;
+  const shownAt = performance.now();
+  R.emit('push.prompt', { kind: 'shown', card: kind, permission: typeof Notification === 'undefined' ? 'unsupported' : Notification.permission });
   const close = (): void => { card.remove(); done(); };
   card.addEventListener('click', async (e) => {
     const b = (e.target as HTMLElement).closest('[data-p]') as HTMLButtonElement | null;
     if (!b) return;
-    if (b.dataset.p === 'later') { dismissPrompt(); close(); return; }
+    if (b.dataset.p === 'later') { R.emit('push.prompt', { kind: 'dismissed', card: kind, ms: Math.round(performance.now() - shownAt) }); dismissPrompt(); close(); return; }
     b.disabled = true;
     try {
       const a = await account();
-      if (a && (await enablePush(a))) { cwToast('Notifications on'); close(); return; }
-    } catch (err) { cwToast((err as Error).message || 'Could not turn them on', 'x'); }
+      const ok = !!(a && (await enablePush(a)));
+      R.emit('push.prompt', { kind: ok ? 'accepted' : 'not-enabled', card: kind, ms: Math.round(performance.now() - shownAt), permission: typeof Notification === 'undefined' ? 'unsupported' : Notification.permission });
+      if (ok) { cwToast('Notifications on'); close(); return; }
+    } catch (err) { R.emit('push.prompt', { kind: 'failed', card: kind, err: String((err as Error)?.message ?? err).slice(0, 120) }); cwToast((err as Error).message || 'Could not turn them on', 'x'); }
     b.disabled = false;
     // blocked in the browser: nothing one tap can do any more
     if (typeof Notification !== 'undefined' && Notification.permission === 'denied') close();

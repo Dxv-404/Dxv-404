@@ -13,6 +13,8 @@ import { presenceCss, bannerHtml, pauseHtml, backHtml, tickClock } from './prese
 import { playTier, winValues, bustValues, tierFor, categoryOf, type Playing } from './tiers';
 import { RaiseSheet } from './raise';
 import { RebuyUi } from './rebuys';
+import { raiseTrace, tablePeek, tableVia } from '../research/table';
+import { noteSetting } from '../research/app';
 
 export interface TableLike {
   view: ScreenView | null;
@@ -26,6 +28,8 @@ const store = {
 };
 export const currentTheme = (): ThemeKey => { const t = store.get('tp-theme'); return (THEME_KEYS as readonly string[]).includes(t ?? '') ? (t as ThemeKey) : 'classic'; };
 export function setTheme(k: ThemeKey): void {
+  const was = store.get('tp-theme');
+  if (was !== k) noteSetting('theme', was, k);
   store.set('tp-theme', k);
   let link = document.getElementById('tp-theme-css') as HTMLLinkElement | null;
   if (!link) { link = document.createElement('link'); link.id = 'tp-theme-css'; link.rel = 'stylesheet'; document.head.append(link); }
@@ -102,12 +106,12 @@ export class TableScreen {
       const t = e.target as HTMLElement;
       if (this.res?.skip && !t.closest('[data-act], .tpw-wrap, .tp-wcard, .tp-raise, .tp-intro, .pz-toast')) { this.skipStep(); return; }
       const el = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null;
-      if (el?.dataset.act === 'peek') { this.peek = true; this.draw(); e.preventDefault(); }
+      if (el?.dataset.act === 'peek') { this.peek = true; tablePeek(true, e.pointerType); this.draw(); e.preventDefault(); }
     };
-    const up = () => { if (this.peek) { this.peek = false; this.draw(); } };
+    const up = () => { if (this.peek) { this.peek = false; tablePeek(false, ''); this.draw(); } };
     const click = (e: Event) => {
       const el = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null;
-      if (el && el.dataset.act !== 'peek') this.press(el.dataset.act!);
+      if (el && el.dataset.act !== 'peek') { tableVia(`button:${(e as MouseEvent).detail === 0 ? 'keyboard' : 'pointer'}`); this.press(el.dataset.act!); }
     };
     root.addEventListener('pointerdown', down);
     window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
@@ -117,8 +121,9 @@ export class TableScreen {
       root.classList.add('kb'); // a keyboard is in use: show the key hints
       if (this.raise?.key(e)) return;
       if (e.code === 'Space' && this.res?.skip) { this.skipStep(); e.preventDefault(); return; }
-      if (e.code === 'Space') { if (!this.peek) { this.peek = true; this.draw(); } e.preventDefault(); return; }
+      if (e.code === 'Space') { if (!this.peek) { this.peek = true; tablePeek(true, 'key'); this.draw(); } e.preventDefault(); return; }
       const k = e.key.toLowerCase();
+      if (k === 'f' || k === 'c' || k === 'r') tableVia(`key:${k}`);
       if (k === 'f') this.press('fold');
       else if (k === 'c') this.press(this.view?.legal?.canCheck ? 'check' : 'call');
       else if (k === 'r') this.press('raise');
@@ -323,6 +328,7 @@ export class TableScreen {
       theme: currentTheme(), level: motionLevel(), over: this.overlay, stage: this.stage,
       go: (a) => { this.closeRaise(); this.t.act(a); },
       close: () => this.closeRaise(),
+      trace: raiseTrace,
     }, this.frame);
   }
   private closeRaise(): void {

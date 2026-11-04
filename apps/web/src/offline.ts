@@ -104,7 +104,7 @@ export async function carryOn(me: Me): Promise<void> {
 /** The table on the host phone's page, as a NetTable the table screen can draw. */
 export function offlineTable(me: Me): NetTable {
   return new NetTable({
-    me: me.id,
+    me: me.id, offline: true,
     makeClient: (cb) => new TableClient({
       url: `ws://${location.host}/table/${TABLE}`, table: TABLE, player: me.id, token: me.token, name: me.name, avatar: myAvatar(),
       ...(me.role === 'host' && me.settings ? { settings: me.settings } : {}),

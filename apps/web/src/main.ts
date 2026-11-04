@@ -1,3 +1,6 @@
+// research capture first, so the session starts before anything else (docs/research-data.md)
+import { installResearch } from './research/app';
+installResearch();
 import './css/app.css';
 import './legacy/app.js';
 import './css/table-live.css';

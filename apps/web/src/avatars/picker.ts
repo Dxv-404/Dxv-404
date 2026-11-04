@@ -15,6 +15,8 @@ import { toast } from '../legacy/ui.js';
 
 type Layout = 'phone' | 'tablet' | 'laptop' | 'land';
 type Look = typeof LookT;
+import { avatarBrowse, type AvatarBrowse } from '../research/avatar';
+
 export interface PickerOptions {
   /** Signed-in phones: where the pick is kept (the account); guests keep it on the phone. */
   account?: () => Promise<{ profile: unknown; setAvatar(id: string | null): Promise<string | null> } | null>;
@@ -57,8 +59,10 @@ export async function openAvatarPicker(o: PickerOptions = {}): Promise<AvatarId 
   let look: Look;
   let done!: (v: AvatarId | null | undefined) => void;
   const result = new Promise<AvatarId | null | undefined>((r) => { done = r; });
+  let rb: AvatarBrowse | null = null;
   const close = (v: AvatarId | null | undefined): void => {
     if (!root.isConnected) return;
+    rb?.close(v);
     root.remove();
     for (const c of behind) c.inert = false;
     document.documentElement.classList.remove('avp-open');
@@ -97,6 +101,7 @@ export async function openAvatarPicker(o: PickerOptions = {}): Promise<AvatarId 
   let tab: AvatarTheme = sel ? avatarTheme(sel) : ((AVATAR_THEMES as readonly string[]).includes(currentTheme()) ? currentTheme() as AvatarTheme : 'classic');
   let layout = layoutFor(innerWidth, innerHeight);
   let saving = false;
+  rb = avatarBrowse(root, { current: sel, tab });
 
   const sw = (k: AvatarTheme): string => `<span class="a-sw" style="background:${look[k].bg};box-shadow:inset 0 0 0 2px ${look[k].acc}"></span>`;
   const ids = (k: AvatarTheme): AvatarId[] => (Object.keys(set) as AvatarId[]).filter((i) => set[i].theme === k);
@@ -174,6 +179,7 @@ export async function openAvatarPicker(o: PickerOptions = {}): Promise<AvatarId 
   const refocus = (sel2: string): void => { if (!root.contains(document.activeElement) || document.activeElement === root) root.querySelector<HTMLElement>(sel2)?.focus({ preventScroll: true }); };
   const select = (id: AvatarId | null): void => {
     if (id === sel) return;
+    rb?.select(id);
     sel = id;
     part('tiles', tilesHtml());
     part('ini', iniHtml());
@@ -183,6 +189,7 @@ export async function openAvatarPicker(o: PickerOptions = {}): Promise<AvatarId 
   };
   const toTab = (t: AvatarTheme, focusTab = false): void => {
     if (t === tab) return;
+    rb?.tab(t);
     tab = t;
     part('tabs', tabsHtml());
     part('tiles', tilesHtml());

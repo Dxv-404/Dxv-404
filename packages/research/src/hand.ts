@@ -23,8 +23,9 @@ function position(order: PlayerId[], pid: PlayerId, h: { sbId: PlayerId | null; 
 
 /** What a player could see, without what never changes or is not about the game (names, the text log). */
 function infoSet(v: View): Record<string, unknown> {
-  const { log: _log, cfg: _cfg, players, ...rest } = v;
-  return { ...rest, players: players.map(({ name: _n, ...p }) => p) };
+  const out: Record<string, unknown> = { ...v, players: v.players.map((p) => { const c: Record<string, unknown> = { ...p }; delete c.name; return c; }) };
+  delete out.log; delete out.cfg;
+  return out;
 }
 
 const stacksOf = (s: GameState): Record<PlayerId, number> => Object.fromEntries(s.players.concat(s.departed ?? []).map((p) => [p.id, p.stack]));

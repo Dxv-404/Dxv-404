@@ -13,6 +13,8 @@ const bb = (x) => (x == null ? '–' : `${x > 0 ? '+' : x < 0 ? '−' : ''}${Mat
 const signed = (n) => (n == null ? '–' : `${n > 0 ? '+' : n < 0 ? '−' : ''}${fmt(Math.abs(n))}`);
 const ordinal = (n) => (n == null ? '' : n + (['th', 'st', 'nd', 'rd'][(n % 100 >> 3) ^ 1 && n % 10] || 'th'));
 
+import { R } from '../research/capture.ts';
+
 export function leagueScreens({ screen, openSheet, account, back }) {
   const head = (title, onBack) => h('header', { class: 'page-head' }, h('button', { class: 'icon-btn', 'aria-label': 'Back', onclick: onBack }, '‹'), h('h1', {}, title));
   const busy = (el) => el.replaceChildren(h('p', { class: 'hint', role: 'status' }, 'Loading…'));
@@ -120,8 +122,14 @@ export function leagueScreens({ screen, openSheet, account, back }) {
         const keyName = (n) => nm(rp.keys[n]);
         let i = 0;
         const stage = h('div', { class: 'replay-stage', 'aria-live': 'polite' });
+        // research: which hand, whose hands it shows, and every step looked at (the screen's dwell is ui.screen)
+        R.emit('replay.view', { kind: 'open', game: gameId, hand: handNo, players: rp.keys, steps: frames.length, mine: rp.keys.includes(me), myCards: !!got.myCards });
+        let lastStepAt = performance.now();
         const draw = () => {
           const f = frames[i];
+          const now = performance.now();
+          R.emit('replay.view', { kind: 'step', game: gameId, hand: handNo, step: i, of: frames.length, say: f.say?.t ?? null, prevMs: Math.round(now - lastStepAt) });
+          lastStepAt = now;
           stage.replaceChildren(
             h('p', { class: 'replay-say', 'data-testid': 'replay-say' }, describe(f.say, keyName)),
             h('div', { class: 'replay-board' }, ...f.board.map((c) => cardEl(c, { size: 'sm' })), f.board2 ? h('span', { class: 'hint' }, ' · ') : null, ...(f.board2 ?? []).map((c) => cardEl(c, { size: 'sm' }))),

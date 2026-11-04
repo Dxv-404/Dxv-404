@@ -954,7 +954,8 @@ export class TableRoom {
 const HAND_INPUTS = new Set(['act', 'tick', 'start', 'vote', 'show']);
 /** Research: an input outside a hand's play (seats, rebuys, presence, host commands), and what it changed. */
 function gameInput(e: Engine, input: Input, events: GameEvent[]): Record<string, unknown> {
-  const { now: _now, ...rest } = input as Input & { now: number };
+  const rest: Record<string, unknown> = { ...input };
+  delete rest.now;
   const pid = 'pid' in input ? input.pid : input.t === 'join' ? input.id : null;
   const p = pid ? e.player(pid) ?? e.s.departed?.find((x) => x.id === pid) ?? null : null;
   return {

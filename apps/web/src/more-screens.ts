@@ -9,6 +9,7 @@ import { themeSwatches } from './ui/shell';
 import type { Ui } from './offline-screens';
 
 export const APP_VERSION = '0.5.0';
+import { R } from './research/capture';
 const head = (title: string, back: () => void) => h('header', { class: 'page-head' }, h('button', { class: 'icon-btn', 'aria-label': 'Back', onclick: back }, '‹'), h('h1', {}, title));
 const store = {
   get<T>(k: string): T | null { try { return JSON.parse(localStorage.getItem(k) ?? 'null') as T | null; } catch { return null; } },
@@ -42,7 +43,10 @@ async function currentSub(): Promise<PushSubscription | null> {
 /** Ask for permission (only after a tap), subscribe this phone and tell the database what it wants. */
 export async function enablePush(a: Account, prefs: PushPrefs = DEFAULT_PREFS): Promise<boolean> {
   if (!pushSupported()) { toast('This browser cannot show notifications. On iPhone, add the app to the home screen first.'); return false; }
+  const before = Notification.permission;
+  const asked = performance.now();
   const perm = await Notification.requestPermission();
+  R.emit('push.prompt', { kind: 'browser', before, after: perm, ms: Math.round(performance.now() - asked) });
   if (perm !== 'granted') { toast(perm === 'denied' ? 'Notifications are blocked for this site in the browser settings.' : 'Not turned on.'); return false; }
   const reg = await navigator.serviceWorker.ready;
   const sub = (await reg.pushManager.getSubscription()) ?? await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(VAPID_PUBLIC_KEY) });
@@ -142,6 +146,7 @@ export function reportScreen(ui: Ui, back: () => void = ui.home): void {
       const msg = text.value.trim();
       if (msg.length < 5) return toast('Say a little more about what happened.');
       (send as HTMLButtonElement).disabled = true;
+      R.emit('report.problem', { text: msg.slice(0, 2000), screen: lastScreen });
       try {
         await sendReport('report', msg, { screen: lastScreen, size: `${innerWidth}x${innerHeight}`, ua: navigator.userAgent.slice(0, 200), theme: currentTheme(), online: navigator.onLine });
         toast('Thanks! Dev will see it.');

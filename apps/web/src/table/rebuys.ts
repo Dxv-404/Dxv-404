@@ -9,6 +9,7 @@ import type { ScreenView } from '../net-table';
 import { FEEL, type MotionLevel } from './motion';
 import { ordinal } from './rebuy-hint';
 import type { ThemeKey } from './render';
+import { R } from '../research/capture';
 
 const fmt = (n: number): string => Math.round(n).toLocaleString('en-IN');
 const esc = (s: string): string => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -116,10 +117,14 @@ export class RebuyUi {
     wrap.innerHTML = bustSheetHtml(v, b, { offline: this.o.offline, leave: !!this.o.leave });
     l.append(wrap);
     this.open = bustKind(v);
+    const shownAt = performance.now();
+    this.sheetShownAt = shownAt;
+    R.emit('rebuy.sheet', { kind: 'shown', sheet: this.open, place: b.place, of: b.of, handNo: b.handNo, rebuy: v.rebuy });
     wrap.addEventListener('click', (e) => {
       const btn = (e.target as HTMLElement).closest('[data-rb]') as HTMLElement | null;
       if (!btn) return;
       const what = btn.dataset.rb;
+      R.emit('rebuy.sheet', { kind: 'choice', choice: what ?? null, ms: Math.round(performance.now() - shownAt), amount: v.rebuy?.amount ?? null });
       if (what === 'rebuy') { (btn as HTMLButtonElement).disabled = true; this.o.rebuy(); this.closeSheet(); }
       else if (what === 'watch') this.closeSheet();
       else if (what === 'leave') { this.closeSheet(); this.o.leave?.(); }
@@ -174,7 +179,10 @@ export class RebuyUi {
     this.barTimer = setInterval(step, this.o.level() === 'off' ? 1000 : 50);
   }
 
+  private sheetShownAt: number | null = null;
   closeSheet(): void {
+    if (this.sheetShownAt !== null && this.open) R.emit('rebuy.sheet', { kind: 'closed', sheet: this.open, ms: Math.round(performance.now() - this.sheetShownAt) });
+    this.sheetShownAt = null;
     if (this.barTimer) { clearInterval(this.barTimer); this.barTimer = null; }
     this.layer?.querySelector('.rb-bust')?.remove();
     this.open = null;

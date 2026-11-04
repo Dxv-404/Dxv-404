@@ -65,6 +65,10 @@ export interface ClientOptions {
   onSeatElsewhere?(device: DeviceInfo): void;
   /** The seat moved to another of the player's devices; this one watches now. */
   onSeatMoved?(device: DeviceInfo): void;
+  /** Research: this app's device and session ids, sent with hello (older servers ignore them). */
+  research?: { d: string; s: string };
+  /** Research: pongs (round trip and server clock), updates as they arrive, gaps, welcomes. Never throws into the client. */
+  onTrace?(kind: 'pong' | 'update' | 'gap' | 'welcome', data: Record<string, number>): void;
 }
 
 type Outgoing = Extract<ClientMessage, { actionId: string }>;
@@ -185,6 +189,7 @@ export class TableClient {
           ...(this.o.avatar !== undefined ? { avatar: this.o.avatar } : {}),
           ...(this.o.spectate ? { spectate: true } : {}), ...(this.o.settings ? { settings: this.o.settings } : {}),
           ...(this.o.claim ? { claim: this.o.claim } : {}), ...(cp ? { cp } : {}),
+          ...(this.o.research ? { rs: this.o.research } : {}),
         });
       };
       if (!this.o.getTicket) return hello();
@@ -219,6 +224,7 @@ export class TableClient {
         this.seq = m.seq; this.you = m.you; this.host = m.host;
         this.view = m.view as unknown as View;
         this.clockOffset = m.serverTime - this.t.now();
+        this.trace('welcome', { seq: m.seq, missed: m.missed?.length ?? -1, serverTime: m.serverTime });
         if (this.hidden) this.raw({ t: 'bg', hidden: true });
         this.setStatus('live');
         this.o.onView?.(this.view, (m.missed ?? []) as unknown as GameEvent[]);
@@ -227,7 +233,8 @@ export class TableClient {
         return;
       case 'update':
         if (this.status !== 'live' || m.seq <= this.seq) return; // before the welcome, or an old duplicate
-        if (m.seq !== this.seq + 1) return this.reconnect(); // missed one: resume from what we have
+        if (m.seq !== this.seq + 1) { this.trace('gap', { have: this.seq, got: m.seq }); return this.reconnect(); } // missed one: resume from what we have
+        this.trace('update', { seq: m.seq, at: m.at ?? 0, n: m.events.length });
         this.seq = m.seq; this.host = m.host;
         this.view = m.view as unknown as View;
         this.o.onView?.(this.view, m.events as unknown as GameEvent[]);
@@ -242,6 +249,7 @@ export class TableClient {
       case 'pong':
         this.rtt = this.t.now() - m.c;
         this.clockOffset = m.s - (m.c + this.rtt / 2);
+        this.trace('pong', { rtt: this.rtt, s: m.s });
         if (m.seq > this.seq && this.status === 'live') this.reconnect(); // an update went missing
         return;
       case 'error':
@@ -298,6 +306,13 @@ export class TableClient {
     }
     this.tickTimer = this.t.set(() => this.tick(), Math.min(this.o.retryMs, this.o.pingEveryMs) / 2);
   }
+
+  private trace(kind: 'pong' | 'update' | 'gap' | 'welcome', data: Record<string, number>): void {
+    try { this.o.onTrace?.(kind, data); } catch { /* research must never disturb the table */ }
+  }
+
+  /** The table code this client plays at. */
+  get table(): string { return this.o.table; }
 
   private raw(m: ClientMessage): void {
     try { this.ws?.send(encode(m)); } catch { /* the close handler reconnects */ }

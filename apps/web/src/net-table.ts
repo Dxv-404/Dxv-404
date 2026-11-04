@@ -4,6 +4,8 @@
 // methods for the buttons. All the hard parts (resending taps, numbering, reconnecting) are TableClient's.
 import type { Action, GameEvent, View } from '@tp/engine';
 import type { TableClient, ClientOptions, Status } from '@tp/table';
+import { R } from './research/capture';
+import { TableCapture } from './research/table';
 
 export type ScreenView = View & {
   isHost: boolean; hostId: string | null;
@@ -15,7 +17,7 @@ export type ScreenView = View & {
   nextDealAt?: number | null;
   standings?: { id: string; name: string; stack: number; buyins: number; net: number; won: number; biggest: number }[];
 };
-type Callbacks = Pick<ClientOptions, 'onView' | 'onStatus' | 'onError' | 'onReact' | 'onNotice' | 'onAck' | 'onSeatElsewhere' | 'onSeatMoved'>;
+type Callbacks = Pick<ClientOptions, 'onView' | 'onStatus' | 'onError' | 'onReact' | 'onNotice' | 'onAck' | 'onSeatElsewhere' | 'onSeatMoved' | 'onTrace' | 'research'>;
 /** Which of the player's devices has the seat (see onSeat). */
 export interface SeatDevice { kind: 'phone' | 'tablet' | 'laptop'; name: string | null }
 
@@ -31,21 +33,28 @@ export class NetTable {
   private reacts = new Set<(from: string, reaction: string) => void>();
   private seats = new Set<(what: 'elsewhere' | 'moved', device: SeatDevice) => void>();
 
-  constructor(o: { me: string; makeClient(cb: Callbacks): TableClient }) {
+  /** Research capture for this table (null before the client exists, or if research is off). */
+  private rc: TableCapture | null = null;
+
+  constructor(o: { me: string; makeClient(cb: Callbacks): TableClient; offline?: boolean }) {
     this.me = o.me;
     this.client = o.makeClient({
       onView: (v, events) => {
         this.view = this.shape(v);
+        this.rc?.view(this.view, events);
         for (const fn of this.views) fn(events, this.view);
       },
-      onStatus: (s) => { this.status = s; for (const fn of this.statuses) fn(s); },
+      onStatus: (s) => { this.status = s; this.rc?.netStatus(s); for (const fn of this.statuses) fn(s); },
+      onTrace: (k, d) => this.rc?.trace(k, d),
+      ...(R.enabled ? { research: { d: R.device, s: R.maker.session } } : {}),
       onError: (code, m) => { for (const fn of this.errors) fn(code, m); },
       onNotice: (t) => { for (const fn of this.notices) fn(t); },
       onReact: (f, r) => { for (const fn of this.reacts) fn(f, r); },
-      onAck: (_id, ok, error) => { if (!ok && error) for (const fn of this.errors) fn('refused', error); },
-      onSeatElsewhere: (d) => { for (const fn of this.seats) fn('elsewhere', d); },
-      onSeatMoved: (d) => { for (const fn of this.seats) fn('moved', d); },
+      onAck: (id, ok, error) => { this.rc?.ack(id, ok, error); if (!ok && error) for (const fn of this.errors) fn('refused', error); },
+      onSeatElsewhere: (d) => { R.emit('id.event', { kind: 'seatElsewhere', device: d }); for (const fn of this.seats) fn('elsewhere', d); },
+      onSeatMoved: (d) => { R.emit('id.event', { kind: 'seatMoved', device: d }); for (const fn of this.seats) fn('moved', d); },
     });
+    if (R.enabled && typeof document !== 'undefined') { try { this.rc = new TableCapture(this.client.table, !!o.offline); if (this.view) this.rc.view(this.view, []); } catch { this.rc = null; } }
     // the table pushes "Your turn" only while the app is not on screen
     if (typeof document !== 'undefined') {
       this.onVis = () => this.client.background(document.visibilityState === 'hidden');
@@ -86,20 +95,20 @@ export class NetTable {
   /** Is this device playing the seat (not watching)? */
   get seated(): boolean { return this.client.you === this.me; }
   /** "Move seat here". */
-  moveSeat(): void { this.client.moveSeat(); }
+  moveSeat(): void { this.rc?.sentMsg('moveSeat', {}, null); this.client.moveSeat(); }
 
   // ---------------- buttons ----------------
   get isHost(): boolean { return this.client.host === this.me && this.client.you === this.me; }
-  act(a: Action): void { this.client.act(a); }
-  show(): void { if (this.view) this.client.send({ t: 'show', handNo: this.view.handNo }); }
-  rebuy(): void { this.client.send({ t: 'rebuy' }); }
-  sitOut(out: boolean): void { this.client.send({ t: 'sit', out }); }
-  vote(yes: boolean): void { if (this.view) this.client.send({ t: 'vote', handNo: this.view.handNo, yes }); }
-  straddle(on: boolean): void { this.client.send({ t: 'straddle', on }); }
-  dealNow(): void { this.client.send({ t: 'host', cmd: this.view?.paused ? 'resume' : 'deal' }); }
+  act(a: Action): void { const id = this.client.act(a); this.rc?.sentMsg('act', { type: a.type, to: a.to ?? null, handNo: this.view?.handNo ?? null }, id); }
+  show(): void { if (this.view) this.rc?.sentMsg('show', { handNo: this.view.handNo }, this.client.send({ t: 'show', handNo: this.view.handNo })); }
+  rebuy(): void { this.rc?.sentMsg('rebuy', {}, this.client.send({ t: 'rebuy' })); }
+  sitOut(out: boolean): void { this.rc?.sentMsg('sit', { out }, this.client.send({ t: 'sit', out })); }
+  vote(yes: boolean): void { if (this.view) this.rc?.sentMsg('vote', { yes, handNo: this.view.handNo }, this.client.send({ t: 'vote', handNo: this.view.handNo, yes })); }
+  straddle(on: boolean): void { this.rc?.sentMsg('straddle', { on }, this.client.send({ t: 'straddle', on })); }
+  dealNow(): void { const cmd = this.view?.paused ? 'resume' : 'deal'; this.rc?.sentMsg('host', { cmd }, this.client.send({ t: 'host', cmd })); }
   host(cmd: 'pause' | 'resume' | 'undo' | 'end' | 'deal' | 'move' | 'remove' | 'setBlinds', extra: { pid?: string; dir?: number; sb?: number; bb?: number; ante?: number } = {}): void {
-    this.client.send({ t: 'host', cmd, ...extra });
+    this.rc?.sentMsg('host', { cmd, ...extra }, this.client.send({ t: 'host', cmd, ...extra }));
   }
-  react(reaction: string): void { this.client.react(reaction as never); }
-  close(): void { if (this.onVis) document.removeEventListener('visibilitychange', this.onVis); this.client.close(); }
+  react(reaction: string): void { this.rc?.sentMsg('react', { reaction }, null); this.client.react(reaction as never); }
+  close(): void { if (this.onVis) document.removeEventListener('visibilitychange', this.onVis); this.rc?.close(); this.rc = null; this.client.close(); }
 }

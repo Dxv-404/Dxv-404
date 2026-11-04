@@ -41,6 +41,34 @@ export class AccountError extends Error {
 /** Show the 12-digit code the way people read it out: 4821 0937 5562. */
 export const formatCode = (code: string): string => code.replace(/\D/g, '').replace(/(\d{4})(?=\d)/g, '$1 ');
 
+/** One call to the accounts project, as research records it (see the app's research capture). */
+export interface CallTrace { method: string; path: string; status: number; ms: number; body: string | null; result: string | null; error: string | null }
+/** Research: set by the app to see every call this package makes (never set on servers). Must not throw. */
+export const accountTrace: { on: ((t: CallTrace) => void) | null } = { on: null };
+
+/** fetch, timed and reported to accountTrace (the request body and a short answer: the app redacts secrets). */
+const tracedFetch: typeof fetch = async (input, init) => {
+  const on = accountTrace.on;
+  if (!on) return fetch(input, init);
+  const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+  const method = init?.method ?? (typeof input === 'object' && 'method' in input ? input.method : 'GET');
+  let path = url;
+  try { path = new URL(url).pathname; } catch { /* keep it */ }
+  const body = typeof init?.body === 'string' ? init.body : null;
+  const ms = () => (typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0;
+  try {
+    const res = await fetch(input, init);
+    // a short answer only (never auth tokens), read from a copy so the caller's response is untouched
+    const small = !/\/auth\//.test(path) && Number(res.headers.get('content-length') ?? 0) < 2000;
+    void (small ? res.clone().text().catch(() => null) : Promise.resolve(null)).then((t) => { try { on({ method, path, status: res.status, ms: ms(), body, result: t && t.length <= 1500 ? t : null, error: null }); } catch { /* ignore */ } });
+    return res;
+  } catch (e) {
+    try { on({ method, path, status: 0, ms: ms(), body, result: null, error: String((e as Error)?.message ?? e).slice(0, 200) }); } catch { /* ignore */ }
+    throw e;
+  }
+};
+
 export class Account {
   readonly db: SupabaseClient;
   profile: Profile | null = null;
@@ -48,7 +76,7 @@ export class Account {
   constructor(opts: { url?: string; key?: string; storage?: KeyStore; fetch?: typeof fetch } = {}) {
     this.db = createClient(opts.url ?? SUPABASE_URL, opts.key ?? SUPABASE_KEY, {
       auth: { persistSession: true, autoRefreshToken: true, storageKey: 'tp-login', ...(opts.storage ? { storage: opts.storage } : {}) },
-      ...(opts.fetch ? { global: { fetch: opts.fetch } } : {}),
+      global: { fetch: opts.fetch ?? tracedFetch },
     });
   }
 
