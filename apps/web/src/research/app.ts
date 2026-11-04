@@ -187,6 +187,7 @@ export const flushClock = (): void => {
 /** NTP-style pings to the ingestion server (POST, so the service worker stays out of the way). */
 function pingClock(n: number): void {
   const one = async (): Promise<void> => {
+    if (!ingestBase()) return;
     const t0 = performance.now();
     try {
       const r = await fetch(`${ingestBase()}/research/ping`, { method: 'POST', body: '', cache: 'no-store' });

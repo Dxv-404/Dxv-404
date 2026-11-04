@@ -28,8 +28,8 @@ export function ingestBase(): string {
   if (o) return o.replace(/\/$/, '');
   const s = LS.get('tp-server-override');
   if (s) return s.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:').replace(/\/$/, '');
-  // a local build (tests, development) never sends to the live endpoint: its events wait and fail fast
-  if (/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) return 'http://127.0.0.1:9';
+  // a local build (tests, development) never sends to the live endpoint: nothing is sent, events wait in the queue
+  if (/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) return '';
   return CLOUDFLARE;
 }
 
@@ -113,7 +113,9 @@ class Capture {
   }
 
   private async send(body: string, beacon: boolean): Promise<SendResult> {
-    const url = `${ingestBase()}/research/ingest`;
+    const base = ingestBase();
+    if (!base) return { ok: false };
+    const url = `${base}/research/ingest`;
     if (beacon) {
       // the page is going away: a beacon (text/plain, so no preflight), else a keepalive fetch
       try { if (navigator.sendBeacon?.(url, new Blob([body], { type: 'text/plain' }))) return { ok: true }; } catch { /* fall through */ }
