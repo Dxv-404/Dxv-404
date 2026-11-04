@@ -191,6 +191,15 @@ importers:
         specifier: workspace:*
         version: link:../../packages/table
 
+  tools/research:
+    devDependencies:
+      '@tp/research':
+        specifier: workspace:*
+        version: link:../../packages/research
+      '@tp/table':
+        specifier: workspace:*
+        version: link:../../packages/table
+
 packages:
 
   '@ampproject/remapping@2.3.0':

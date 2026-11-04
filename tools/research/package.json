@@ -1,0 +1,14 @@
+{
+  "name": "@tp/research-tools",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Owner-run research export (docs/research-data.md). Plain Node 22, no build.",
+  "scripts": {
+    "export": "node export.mjs"
+  },
+  "devDependencies": {
+    "@tp/research": "workspace:*",
+    "@tp/table": "workspace:*"
+  }
+}

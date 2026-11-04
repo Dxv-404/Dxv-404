@@ -190,6 +190,7 @@ export const EVENT_TYPES = {
   'motion.samples': { v: 1, src: 'c' },
   'motion.hold': { v: 1, src: 'c' },
   'rebuy.sheet': { v: 1, src: 'c' },
+  'qr.state': { v: 1, src: 'c' },
   // ---- app: everything around the table ----
   'api.call': { v: 1, src: 'c' },
   'settings.change': { v: 1, src: 'c' },

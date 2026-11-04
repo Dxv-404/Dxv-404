@@ -1,9 +1,26 @@
 // Host controller: owns the Engine, the links to every guest phone, timers and persistence.
-import { Engine } from '@tp/engine';
+import { Engine, cardStr } from '@tp/engine';
+import { R } from '../research/capture.ts';
 import { resultsPauseMs, runoutStreets } from '@tp/table';
 import { Link, keepAlive } from './net.js';
 
 const SAVE_KEY = 'tp-host-v1';
+
+// research (docs/research-data.md): a QR table runs on this phone, so this phone records it, as the table server
+// does online: every change with the table after it, everyone's cards included (they are all on this phone).
+function qrResearch(host, events) {
+  try {
+    const e = host.e, h = e.s.hand;
+    R.emit('qr.state', {
+      seq: host.seq, events: events.filter((x) => x.t !== 'deckReveal'), phase: e.s.phase, handNo: e.s.handNo, level: e.s.level, button: e.s.button,
+      players: e.s.players.map((p) => ({ pid: p.id, seat: p.seat, chair: p.chair, stack: p.stack, sittingOut: p.sittingOut, connected: p.connected, buyins: p.buyins, bank: p.bank })),
+      hand: h ? { id: h.id, street: h.street, board: h.board.map(cardStr), toAct: h.toAct, currentBet: h.currentBet, pot: e.potTotal(), order: h.order, turnStartedAt: h.turnStartedAt,
+        ps: Object.fromEntries(h.order.map((pid) => [pid, { cards: h.ps[pid].cards.map(cardStr), streetBet: h.ps[pid].streetBet, total: h.ps[pid].total, folded: h.ps[pid].folded, allIn: h.ps[pid].allIn }])),
+        seed: h.seedInfo ? h.seedInfo.seed : null, results: h.results ? { showdown: h.results.showdown, pots: h.results.pots.map((x) => ({ amount: x.amount, awards: x.awards, hand: x.hand ? x.hand.name : null })) } : null,
+        legal: h.toAct ? e.legal(h.toAct) : null } : null,
+    }, { tb: 'QR', h: e.s.handNo || null, st: h ? h.street : 'between' });
+  } catch { /* never into the game */ }
+}
 
 export class Host {
   constructor(engine, myPid) {
@@ -197,6 +214,7 @@ export class Host {
   push(events) {
     if (!events) return;
     this.seq += 1;
+    qrResearch(this, events);
     this.afterEvents(events);
     this.save();
     for (const p of this.e.s.players) {

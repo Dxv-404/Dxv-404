@@ -13,3 +13,7 @@ apps/host/android/app/src/main/assets/
 apps/host/android/.kotlin/
 .claude/
 __pycache__/
+# research: the owner's private name map and exported datasets never go in git
+tools/research/private/
+research-export/
+*.research.ndjson
