@@ -302,6 +302,9 @@ test('a device with its own crew: asked once; Bring them over, or Leave them beh
   await expect(old.page.getByTestId('moved')).toContainText('1crew');
   // the account has the crew now, on every device
   await a.page.goto('/');
+  // (the "Signed in on a new phone" notice can drop over the menu first: answer it)
+  const top = a.page.getByTestId('device-notice-top');
+  if (await top.isVisible({ timeout: 3000 }).catch(() => false)) { await top.getByTestId('notice-ok').click(); await expect(top).toHaveCount(0); }
   await a.page.getByTestId('open-profile').click();
   await expect(a.page.getByTestId('crews')).toContainText('Hostel 4B');
   // leave them behind
