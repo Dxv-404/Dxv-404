@@ -54,8 +54,9 @@ export interface ArchiveReport { slices: number; rows: number; deleted: number; 
 
 // (built without DOM types: TextEncoder and TextDecoder exist on every runtime this runs on)
 const G = globalThis as unknown as { TextEncoder: new () => { encode(s: string): Uint8Array }; TextDecoder: new () => { decode(b: Uint8Array): string } };
-const enc = new G.TextEncoder();
-const dec = new G.TextDecoder();
+// (made when first used: the offline host phone's QuickJS bundles this module and has no TextEncoder)
+const enc = { encode: (x: string): Uint8Array => new G.TextEncoder().encode(x) };
+const dec = { decode: (b: Uint8Array): string => new G.TextDecoder().decode(b) };
 const safeType = (t: string): string => t.replace(/[^a-z0-9_.-]/gi, '_');
 
 /** One slice: files, verification, manifest, delete. Returns false if anything did not check out. */
