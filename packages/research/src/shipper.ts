@@ -29,6 +29,7 @@ export class ResearchShipper {
   private buf: Envelope[] = [];
   private failed: { key: string; events: Envelope[] }[] = [];
   private timer: unknown = null;
+  private timerAt = 0;
   private sending: Promise<void> | null = null;
   private tries = 0;
   private retryAt = 0;
@@ -54,8 +55,13 @@ export class ResearchShipper {
   private waitingFailed(): number { return this.failed.reduce((s, f) => s + f.events.length, 0); }
 
   private arm(ms: number): void {
-    if (this.timer !== null) return;
     const wait = Math.max(ms, this.retryAt - this.d.now());
+    const at = this.d.now() + wait;
+    if (this.timer !== null) {
+      if (this.timerAt <= at) return; // an earlier one is set already
+      this.d.clearTimer(this.timer);
+    }
+    this.timerAt = at;
     this.timer = this.d.setTimer(() => { this.timer = null; const p = this.flush(); this.d.keepAlive?.(p); }, wait);
   }
 

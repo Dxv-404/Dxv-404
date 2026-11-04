@@ -65,14 +65,14 @@ select (select public.research_archive_page(x, testing.sign('test-recorder-token
 select is(json_array_length(:'page'::json), 4, 'a page of rows, in id order');
 select (select string_agg(r ->> 'id', ',' order by r ->> 'id') from json_array_elements(:'page'::json) r) as ids \gset
 select is((select public.research_archive_commit(x, testing.sign('test-recorder-token', x)) ->> 'ok' from (select json_build_object('day', (now() at time zone 'utc')::date - 20, 'cutoff', now() - interval '1 minute',
-  'first', split_part(:'ids', ',', 1), 'last', split_part(:'ids', ',', 4), 'rows', 4, 'ids_md5', md5('wrong'), 'key', 'k')::text x) s), 'false', 'a checksum that does not match: nothing deleted');
+  'first', split_part(:'ids', ',', 1), 'last', split_part(:'ids', ',', 4), 'rows', 4, 'ids_sha256', encode(sha256('wrong'::bytea), 'hex'), 'key', 'k')::text x) s), 'false', 'a checksum that does not match: nothing deleted');
 select is((select count(*)::int from research.events where session = 'srv-session-1'), 6, 'all six still there');
 select is((select public.research_archive_commit(x, testing.sign('test-recorder-token', x)) ->> 'deleted' from (select json_build_object('day', (now() at time zone 'utc')::date - 20, 'cutoff', now() - interval '1 minute',
-  'first', split_part(:'ids', ',', 1), 'last', split_part(:'ids', ',', 4), 'rows', 4, 'ids_md5', md5(:'ids'), 'key', 'research/day=x/part.ndjson.gz')::text x) s), '4', 'the matching slice is deleted');
+  'first', split_part(:'ids', ',', 1), 'last', split_part(:'ids', ',', 4), 'rows', 4, 'ids_sha256', encode(sha256(convert_to(:'ids', 'UTF8')), 'hex'), 'key', 'research/day=x/part.ndjson.gz')::text x) s), '4', 'the matching slice is deleted');
 select is((select count(*)::int from research.events where session = 'srv-session-1'), 2, 'the rest of the day stays until it is archived');
 select is((select rows from research.archive_log), 4, 'and the archive log says what went where');
 select is((select public.research_archive_commit(x, testing.sign('test-recorder-token', x)) ->> 'ok' from (select json_build_object('day', (now() at time zone 'utc')::date - 20, 'cutoff', now() - interval '1 minute',
-  'first', split_part(:'ids', ',', 1), 'last', split_part(:'ids', ',', 4), 'rows', 4, 'ids_md5', md5(:'ids'), 'key', 'k')::text x) s), 'false', 'committing the same slice twice deletes nothing more');
+  'first', split_part(:'ids', ',', 1), 'last', split_part(:'ids', ',', 4), 'rows', 4, 'ids_sha256', encode(sha256(convert_to(:'ids', 'UTF8')), 'hex'), 'key', 'k')::text x) s), 'false', 'committing the same slice twice deletes nothing more');
 
 -- ---------------------------------------------------------------- exporting and upkeep
 select is((select json_array_length(public.research_export_page(x, testing.sign('test-recorder-token', x))) from (select json_build_object('from', '2020-01-01', 'to', '2100-01-01')::text x) s), 3, 'the export pages through what is left');

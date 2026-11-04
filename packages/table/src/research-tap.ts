@@ -2,8 +2,9 @@
 // tap makes research events and hands them to a sink (a ResearchShipper on the servers). Everything here is
 // wrapped so it can never throw into the room, and the heavy part (a finished hand, worked out by
 // replaying it) runs after the room has answered the phones.
-import { EnvelopeMaker, handEvents, type Envelope, type EventType, type HandEvt } from '@tp/research';
-import type { HandRecord, PlayerId } from '@tp/engine';
+import { EVENT_TYPES, EnvelopeMaker, SCHEMA_VERSION, handEvents, type Envelope, type EventType, type HandEvt } from '@tp/research';
+import { sha256hex, type HandRecord, type PlayerId } from '@tp/engine';
+import type { Upload } from './offline-upload';
 
 export interface ResearchSink {
   emit(e: Envelope): void;
@@ -67,3 +68,34 @@ const SAFE = /^[A-Za-z0-9_:.-]{1,64}$/;
 const safeId = (s: string): string | null => (SAFE.test(s) ? s : null);
 let warned = 0;
 const warn = (e: unknown): void => { if (warned++ < 20) console.error('research tap:', e); };
+
+/**
+ * A night played on the offline host phone, as research events, when its records reach a server (each hand
+ * was replayed and checked there already). Ids are derived from the game and hand, so an upload sent twice
+ * gives the same events and the database keeps them once. Session: one per uploaded item ("off-<game>-<hand>").
+ */
+export function offlineEvents(up: Upload): Envelope[] {
+  const body = up.payload as { game: { id: string }; hand?: { no: number; full: HandRecord; players: { key: string; account: string | null }[] }; players?: { key: string; account: string | null }[]; endedAt?: string };
+  const gm = body.game.id;
+  const accounts = new Set((body.hand?.players ?? body.players ?? []).filter((p) => p.account).map((p) => p.key));
+  const session = `off-${gm.slice(0, 8)}-${body.hand ? body.hand.no : 'end'}`;
+  let q = 0;
+  const env = (t: EventType, p: unknown, pid: PlayerId | null, at: number, h: number | null, st: string | null): Envelope => ({
+    id: detUuid(`${up.id}#${q + 1}`), sv: SCHEMA_VERSION, t, v: EVENT_TYPES[t].v, src: 's', tc: at, tm: 0, s: session, q: ++q,
+    d: null, a: pid && accounts.has(pid) ? pid : null, g: pid && !accounts.has(pid) ? pid : null,
+    tb: 'OFFLINE', gm, ...(h ? { h } : {}), ...(st ? { st } : {}), app: 'server:host-upload', ts: at, p,
+  });
+  if (body.hand) {
+    const rec = body.hand.full;
+    const out = [env('offline.hand', { game: body.game, handNo: rec.handNo, players: body.hand.players }, null, rec.endedAt, rec.handNo, null)];
+    for (const ev of handEvents(rec)) out.push(env(ev.t, ev.p, ev.pid, ev.at, rec.handNo, ev.st));
+    return out;
+  }
+  return [env('game.end', { game: body.game, endedAt: body.endedAt ? Date.parse(body.endedAt) : null, players: body.players, offline: true }, null, body.endedAt ? Date.parse(body.endedAt) : Date.now(), null, null)];
+}
+
+/** A UUID-shaped id that is always the same for the same text. */
+function detUuid(text: string): string {
+  const h = sha256hex(text);
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`;
+}

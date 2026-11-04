@@ -6,3 +6,4 @@ export * from './samples';
 export * from './hand';
 export * from './ingest';
 export * from './shipper';
+export * from './archive';

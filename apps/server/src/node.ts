@@ -9,7 +9,8 @@ import { gzipSync } from 'node:zlib';
 import { dirname, join } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { PROTOCOL_VERSION } from '@tp/protocol';
-import { TableRoom, Recorder, tokenSigner, supabaseSend, checkOfflineUpload, MAX_UPLOAD_BYTES, type Conn, type Persisted, type OutboxItem, type PushRequest } from '@tp/table';
+import { TableRoom, Recorder, tokenSigner, supabaseSend, checkOfflineUpload, offlineEvents, MAX_UPLOAD_BYTES, type Conn, type Persisted, type OutboxItem, type PushRequest } from '@tp/table';
+import { INGEST_HEADERS, RateLimiter, ResearchShipper, databaseWriter, ingest, type Envelope } from '@tp/research';
 import { cachedTicketChecker, SUPABASE_KEY, SUPABASE_URL } from '@tp/account/ticket';
 import { LATENCY_PAGE } from './latency-page';
 import { TAP_PAGE } from './tap-page';
@@ -32,6 +33,7 @@ mkdirSync(join(DATA, 'tables'), { recursive: true });
 mkdirSync(join(DATA, 'hands'), { recursive: true });
 mkdirSync(join(DATA, 'outbox'), { recursive: true });
 mkdirSync(join(DATA, 'backups'), { recursive: true, mode: 0o700 });
+mkdirSync(join(DATA, 'research'), { recursive: true, mode: 0o700 });
 
 // ---------------- league recorder ----------------
 // The signing key reaches this machine out of band: an environment variable, or the Oracle instance's
@@ -61,6 +63,27 @@ void recorderKey().then(async (key) => {
   void recorder.flush();
   setInterval(() => { void recorder?.flush(); }, 30_000).unref();
 });
+
+// ---------------- research ----------------
+// The tables' research events (and the apps', through /research/ingest) go to the database signed with the
+// recorder key. Until the key is known, or while the database is unreachable, batches wait on disk.
+const RESEARCH_OFF = process.env.RESEARCH_OFF === '1';
+const researchDir = join(DATA, 'research');
+const researchWrite = async (events: Envelope[]): Promise<boolean> => {
+  if (!signBody) return false;
+  return databaseWriter(process.env.SUPABASE_URL ?? SUPABASE_URL, SUPABASE_KEY, signBody)(events);
+};
+const research = RESEARCH_OFF ? null : new ResearchShipper({
+  write: researchWrite, now: Date.now, setTimer: (fn, ms) => setTimeout(fn, ms).unref(), clearTimer: (h) => clearTimeout(h as NodeJS.Timeout), log: (m) => console.log(m),
+  store: {
+    load: async () => readdirSync(researchDir).filter((f) => f.endsWith('.json')).sort().map((f) => ({ key: f.replace(/\.json$/, ''), events: JSON.parse(readFileSync(join(researchDir, f), 'utf8')) as Envelope[] })),
+    put: async (key, events) => { const f = join(researchDir, `${key.replace(/[^A-Za-z0-9_-]/g, '_')}.json`); writeFileSync(`${f}.tmp`, JSON.stringify(events), { mode: 0o600 }); renameSync(`${f}.tmp`, f); },
+    remove: async (key) => { try { unlinkSync(join(researchDir, `${key.replace(/[^A-Za-z0-9_-]/g, '_')}.json`)); } catch { /* gone */ } },
+  },
+});
+void research?.start();
+const researchSink = research ? { emit: (e: Envelope) => research.emit(e) } : undefined;
+const researchLimiter = new RateLimiter();
 
 // ---------------- push notifications ----------------
 // The push key is kept only on Cloudflare: this server hands each push there, signed with the recorder key.
@@ -143,7 +166,7 @@ function getRoom(code: string): Live {
       if (recorder) void recorder.add(fn, id, payload);
       else void outboxStore.put({ id, fn, body: JSON.stringify(payload), tries: 0, nextAt: 0 });
     },
-  }, saved, { identify, server: 'oracle', push: handPush, ...(process.env.HAND_PAUSE_MS ? { handPauseMs: Number(process.env.HAND_PAUSE_MS) } : {}) });
+  }, saved, { identify, server: 'oracle', push: handPush, ...(researchSink ? { research: researchSink } : {}), ...(process.env.HAND_PAUSE_MS ? { handPauseMs: Number(process.env.HAND_PAUSE_MS) } : {}) });
   l.room.settleAfterRestart(); // nobody is connected to a table just loaded from disk
   live.set(code, l);
   return l;
@@ -168,6 +191,7 @@ const server = createServer((req, res) => {
     return;
   }
   if (url.pathname === '/offline/upload' && req.method === 'POST') { offlineUpload(req, res, cors); return; }
+  if (url.pathname === '/research/ingest' || url.pathname === '/research/ping') { researchRoute(req, res, url.pathname); return; }
   if (url.pathname === '/latency' || url.pathname === '/tap') {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', ...cors });
     res.end(url.pathname === '/tap' ? TAP_PAGE : LATENCY_PAGE);
@@ -198,7 +222,27 @@ function offlineUpload(req: import('node:http').IncomingMessage, res: import('no
     catch (e) { return reply(422, { error: (e as Error).message }); }
     if (recorder) void recorder.add(up.fn, up.id, up.payload);
     else void outboxStore.put({ id: up.id, fn: up.fn, body: JSON.stringify(up.payload), tries: 0, nextAt: 0, order: Date.now() });
+    if (research) try { for (const e of offlineEvents(up)) research.emit(e); } catch (e) { console.error('research: offline upload', e); }
     reply(200, { queued: up.id });
+  });
+}
+
+// ---------------- research ingestion (the apps' events) ----------------
+function researchRoute(req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse, path: string): void {
+  const headers = { ...INGEST_HEADERS, 'content-type': 'application/json' };
+  const reply = (code: number, o: unknown) => { res.writeHead(code, headers); res.end(JSON.stringify(o)); };
+  if (req.method === 'OPTIONS') { res.writeHead(204, INGEST_HEADERS); res.end(); return; }
+  if (path === '/research/ping') return reply(200, { st: Date.now() });
+  if (req.method !== 'POST') return reply(405, { ok: false, error: 'POST only' });
+  if (!research) return reply(503, { ok: false, error: 'not recording', st: Date.now() });
+  let text = '';
+  req.on('data', (c: Buffer) => { text += c; if (text.length > 600_000) { reply(413, { ok: false, error: 'too large', st: Date.now() }); req.destroy(); } });
+  req.on('end', () => {
+    if (res.headersSent) return;
+    // the database write happens in the background (a batch waits on disk if it cannot be written now), so
+    // the app is answered at once: its events are safe here
+    void ingest(text, { now: Date.now, limiter: researchLimiter, forward: async (events) => { for (const e of events) research.emit(e); return true; } })
+      .then((r) => reply(r.status, r.body), () => reply(500, { ok: false, st: Date.now() }));
   });
 }
 

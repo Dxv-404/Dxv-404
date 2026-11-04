@@ -1,7 +1,8 @@
 // The Cloudflare table server (the backup to the Oracle server in Hyderabad): one Durable Object per table.
 import { DurableObject } from 'cloudflare:workers';
 import { PROTOCOL_VERSION, VAPID_PUBLIC_KEY, PUSH_SUBJECT } from '@tp/protocol';
-import { TableRoom, Recorder, tokenSigner, supabaseSend, supabaseRpc, deliver, drainOutbox, verifySigned, checkOfflineUpload, MAX_UPLOAD_BYTES, type Conn, type ConnInfo, type Persisted, type OutboxItem, type PushDeps, type PushRequest } from '@tp/table';
+import { TableRoom, Recorder, tokenSigner, supabaseSend, supabaseRpc, deliver, drainOutbox, verifySigned, checkOfflineUpload, offlineEvents, MAX_UPLOAD_BYTES, type Conn, type ConnInfo, type Persisted, type OutboxItem, type PushDeps, type PushRequest } from '@tp/table';
+import { INGEST_HEADERS, RateLimiter, ResearchShipper, archiveDb, databaseWriter, ingest, runArchive, type Envelope } from '@tp/research';
 import { cachedTicketChecker, checkTicket, SUPABASE_KEY, SUPABASE_URL } from '@tp/account/ticket';
 
 // signed-in phones show a ticket; the accounts database says whose it is (cached while this isolate lives)
@@ -9,7 +10,61 @@ const identify = cachedTicketChecker();
 import { LATENCY_PAGE } from './latency-page';
 import { TAP_PAGE } from './tap-page';
 
-export interface Env { TABLES: DurableObjectNamespace<Table>; ECHO: DurableObjectNamespace<Echo>; RECORDER_TOKEN?: string; VAPID_PRIVATE?: string; BACKUPS?: KVNamespace }
+export interface Env {
+  TABLES: DurableObjectNamespace<Table>; ECHO: DurableObjectNamespace<Echo>; RECORDER_TOKEN?: string; VAPID_PRIVATE?: string; BACKUPS?: KVNamespace;
+  /** Research: the archive bucket (R2), how many days the database keeps, most rows one archive run moves, and an off switch. */
+  RESEARCH_ARCHIVE?: R2Bucket; RESEARCH_KEEP_DAYS?: string; RESEARCH_ARCHIVE_MAX_ROWS?: string; RESEARCH_OFF?: string;
+}
+
+// ---------------- research ----------------
+/** The research database writer (signed like the league recorder), or null when this server cannot record. */
+function researchWriter(env: Env): ((events: Envelope[]) => Promise<boolean>) | null {
+  if (!env.RECORDER_TOKEN || env.RESEARCH_OFF === '1') return null;
+  return databaseWriter(SUPABASE_URL, SUPABASE_KEY, tokenSigner(env.RECORDER_TOKEN));
+}
+// (per isolate: a phone's batches usually reach the same one; the database is the real limit)
+const researchLimiter = new RateLimiter();
+const RESEARCH_CRON = '47 22 * * *';
+
+/** POST /research/ingest (the app's events), GET /research/ping (a clock sample). */
+async function researchRoute(request: Request, env: Env, path: string): Promise<Response> {
+  const headers = { ...INGEST_HEADERS, 'content-type': 'application/json' };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: INGEST_HEADERS });
+  if (path === '/research/ping') return Response.json({ st: Date.now() }, { headers });
+  if (request.method !== 'POST') return new Response('POST only', { status: 405, headers: INGEST_HEADERS });
+  const write = researchWriter(env);
+  if (!write) return Response.json({ ok: false, error: 'not recording', st: Date.now() }, { status: 503, headers });
+  if (Number(request.headers.get('content-length') ?? 0) > 600_000) return Response.json({ ok: false, error: 'too large', st: Date.now() }, { status: 413, headers });
+  const r = await ingest(await request.text(), { now: Date.now, limiter: researchLimiter, forward: write, log: (m) => console.log(m) });
+  return Response.json(r.body, { status: r.status, headers });
+}
+
+const toBytes = async (s: ReadableStream): Promise<Uint8Array> => new Uint8Array(await new Response(s).arrayBuffer());
+const hex = (b: ArrayBuffer): string => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, '0')).join('');
+/** The daily research archive: old days to the R2 bucket, checked, then deleted from the database. */
+async function researchArchive(env: Env): Promise<void> {
+  if (!env.RECORDER_TOKEN || !env.RESEARCH_ARCHIVE) { console.log('research archive: no bucket or key, skipped'); return; }
+  const sign = tokenSigner(env.RECORDER_TOKEN);
+  const bucket = env.RESEARCH_ARCHIVE;
+  const call = async (fn: string, body: Record<string, unknown>): Promise<unknown> => {
+    const b = JSON.stringify(body);
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, { method: 'POST', headers: { apikey: SUPABASE_KEY, 'content-type': 'application/json' }, body: JSON.stringify({ p_body: b, p_sig: await sign(b) }) });
+    if (!r.ok) throw new Error(`${fn} ${r.status}: ${(await r.text()).slice(0, 200)}`);
+    return r.json();
+  };
+  await runArchive({
+    db: archiveDb(call),
+    bucket: {
+      put: async (key, data, meta) => { await bucket.put(key, data, { customMetadata: meta, sha256: meta.sha256 && meta.sha256.length === 64 ? meta.sha256 : undefined }); },
+      get: async (key) => { const o = await bucket.get(key); return o ? new Uint8Array(await o.arrayBuffer()) : null; },
+    },
+    gzip: (d) => toBytes(new Blob([d]).stream().pipeThrough(new CompressionStream('gzip'))),
+    gunzip: (d) => toBytes(new Blob([d]).stream().pipeThrough(new DecompressionStream('gzip'))),
+    sha256: async (d) => hex(await crypto.subtle.digest('SHA-256', d)),
+    now: Date.now,
+    log: (m) => console.log(m),
+  }, { keepDays: Number(env.RESEARCH_KEEP_DAYS ?? 14) || 14, maxRows: Number(env.RESEARCH_ARCHIVE_MAX_ROWS ?? 40_000) || 40_000 });
+}
 
 /** Push sending needs both the recorder token (to ask the database who) and the push key. */
 function pushDeps(env: Env): PushDeps | null {
@@ -48,6 +103,8 @@ export class Table extends DurableObject<Env> {
   private room: TableRoom | null = null;
   private conns = new Map<WebSocket, Conn>();
   private recorder: Recorder | null = null;
+  /** Research events of this table, on their way to the database (null when this server does not record). */
+  private research: ResearchShipper | null = null;
   /** One alarm serves both the table's timers and the league outbox's retries. */
   private roomAt: number | null = null;
 
@@ -62,6 +119,20 @@ export class Table extends DurableObject<Env> {
           remove: async (id) => { await storage.delete(`outbox:${id}`); },
         }, tokenSigner(env.RECORDER_TOKEN), supabaseSend(SUPABASE_URL, SUPABASE_KEY), Date.now, (m) => console.log(m));
         await this.recorder.start();
+      }
+      const write = researchWriter(env);
+      if (write) {
+        const storage = ctx.storage;
+        this.research = new ResearchShipper({
+          write, now: Date.now, setTimer: (fn, ms) => setTimeout(fn, ms), clearTimer: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
+          keepAlive: (p) => ctx.waitUntil(p), log: (m) => console.log(m),
+          store: {
+            load: async () => [...(await storage.list<Envelope[]>({ prefix: 'research:' })).entries()].map(([key, events]) => ({ key, events })),
+            put: async (key, events) => { await storage.put(`research:${key}`, events); },
+            remove: async (key) => { await storage.delete(key.startsWith('research:') ? key : `research:${key}`); },
+          },
+        });
+        await this.research.start();
       }
       this.roomAt = (await ctx.storage.get<number>('roomAt')) ?? null;
       const code = await ctx.storage.get<string>('code');
@@ -88,6 +159,7 @@ export class Table extends DurableObject<Env> {
       },
     }, saved, {
       identify, server: 'cloudflare',
+      ...(this.research ? { research: { emit: (e: Envelope) => this.research!.emit(e) } } : {}),
       push: (p) => { const d = pushDeps(this.env); if (d) this.ctx.waitUntil(deliver(p, d).catch((e: unknown) => console.error('push failed', e))); },
     });
     this.room = room;
@@ -111,6 +183,7 @@ export class Table extends DurableObject<Env> {
     catch (e) { return Response.json({ error: (e as Error).message }, { status: 422 }); }
     await this.recorder.add(up.fn, up.id, up.payload);
     this.setAlarm();
+    if (this.research) try { for (const e of offlineEvents(up)) this.research.emit(e); } catch (e) { console.error('research: offline upload', e); }
     return Response.json({ queued: up.id });
   }
 
@@ -199,6 +272,7 @@ export default {
     const cors = { 'Access-Control-Allow-Origin': '*' };
     if (url.pathname === '/latency') return new Response(LATENCY_PAGE, { headers: { 'content-type': 'text/html; charset=utf-8' } });
     if (url.pathname === '/tap') return new Response(TAP_PAGE, { headers: { 'content-type': 'text/html; charset=utf-8' } });
+    if (url.pathname === '/research/ingest' || url.pathname === '/research/ping') return researchRoute(request, env, url.pathname);
     if (url.pathname === '/health') {
       const cf = (request as Request & { cf?: { colo?: string; country?: string } }).cf;
       return Response.json({ ok: true, protocol: PROTOCOL_VERSION, colo: cf?.colo, country: cf?.country }, { headers: cors });
@@ -241,6 +315,8 @@ export default {
   // stop working until someone restored it by hand. One tiny database call a day prevents that.
   // It also closes seasons whose end has passed (trophies for the winner and the iron chair).
   async scheduled(event, env, ctx): Promise<void> {
+    // daily: research events older than RESEARCH_KEEP_DAYS go to the R2 archive (checked), then leave the database
+    if (event.cron === RESEARCH_CRON) { ctx.waitUntil(researchArchive(env).catch((e: unknown) => console.error('research archive failed', e))); return; }
     // every few minutes: pushes the database queued (approved into a crew, trophies, a season's end)
     if (event.cron !== '23 21 * * *') {
       const d = pushDeps(env);

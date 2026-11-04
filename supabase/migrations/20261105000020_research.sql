@@ -57,7 +57,7 @@ create table research.archive_log (
   first_id uuid not null,
   last_id uuid not null,
   rows integer not null,
-  ids_md5 text not null,
+  ids_sha256 text not null,
   object_key text not null,
   deleted integer not null,
   at timestamptz not null default now()
@@ -161,21 +161,21 @@ begin
 end $$;
 
 -- Delete a slice that is safely in the archive: only if the rows are exactly the ones archived (same count,
--- same md5 over their ids in order); otherwise nothing is deleted and the job tries again another day.
+-- same sha256 over their ids in order, joined with commas); otherwise nothing is deleted and the job tries again another day.
 create function public.research_archive_commit(p_body text, p_sig text) returns json
 language plpgsql security definer set search_path = '' as $$
 declare b json := p_body::json; d date; cut timestamptz; f uuid; l uuid; n int; h text; deleted int;
 begin
   if not private.recorder_ok(p_body, p_sig) then raise exception 'Not a table server' using errcode = '42501'; end if;
   d := (b ->> 'day')::date; cut := (b ->> 'cutoff')::timestamptz; f := (b ->> 'first')::uuid; l := (b ->> 'last')::uuid;
-  select count(*), md5(coalesce(string_agg(id::text, ',' order by id), '')) into n, h
+  select count(*), encode(sha256(convert_to(coalesce(string_agg(id::text, ',' order by id), ''), 'UTF8')), 'hex') into n, h
   from research.events where day = d and received_at <= cut and id between f and l;
-  if n <> (b ->> 'rows')::int or h <> (b ->> 'ids_md5') then
-    return json_build_object('ok', false, 'rows', n, 'ids_md5', h);
+  if n <> (b ->> 'rows')::int or h <> (b ->> 'ids_sha256') then
+    return json_build_object('ok', false, 'rows', n, 'ids_sha256', h);
   end if;
   delete from research.events where day = d and received_at <= cut and id between f and l;
   get diagnostics deleted = row_count;
-  insert into research.archive_log (day, cutoff, first_id, last_id, rows, ids_md5, object_key, deleted)
+  insert into research.archive_log (day, cutoff, first_id, last_id, rows, ids_sha256, object_key, deleted)
   values (d, cut, f, l, n, h, coalesce(b ->> 'key', ''), deleted);
   return json_build_object('ok', true, 'deleted', deleted);
 end $$;
