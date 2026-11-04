@@ -319,6 +319,7 @@ folder and `research-export/` are git-ignored; the map must never be committed o
 - The capture's own cost is measured (`perf.capture.cost`: total ms in capture handlers per minute). In tests,
   queueing one event costs ≈ 0.01 ms.
 - Settings `tp-research-off = 1` in a browser's storage turns its capture off (tests use it to act as an older
-  app); `tp-research-url` points the uploads elsewhere (tests).
+  app); `tp-research-url` points the uploads elsewhere (tests). A build served from `localhost` never sends to
+  the live endpoint (unless pointed somewhere with `tp-research-url` or `tp-server-override`).
 - Older apps: they send no research ids in `hello` and record nothing; the server still records their game
   (device null on their events).

@@ -282,6 +282,9 @@ test('around the table: profile, avatar picker, settings, crew, replays and movi
   await expect(laptop.page.getByTestId('standings').locator('li')).toHaveCount(2);
   // replays: the game, a hand, steps
   await phone.page.goto('/');
+  // (the "Signed in on a new laptop" notice can drop over the menu first: answer it, recorded as an api.call)
+  const top = phone.page.getByTestId('device-notice-top');
+  if (await top.isVisible({ timeout: 3000 }).catch(() => false)) { await top.getByTestId('notice-ok').click(); await expect(top).toHaveCount(0); }
   await phone.page.getByTestId('open-profile').click();
   await phone.page.getByTestId('my-games').click();
   await expect(phone.page.getByTestId('games').getByRole('button').first()).toBeVisible({ timeout: 20_000 });

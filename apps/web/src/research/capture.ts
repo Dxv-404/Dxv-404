@@ -28,6 +28,8 @@ export function ingestBase(): string {
   if (o) return o.replace(/\/$/, '');
   const s = LS.get('tp-server-override');
   if (s) return s.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:').replace(/\/$/, '');
+  // a local build (tests, development) never sends to the live endpoint: its events wait and fail fast
+  if (/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) return 'http://127.0.0.1:9';
   return CLOUDFLARE;
 }
 
