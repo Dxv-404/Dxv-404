@@ -8,7 +8,7 @@
   // Research archive (docs/research-data.md): create the bucket first (wrangler r2 bucket create train-poker-research),
   // then deploy. The daily 22:47 UTC run moves research events older than RESEARCH_KEEP_DAYS from Supabase to it.
   "r2_buckets": [{ "binding": "RESEARCH_ARCHIVE", "bucket_name": "train-poker-research" }],
-  "vars": { "RESEARCH_KEEP_DAYS": "14", "RESEARCH_ARCHIVE_MAX_ROWS": "40000" },
+  "vars": { "RESEARCH_KEEP_DAYS": "7", "RESEARCH_ARCHIVE_MAX_ROWS": "40000" },
   "kv_namespaces": [{ "binding": "BACKUPS", "id": "84f416b247a941c6a8803a402328e8aa" }],
   "durable_objects": {
     "bindings": [{ "name": "TABLES", "class_name": "Table" }, { "name": "ECHO", "class_name": "Echo" }]

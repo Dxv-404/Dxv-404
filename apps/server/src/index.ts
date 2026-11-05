@@ -63,7 +63,7 @@ async function researchArchive(env: Env): Promise<void> {
     sha256: async (d) => hex(await crypto.subtle.digest('SHA-256', d)),
     now: Date.now,
     log: (m) => console.log(m),
-  }, { keepDays: Number(env.RESEARCH_KEEP_DAYS ?? 14) || 14, maxRows: Number(env.RESEARCH_ARCHIVE_MAX_ROWS ?? 40_000) || 40_000 });
+  }, { keepDays: Number(env.RESEARCH_KEEP_DAYS ?? 7) || 7, maxRows: Number(env.RESEARCH_ARCHIVE_MAX_ROWS ?? 40_000) || 40_000 });
 }
 
 /** Push sending needs both the recorder token (to ask the database who) and the push key. */

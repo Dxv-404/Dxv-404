@@ -48,7 +48,7 @@ export interface ArchiveOptions {
   maxRows: number;
   prefix: string;
 }
-export const ARCHIVE_DEFAULTS: ArchiveOptions = { keepDays: 14, pageRows: 5000, maxRows: 40_000, prefix: 'research/v1' };
+export const ARCHIVE_DEFAULTS: ArchiveOptions = { keepDays: 7, pageRows: 5000, maxRows: 40_000, prefix: 'research/v1' };
 
 export interface ArchiveReport { slices: number; rows: number; deleted: number; files: number; bytes: number; refused: number; errors: string[] }
 

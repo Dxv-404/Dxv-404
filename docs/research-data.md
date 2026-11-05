@@ -256,7 +256,7 @@ ids. `research.archive_log` records every archived slice. Phones have no access:
 row-level security on every table with no policies; every function needs the recorder signature.
 
 **Archive** (Cloudflare cron `47 22 * * *` UTC, R2 bucket `train-poker-research`, binding `RESEARCH_ARCHIVE`):
-days older than `RESEARCH_KEEP_DAYS` (default 14) move to
+days older than `RESEARCH_KEEP_DAYS` (default 7) move to
 
 ```
 research/v1/day=YYYY-MM-DD/type=<type>/part-<first id>-<last id>.ndjson.gz   rows of that day and type (one JSON row per line)
@@ -277,8 +277,8 @@ snapshots are 70 % of it (≈ 4.6 KB each with 8 players). The app adds, per pla
 phone with motion sensors): ≈ 40 rows per hand (turns, sends, acks, ≈ 25 table updates, motion windows of
 ≈ 3–4 KB, taps), plus holds, clock samples and timings: ≈ 1.8–2.4 MB in Postgres. **Total ≈ 3 MB per
 player-night (≈ 24 MB for an 8-player night).** The free 500 MB database (minus the accounts data) holds ≈ 18–19
-such nights without archiving; with the 14-day archive it holds at most two weeks (≈ 6 nights at three a week ≈
-150 MB). The archive grows ≈ 2–3 MB per 8-player night (gzipped).
+such nights without archiving; with the 7-day archive it holds at most one week (≈ 3–4 nights at three a week ≈
+75–100 MB). The archive grows ≈ 2–3 MB per 8-player night (gzipped).
 
 ---
 
