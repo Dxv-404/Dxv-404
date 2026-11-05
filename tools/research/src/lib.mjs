@@ -135,7 +135,10 @@ const NAME_KEYS = new Set(['name', 'names', 'p_name', 'account_name', 'table_nam
  */
 export function anonymizer(subjects, names = []) {
   const rid = new Map();
-  for (const s of subjects) rid.set(s.key.slice(2), s.rid);
+  // an account's seat id is the account id, and a server may also have seen it as a guest seat: the same raw id
+  // must always become the account's research id, so the name map and every payload agree
+  const rank = (k) => (k.startsWith('a:') ? 0 : k.startsWith('g:') ? 1 : 2);
+  for (const s of [...subjects].sort((x, y) => rank(y.key) - rank(x.key))) rid.set(s.key.slice(2), s.rid);
   const nameRe = names.filter((n) => typeof n === 'string' && n.trim().length >= 3).sort((a, b) => b.length - a.length)
     .map((n) => n.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
   const scrubRe = nameRe.length ? new RegExp(`(?<![\\p{L}\\p{N}])(${nameRe.join('|')})(?![\\p{L}\\p{N}])`, 'giu') : null;

@@ -9,6 +9,20 @@ self.addEventListener('activate', (e) => {
 });
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
+  // opening the app (a page load) always asks the network first, so whoever opens it gets the latest version
+  // on any device without clearing anything; the saved copy is used only when offline or the network is very slow
+  if (e.request.mode === 'navigate') {
+    e.respondWith((async () => {
+      try {
+        const res = await Promise.race([fetch(e.request, { cache: 'no-store' }), new Promise((_, no) => setTimeout(() => no(new Error('slow')), 4000))]);
+        if (res && res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put('./index.html', copy)).catch(() => {}); return res; }
+        throw new Error('bad');
+      } catch {
+        return (await caches.match(e.request, { ignoreSearch: true })) || (await caches.match('./index.html')) || fetch(e.request);
+      }
+    })());
+    return;
+  }
   e.respondWith(
     caches.match(e.request, { ignoreSearch: true }).then((hit) => hit || fetch(e.request).then((res) => {
       if (res.ok && new URL(e.request.url).origin === location.origin) {
