@@ -482,8 +482,14 @@ void import('../crews/data.ts').then((m) => m.claimGuestGames()).catch(() => {})
 // service worker for offline use
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   navigator.serviceWorker.register('sw.js').then((reg) => {
-    // look for a new version whenever the app comes back to the front
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
+    if (!reg) return;
+    // look for a new version when the app comes back to the front or online, when the window gets focus, and
+    // every 5 minutes (a laptop tab left open on the table never goes to the back, so that alone missed updates)
+    const check = () => { reg.update().catch(() => {}); };
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+    addEventListener('focus', check);
+    addEventListener('online', check);
+    setInterval(check, 5 * 60_000);
   }).catch(() => {});
   // A new version took over (the old one served this page from its cache): load it now, or, mid-game, as soon as
   // the table is left, so an update never needs two reloads and never interrupts a hand.
@@ -491,7 +497,9 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
   let reloading = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (!hadController || reloading) return;
-    const go = () => { if (reloading) return; if (document.body.dataset.playing) { setTimeout(go, 5000); return; } reloading = true; location.reload(); };
+    // an online table reloads between hands (the seat comes straight back); a table run on this phone (QR host,
+    // offline) waits until it is left, since the game lives on this phone
+    const go = () => { if (reloading) return; if (document.body.dataset.playing || document.body.dataset.inHand) { setTimeout(go, 2000); return; } reloading = true; location.reload(); };
     go();
   });
   // a notification was tapped while the app was open (sw.js openAt): go to its page, a table to join

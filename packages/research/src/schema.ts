@@ -149,6 +149,7 @@ export const EVENT_TYPES = {
   'hand.vote': { v: 1, src: 's' },
   'hand.show': { v: 1, src: 's' },
   'hand.end': { v: 1, src: 's' },
+  'hand.cut': { v: 1, src: 's' },
   'push.sent': { v: 1, src: 's' },
   'offline.hand': { v: 1, src: 's' },
   // ---- app: sessions, device, attention ----

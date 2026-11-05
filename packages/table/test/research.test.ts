@@ -117,6 +117,27 @@ describe('research recording on the table server', () => {
     expect(got.some((e) => e.t === 'conn.close' && (e.p as { pid: string }).pid === 'b')).toBe(true);
   });
 
+  it('a game ended in the middle of a hand keeps that hand (hand.cut): the table before it and every input, enough to replay it', async () => {
+    const got: Envelope[] = [];
+    const t = setup({ emit: (e) => got.push(e) });
+    t.join('a'); t.join('b'); t.join('c');
+    t.send('a', { t: 'host', cmd: 'deal' });
+    const e = t.room.engine!;
+    const first = e.s.hand!.toAct!;
+    t.send(first, { t: 'act', handNo: e.s.handNo, action: { type: 'call' } });
+    const holes = JSON.parse(JSON.stringify(e.s.hand!.holes ?? null));
+    t.send('a', { t: 'host', cmd: 'end' });
+    await flushTimers();
+    const cut = got.find((x) => x.t === 'hand.cut');
+    expect(cut).toBeDefined();
+    const p = cut!.p as { handNo: number; inputs: unknown[]; before: unknown; hand: { holes?: unknown } };
+    expect(cut!.h).toBe(1);
+    expect(p.handNo).toBe(1);
+    expect(p.before).toBeTruthy();
+    expect(p.inputs.length).toBeGreaterThanOrEqual(2); // the deal and the call
+    if (holes) expect(p.hand.holes).toEqual(holes);
+  });
+
   it('a recording that throws never stops the game', async () => {
     const t = setup({ emit: () => { throw new Error('sink down'); } });
     t.join('a'); t.join('b');

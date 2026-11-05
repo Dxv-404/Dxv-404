@@ -139,14 +139,27 @@ function install(): void {
     if (hover) { const ms = performance.now() - hover.t; if (ms >= 80) R.emit('ui.hover', { k: keyOf(hover.el), ms: Math.round(ms), screen: screenName }); }
     hover = el ? { el, t: performance.now() } : null;
   }), { capture: true, passive: true });
+  // a held key (space to peek at the cards) repeats ~30 times a second: the press is recorded once, and the
+  // release says how long it was held and how many repeats there were
+  const held = new Map<string, { t: number; reps: number }>();
   document.addEventListener('keydown', R.guard((e: KeyboardEvent) => {
     const t = e.target as HTMLElement | null;
     const typing = !!t?.closest?.('input, textarea, select, [contenteditable]');
+    if (e.repeat) { const h = held.get(e.code); if (h) { h.reps++; return; } if (typing) return; }
+    if (!typing) held.set(e.code, { t: performance.now(), reps: 0 });
     // in a text box only that a key was pressed and how long the text is, never what
     R.emit('ui.key', typing
       ? { typing: true, field: keyOf(t), len: (t as HTMLInputElement).value?.length ?? null, screen: screenName }
       : { key: e.key.length === 1 || /^(Arrow|Enter|Escape|Tab|Backspace|Home|End|Page| )/.test(e.key) ? e.key : 'other', code: e.code, shift: e.shiftKey, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey, repeat: e.repeat, focus: keyOf(t), screen: screenName });
   }), { capture: true, passive: true });
+  document.addEventListener('keyup', R.guard((e: KeyboardEvent) => {
+    const h = held.get(e.code);
+    if (!h) return;
+    held.delete(e.code);
+    const ms = performance.now() - h.t;
+    if (h.reps > 0 || ms >= 250) R.emit('ui.key', { up: true, code: e.code, ms: Math.round(ms), repeats: h.reps, screen: screenName });
+  }), { capture: true, passive: true });
+  addEventListener('blur', () => held.clear());
 
   // ---- scroll depth (the screen's own scroller or the page), kept as the maximum until the screen changes
   document.addEventListener('scroll', R.guard((e: Event) => {

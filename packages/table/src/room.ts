@@ -49,6 +49,8 @@ export interface Persisted {
   createdAt: number;
   /** Recent answers per seat, so a tap resent across a restart is still applied once. */
   acks?: Record<PlayerId, Ack[]>;
+  /** Since when no player has been connected (kept across restarts, so an abandoned table still ends). */
+  emptySince?: number | null;
   /** Crew-only table: the crew whose members may sit and watch. */
   crew?: string | null;
   /** Seats that belong to signed-in accounts. */
@@ -529,8 +531,13 @@ export class TableRoom {
   /** Apply one input; on success bump seq, tell everyone and save. Returns an error text or null. */
   private apply(input: Input): string | null {
     const e = this.engine!;
+    // a game ended in the middle of a hand leaves no hand record: keep what is needed to replay it exactly
+    const cut = input.t === 'host' && input.cmd === 'end' && e.s.phase === 'hand' && e.s.hand && !e.s.hand.results
+      ? { handNo: e.s.handNo, street: e.s.hand.street, before: this.base, inputs: this.inputs.slice(), hand: JSON.parse(JSON.stringify(e.s.hand)) as unknown }
+      : null;
     const r = e.apply(input);
     if (r.error !== undefined) return r.error;
+    if (cut) this.R((t) => t.emit('hand.cut', { ...cut, refunded: true, at: input.now }, null, { h: cut.handNo, st: cut.street, at: input.now }));
     // the shuffle seed stays on the server (it would let any phone work out folded hands); the database keeps it
     // for a fairness check on request
     const events = r.events.filter((ev) => ev.t !== 'deckReveal');
@@ -752,8 +759,11 @@ export class TableRoom {
     const e = this.engine;
     if (!e) return;
     const anyone = e.s.players.some((p) => this.connsOf(p.id).length > 0);
+    const was = this.emptySince;
     if (anyone) this.emptySince = null;
     else if (this.emptySince === null) this.emptySince = this.clock.now();
+    // saved, so a server that sleeps between hands (a Durable Object) does not start the 20 minutes again on every wake
+    if (was !== this.emptySince) this.persist();
   }
 
   private autoEndAt(): number | null {
@@ -882,6 +892,7 @@ export class TableRoom {
       v: 1, code: this.code, base: this.base, inputs: this.inputs, seq: this.seq, host: this.host, tokens: this.tokens,
       running: this.running, nextDealAt: this.nextDealAt, createdAt: this.createdAt, acks, crew: this.crew, accountSeats: [...this.accountSeats], ...(this.game ? { game: this.game } : {}), minStacks: this.minStacks,
       ...(this.continuedFrom ? { continuedFrom: this.continuedFrom } : {}),
+      ...(this.emptySince !== null ? { emptySince: this.emptySince } : {}),
       ...(Object.keys(this.avatars).length ? { avatars: { ...this.avatars } } : {}),
     };
   }
@@ -906,6 +917,7 @@ export class TableRoom {
     this.base = p.base; this.inputs = p.inputs.slice();
     this.seq = p.seq; this.host = p.host; this.tokens = { ...p.tokens };
     this.running = p.running; this.nextDealAt = p.nextDealAt; this.createdAt = p.createdAt; this.crew = p.crew ?? null; this.accountSeats = new Set(p.accountSeats ?? []); this.game = p.game ?? null; this.minStacks = { ...(p.minStacks ?? {}) }; this.continuedFrom = p.continuedFrom ?? null;
+    this.emptySince = typeof p.emptySince === 'number' ? p.emptySince : null;
     this.avatars = {};
     for (const [pid, av] of Object.entries(p.avatars ?? {})) if (isAvatarId(av)) this.avatars[pid] = av;
     for (const [pid, list] of Object.entries(p.acks ?? {})) this.acks.set(pid, new Map(list.map((a) => [a.actionId, a])));

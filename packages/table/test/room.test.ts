@@ -401,6 +401,25 @@ describe('table room', () => {
     expect(t.room.running).toBe(false);
   });
 
+  it('an abandoned table ends after 20 minutes even when the server sleeps and wakes between hands', () => {
+    const t = setup();
+    const c = { a: t.join('a'), b: t.join('b') };
+    t.send(c.a, { t: 'host', cmd: 'deal' });
+    t.room.disconnect(c.a); t.room.disconnect(c.b);
+    t.advance(3000);
+    // a Durable Object wakes for each alarm with nothing in memory: the 20 minutes must not start again each time
+    let now = t.clock.now();
+    const clock = { now: () => now, schedule: () => {} };
+    let room = t.room;
+    for (let i = 0; i < 30 && room.engine!.s.phase !== 'ended'; i++) {
+      now += 60_000;
+      room = new TableRoom('ABCD', clock, t.store, t.saves.at(-1)!, { handPauseMs: 1000 });
+      room.settleAfterRestart();
+      room.wake();
+    }
+    expect(room.engine!.s.phase).toBe('ended');
+  });
+
   it('a table that never dealt does not end by itself', () => {
     const t = setup();
     const a = t.join('a');

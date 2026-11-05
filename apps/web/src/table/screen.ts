@@ -162,6 +162,8 @@ export class TableScreen {
   update(events: GameEvent[], v: ScreenView): void {
     const prev = this.view;
     this.view = v;
+    // an app update waits for the end of the hand (src/legacy/app.js): a reload mid-hand is never forced
+    if (v.phase === 'hand') document.body.dataset.inHand = '1'; else delete document.body.dataset.inHand;
     // the table's micro-animations: whatever is still moving jumps to its end, and what is about to
     // disappear (bets, folded cards) is noted so it can move away after the redraw
     const snap = events.length ? this.motion.before(events) : null;
@@ -564,6 +566,7 @@ export class TableScreen {
   setElsewhere(x: { pid: string; where: string } | null): void { this.elsewhere = x; this.draw(); }
 
   destroy(): void {
+    delete document.body.dataset.inHand;
     this.closeRaise();
     this.fxGen++; this.playing?.stop(); this.endResults();
     this.rb.destroy();
