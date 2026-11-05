@@ -16255,7 +16255,9 @@ var ClientMessage = external_exports.discriminatedUnion("t", [
     settings: TableSettings.optional(),
     claim: OfflineClaim.optional(),
     /** Offline: fingerprint of the last table checkpoint this phone holds (checked when a table is continued on another phone). */
-    cp: external_exports.string().regex(/^[0-9a-f]{64}$/).optional()
+    cp: external_exports.string().regex(/^[0-9a-f]{64}$/).optional(),
+    /** Research: this app's device id and recording session (newer apps; older servers ignore it). */
+    rs: external_exports.object({ d: external_exports.string().regex(/^[A-Za-z0-9_-]{8,64}$/), s: external_exports.string().regex(/^[A-Za-z0-9_-]{8,64}$/) }).optional()
   }),
   external_exports.object({ t: external_exports.literal("act"), actionId: id, handNo: external_exports.number().int().positive(), action }),
   external_exports.object({ t: external_exports.literal("sit"), actionId: id, out: external_exports.boolean(), postNow: external_exports.boolean().optional() }),
@@ -18114,9 +18116,689 @@ function resultsPauseMs(results, streets = 0) {
   return base + (streets > 0 ? RUNOUT_FIRST_MS + streets * RUNOUT_STREET_MS : 0);
 }
 
+// ../../packages/research/src/schema.ts
+var SCHEMA_VERSION = 1;
+var LIMITS = {
+  /** One event, serialised. Hand summaries from the server are the largest. */
+  eventBytes: 64 * 1024,
+  /** One batch from a phone. */
+  batchBytes: 512 * 1024,
+  batchEvents: 1e3,
+  typeLength: 40,
+  idLength: 64
+};
+var UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+var SAFE_ID = /^[A-Za-z0-9_:.-]{1,64}$/;
+var TYPE = /^[a-z][a-z0-9_]*(\.[a-z0-9_]+){1,3}$/;
+var CODE = /^[A-Z0-9]{2,12}$/;
+var STREETS = /* @__PURE__ */ new Set(["preflop", "flop", "turn", "river", "showdown", "between"]);
+var isUuid = (s) => typeof s === "string" && UUID.test(s);
+function checkEnvelope(e, src) {
+  if (!e || typeof e !== "object" || Array.isArray(e)) return "not an object";
+  const o = e;
+  if (!isUuid(o.id)) return "id";
+  if (o.sv !== SCHEMA_VERSION) return "sv";
+  if (typeof o.t !== "string" || o.t.length > LIMITS.typeLength || !TYPE.test(o.t)) return "t";
+  if (!Number.isInteger(o.v) || o.v < 1 || o.v > 1e3) return "v";
+  if (o.src !== "c" && o.src !== "s" && o.src !== "w") return "src";
+  if (src && o.src !== src && !(src === "c" && o.src === "w")) return "src";
+  if (!finite(o.tc) || o.tc < 15e11 || o.tc > 41e11) return "tc";
+  if (!finite(o.tm) || o.tm < 0) return "tm";
+  if (typeof o.s !== "string" || !SAFE_ID.test(o.s)) return "s";
+  if (!Number.isInteger(o.q) || o.q < 1 || o.q > 2e9) return "q";
+  for (const k of ["d", "a", "g"]) if (o[k] !== null && o[k] !== void 0 && (typeof o[k] !== "string" || !SAFE_ID.test(o[k]))) return k;
+  if (o.a !== null && o.a !== void 0 && !isUuid(o.a)) return "a";
+  if (o.tb !== null && o.tb !== void 0 && (typeof o.tb !== "string" || !CODE.test(o.tb))) return "tb";
+  if (o.gm !== null && o.gm !== void 0 && !isUuid(o.gm)) return "gm";
+  if (o.h !== null && o.h !== void 0 && (!Number.isInteger(o.h) || o.h < 0 || o.h > 1e7)) return "h";
+  if (o.st !== null && o.st !== void 0 && (typeof o.st !== "string" || !STREETS.has(o.st))) return "st";
+  if (o.app !== null && o.app !== void 0 && (typeof o.app !== "string" || o.app.length > 40)) return "app";
+  if (o.ts !== void 0 && !finite(o.ts)) return "ts";
+  if (!("p" in o)) return "p";
+  return null;
+}
+var finite = (x) => typeof x === "number" && Number.isFinite(x);
+function checkBatch(raw, src) {
+  if (raw.length > LIMITS.batchBytes) return { error: "too large" };
+  let body;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    return { error: "not JSON" };
+  }
+  const events2 = body?.events;
+  if (!Array.isArray(events2)) return { error: "no events" };
+  if (events2.length > LIMITS.batchEvents) return { error: "too many events" };
+  const ok = [];
+  const rejected = [];
+  events2.forEach((e, i) => {
+    const why = checkEnvelope(e, src) ?? (JSON.stringify(e).length > LIMITS.eventBytes ? "too large" : null);
+    if (why) rejected.push({ i, why });
+    else ok.push(e);
+  });
+  return { ok, rejected };
+}
+var EVENT_TYPES = {
+  // ---- server: the table (authoritative) ----
+  "table.open": { v: 1, src: "s" },
+  "table.host": { v: 1, src: "s" },
+  "conn.open": { v: 1, src: "s" },
+  "conn.hello": { v: 1, src: "s" },
+  "conn.close": { v: 1, src: "s" },
+  "conn.bg": { v: 1, src: "s" },
+  "seat.join": { v: 1, src: "s" },
+  "seat.move": { v: 1, src: "s" },
+  "msg.in": { v: 1, src: "s" },
+  "game.input": { v: 1, src: "s" },
+  "game.end": { v: 1, src: "s" },
+  "react.send": { v: 1, src: "s" },
+  "rebuy.offer": { v: 1, src: "s" },
+  "hand.start": { v: 1, src: "s" },
+  "hand.decision": { v: 1, src: "s" },
+  "hand.action": { v: 1, src: "s" },
+  "hand.street": { v: 1, src: "s" },
+  "hand.vote": { v: 1, src: "s" },
+  "hand.show": { v: 1, src: "s" },
+  "hand.end": { v: 1, src: "s" },
+  "push.sent": { v: 1, src: "s" },
+  "offline.hand": { v: 1, src: "s" },
+  // ---- app: sessions, device, attention ----
+  "session.start": { v: 1, src: "c" },
+  "session.end": { v: 1, src: "c" },
+  "session.resume": { v: 1, src: "c" },
+  "device.info": { v: 1, src: "c" },
+  "device.change": { v: 1, src: "c" },
+  "att.visibility": { v: 1, src: "c" },
+  "att.focus": { v: 1, src: "c" },
+  "att.lifecycle": { v: 1, src: "c" },
+  "net.status": { v: 1, src: "c" },
+  "net.online": { v: 1, src: "c" },
+  "net.gap": { v: 1, src: "c" },
+  "clock.sync": { v: 1, src: "c" },
+  "perf.load": { v: 1, src: "c" },
+  "perf.frames": { v: 1, src: "c" },
+  "perf.capture": { v: 1, src: "c" },
+  "err.client": { v: 1, src: "c" },
+  "report.problem": { v: 1, src: "c" },
+  // ---- app: input and decisions ----
+  "ui.screen": { v: 1, src: "c" },
+  "ui.sheet": { v: 1, src: "c" },
+  "ui.tap": { v: 1, src: "c" },
+  "ui.abort": { v: 1, src: "c" },
+  "ui.hover": { v: 1, src: "c" },
+  "ui.key": { v: 1, src: "c" },
+  "ui.scroll": { v: 1, src: "c" },
+  "ui.orient": { v: 1, src: "c" },
+  "turn.start": { v: 1, src: "c" },
+  "act.send": { v: 1, src: "c" },
+  "act.ack": { v: 1, src: "c" },
+  "table.view": { v: 1, src: "c" },
+  "table.peek": { v: 1, src: "c" },
+  "raise.path": { v: 1, src: "c" },
+  "mouse.path": { v: 1, src: "c" },
+  "motion.perm": { v: 1, src: "c" },
+  "motion.samples": { v: 1, src: "c" },
+  "motion.hold": { v: 1, src: "c" },
+  "rebuy.sheet": { v: 1, src: "c" },
+  "qr.state": { v: 1, src: "c" },
+  // ---- app: everything around the table ----
+  "api.call": { v: 1, src: "c" },
+  "settings.change": { v: 1, src: "c" },
+  "avatar.browse": { v: 1, src: "c" },
+  "replay.view": { v: 1, src: "c" },
+  "crew.view": { v: 1, src: "c" },
+  "id.event": { v: 1, src: "c" },
+  "push.prompt": { v: 1, src: "c" },
+  "push.open": { v: 1, src: "c" },
+  // ---- service worker ----
+  "push.arrive": { v: 1, src: "w" },
+  "push.click": { v: 1, src: "w" }
+};
+
+// ../../packages/research/src/envelope.ts
+function uuid3() {
+  const c = globalThis.crypto;
+  if (c.randomUUID) return c.randomUUID();
+  const b = c.getRandomValues(new Uint8Array(16));
+  b[6] = b[6] & 15 | 64;
+  b[8] = b[8] & 63 | 128;
+  const h = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+var EnvelopeMaker = class {
+  constructor(src, clock, app, session) {
+    this.src = src;
+    this.clock = clock;
+    this.app = app;
+    this.session = session ?? uuid3();
+  }
+  session;
+  seq = 0;
+  /** The next event of this session. `at` overrides the wall clock (an event that happened earlier). */
+  make(t, p, who = {}, where = {}, at) {
+    const e = {
+      id: uuid3(),
+      sv: SCHEMA_VERSION,
+      t,
+      v: EVENT_TYPES[t].v,
+      src: this.src,
+      tc: at?.tc ?? this.clock.wall(),
+      tm: round3(at?.tm ?? this.clock.mono()),
+      s: this.session,
+      q: ++this.seq,
+      d: who.d ?? null,
+      a: who.a ?? null,
+      g: who.g ?? null,
+      p
+    };
+    if (where.tb) e.tb = where.tb;
+    if (where.gm) e.gm = where.gm;
+    if (where.h !== void 0 && where.h !== null) e.h = where.h;
+    if (where.st) e.st = where.st;
+    if (this.app) e.app = this.app;
+    if (at?.ts !== void 0) e.ts = at.ts;
+    return e;
+  }
+  /** Events made so far (the last sequence number). */
+  get count() {
+    return this.seq;
+  }
+};
+var round3 = (x) => Math.round(x * 1e3) / 1e3;
+
+// ../../packages/research/src/hand.ts
+function position(order, pid, h) {
+  const i = order.indexOf(pid);
+  const n = order.length;
+  const role = pid === h.buttonId ? "btn" : pid === h.sbId ? "sb" : pid === h.bbId ? "bb" : pid === h.straddleId ? "str" : null;
+  return { i, n, fromBtn: n - 1 - i, role };
+}
+function infoSet(v) {
+  const out = { ...v, players: v.players.map((p) => {
+    const c = { ...p };
+    delete c.name;
+    return c;
+  }) };
+  delete out.log;
+  delete out.cfg;
+  return out;
+}
+var stacksOf = (s) => Object.fromEntries(s.players.concat(s.departed ?? []).map((p) => [p.id, p.stack]));
+function handEvents(rec, o = { withBefore: true }) {
+  const before = { ...rec.before, hand: null, log: [] };
+  const e = Engine.fromSnapshot(before);
+  const out = [];
+  const hist = [];
+  const stacks0 = stacksOf(before);
+  let decisionKey = "";
+  let k = 0;
+  let lastAt = rec.startedAt;
+  const shownVoluntarily = [];
+  const potsNow = () => e.s.hand ? e.buildPots().map((p) => ({ amount: p.amount, elig: p.elig })) : [];
+  const decision = (at) => {
+    const h2 = e.s.hand;
+    if (!h2 || e.s.phase !== "hand" || !h2.toAct || h2.results) {
+      decisionKey = "";
+      return;
+    }
+    if (h2.vote) return;
+    const key = `${h2.toAct}:${h2.turnStartedAt}:${h2.street}:${h2.currentBet}`;
+    if (key === decisionKey) return;
+    decisionKey = key;
+    const pid = h2.toAct;
+    const p = e.player(pid);
+    out.push({
+      t: "hand.decision",
+      pid,
+      at: h2.turnStartedAt || at,
+      st: h2.street,
+      p: {
+        k: k++,
+        pid,
+        pos: position(h2.order, pid, h2),
+        legal: e.legal(pid),
+        bank: p.bank,
+        turnTime: e.s.cfg.turnTime,
+        turnStartedAt: h2.turnStartedAt,
+        deadline: e.deadline(),
+        grace: !!h2.graceUsed[pid],
+        hist: hist.map((x) => x.slice()),
+        pots: potsNow(),
+        view: infoSet(e.viewFor(pid))
+      }
+    });
+  };
+  for (const input of rec.inputs) {
+    const h0 = e.s.hand;
+    const pre = h0 && "pid" in input && h0.ps[input.pid] ? (() => {
+      const pid = input.pid;
+      const pl = e.player(pid);
+      return { pid, stack: pl.stack, bank: pl.bank, streetBet: h0.ps[pid].streetBet, legal: e.legal(pid), pot: e.potTotal(), street: h0.street, turnStartedAt: h0.turnStartedAt, toAct: h0.toAct };
+    })() : null;
+    const toActBefore = h0?.toAct ?? null;
+    const preTick = input.t === "tick" && h0 && toActBefore ? { pid: toActBefore, stack: e.player(toActBefore).stack, bank: e.player(toActBefore).bank, streetBet: h0.ps[toActBefore].streetBet, legal: e.legal(toActBefore), pot: e.potTotal(), street: h0.street, turnStartedAt: h0.turnStartedAt } : null;
+    const r = e.apply(input);
+    if (r.error) throw new Error(`hand ${rec.handNo} does not replay: ${r.error}`);
+    const at = input.now ?? lastAt;
+    lastAt = at;
+    const h2 = e.s.hand;
+    const evs = r.events ?? [];
+    if (input.t === "start" && h2) {
+      const seed2 = h2.seedInfo.seed;
+      out.push({
+        t: "hand.start",
+        pid: null,
+        at,
+        st: "preflop",
+        p: {
+          handNo: h2.id,
+          startedAt: h2.startedAt,
+          level: e.s.level,
+          button: { pid: h2.buttonId, chair: h2.buttonChair },
+          sbChair: h2.sbChair,
+          bbChair: h2.bbChair,
+          sb: h2.sbId,
+          bb: h2.bbId,
+          straddle: h2.straddleId,
+          order: h2.order,
+          engineVersion: h2.engineVersion,
+          seed: { dealer: h2.seedInfo.dealerSeed, contributions: h2.seedInfo.contributions, combined: seed2, dealerCommit: h2.seedInfo.dealerSeedCommit, deckCommit: h2.deckCommit },
+          deck: deckFromSeed(seed2).map(cardStr),
+          holes: Object.fromEntries(h2.order.map((pid) => [pid, h2.ps[pid].cards.map(cardStr)])),
+          posts: evs.filter((x) => x.t === "blind" || x.t === "ante").map((x) => ({ pid: x.pid, kind: x.t === "ante" ? "ante" : x.kind, amount: x.amount })),
+          levelChanged: evs.some((x) => x.t === "level"),
+          players: e.s.players.map((p) => ({
+            pid: p.id,
+            seat: p.seat,
+            chair: p.chair,
+            stackBefore: stacks0[p.id] ?? null,
+            stack: p.stack,
+            dealt: h2.order.includes(p.id),
+            pos: h2.order.includes(p.id) ? position(h2.order, p.id, h2) : null,
+            sittingOut: p.sittingOut,
+            away: p.away,
+            waitForBB: p.waitForBB,
+            missedSB: p.missedSB,
+            missedBB: p.missedBB,
+            connected: p.connected,
+            bank: p.bank,
+            buyins: p.buyins,
+            rebuysUsed: p.rebuysUsed,
+            wantsStraddle: p.wantsStraddle,
+            leaving: p.leaving
+          })),
+          cfg: e.s.cfg
+        }
+      });
+    }
+    for (const ev of evs) {
+      if (ev.t === "act") {
+        const b = pre && pre.pid === ev.pid ? pre : preTick && preTick.pid === ev.pid ? preTick : null;
+        const pl = e.player(ev.pid) ?? e.s.departed?.find((x) => x.id === ev.pid);
+        const amount = ev.amount ?? 0;
+        const timeout = input.t === "tick" && !!ev.auto;
+        hist.push([h2?.order.indexOf(ev.pid) ?? -1, ev.a, ev.to ?? 0, amount, b?.street ?? h2?.street ?? ""]);
+        out.push({
+          t: "hand.action",
+          pid: ev.pid,
+          at,
+          st: b?.street ?? h2?.street ?? null,
+          p: {
+            pid: ev.pid,
+            a: ev.a,
+            to: ev.to ?? null,
+            amount,
+            auto: !!ev.auto,
+            timeout,
+            requested: input.t === "act" && input.pid === ev.pid ? input.action : null,
+            pos: h2 ? position(h2.order, ev.pid, h2) : null,
+            toCall: b?.legal?.toCall ?? null,
+            legal: b?.legal ?? null,
+            potBefore: b?.pot ?? null,
+            stackBefore: b?.stack ?? null,
+            streetBetBefore: b?.streetBet ?? null,
+            stackAfter: pl?.stack ?? null,
+            potAfter: e.potTotal(),
+            /** chips put in / pot before; / stack before; a bet or raise's total size (to) / pot before */
+            sizePot: b && b.pot > 0 ? round4(amount / b.pot) : null,
+            sizeStack: b && b.stack > 0 ? round4(amount / b.stack) : null,
+            toPot: b && b.pot > 0 && ev.to !== void 0 ? round4(ev.to / b.pot) : null,
+            decisionMs: b ? at - b.turnStartedAt : null,
+            bankBefore: b?.bank ?? null,
+            bankAfter: pl?.bank ?? null,
+            pots: potsNow(),
+            stacks: stacksOf(e.s)
+          }
+        });
+      } else if (ev.t === "street") {
+        out.push({ t: "hand.street", pid: null, at, st: ev.street, p: { street: ev.street, cards: ev.cards, board: ev.board ?? 1, boardNow: h2?.board.map(cardStr) ?? [], board2Now: h2?.board2?.map(cardStr) ?? null, pot: e.potTotal(), pots: potsNow(), stacks: stacksOf(e.s), live: h2 ? h2.order.filter((x) => !h2.ps[x].folded) : [], runout: !!h2?.runout } });
+      } else if (ev.t === "voteTwice") {
+        out.push({ t: "hand.vote", pid: null, at, st: h2?.street ?? null, p: { kind: "offer", pids: ev.pids, deadline: ev.deadline } });
+      } else if (ev.t === "twice") {
+        out.push({ t: "hand.vote", pid: null, at, st: h2?.street ?? null, p: { kind: "result", agreed: ev.agreed, timedOut: input.t === "tick" } });
+      } else if (ev.t === "show") {
+        shownVoluntarily.push(ev.pid);
+        out.push({ t: "hand.show", pid: ev.pid, at, st: h2?.street ?? null, p: { pid: ev.pid, cards: ev.cards, voluntary: true, afterEnd: !!h2?.results } });
+      }
+    }
+    if (input.t === "vote") out.push({ t: "hand.vote", pid: input.pid, at, st: h2?.street ?? null, p: { kind: "vote", pid: input.pid, yes: input.yes } });
+    decision(at);
+  }
+  const h = e.s.hand;
+  const res = h.results;
+  const stacks1 = stacksOf(e.s);
+  const buyins0 = Object.fromEntries(before.players.concat(before.departed ?? []).map((p) => [p.id, p.buyins]));
+  const after = e.s.players.concat(e.s.departed ?? []);
+  out.push({
+    t: "hand.end",
+    pid: null,
+    at: rec.endedAt,
+    st: "showdown",
+    p: {
+      handNo: rec.handNo,
+      startedAt: rec.startedAt,
+      endedAt: rec.endedAt,
+      ms: rec.endedAt - rec.startedAt,
+      board: rec.board,
+      board2: rec.board2,
+      holes: Object.fromEntries(h.order.map((pid) => [pid, h.ps[pid].cards.map(cardStr)])),
+      folded: h.order.filter((pid) => h.ps[pid].folded),
+      /** shown at the showdown by the rules (everyone still in shows); shown by choice; never shown */
+      revealed: Object.keys(h.revealed).filter((x) => h.revealed[x]),
+      shown: shownVoluntarily,
+      mucked: h.order.filter((pid) => !h.revealed[pid] && !h.shown[pid]),
+      showdown: !!res?.showdown,
+      twice: !!res?.twice,
+      pots: res?.pots.map((p) => ({ label: p.label, amount: p.amount, board: p.board ?? null, hand: p.hand?.name ?? null, awards: p.awards })) ?? [],
+      evals: res ? Object.fromEntries(Object.entries(res.evals).map(([pid, ev]) => [pid, { score: ev.score, name: ev.name, best: ev.best }])) : {},
+      evals2: res?.evals2 ? Object.fromEntries(Object.entries(res.evals2).map(([pid, ev]) => [pid, { score: ev.score, name: ev.name, best: ev.best }])) : null,
+      stacksBefore: stacks0,
+      stacksAfter: stacks1,
+      net: Object.fromEntries(h.order.map((pid) => [pid, (stacks1[pid] ?? 0) - (stacks0[pid] ?? 0) - ((after.find((p) => p.id === pid)?.buyins ?? 0) - (buyins0[pid] ?? 0))])),
+      contributed: Object.fromEntries(h.order.map((pid) => [pid, h.ps[pid].total])),
+      level: e.s.level,
+      deckCommit: rec.deckCommit,
+      engineVersion: rec.engineVersion,
+      decisions: k,
+      /** the exact replay log: the inputs (each with the server's time) and, if asked, the table before */
+      inputs: rec.inputs.map(slimInput),
+      ...o.withBefore ? { before } : {}
+    }
+  });
+  return out;
+}
+var round4 = (x) => Math.round(x * 1e4) / 1e4;
+var slimInput = (i) => i;
+
+// ../../packages/research/src/ingest.ts
+var RateLimiter = class {
+  constructor(perMinute = { batches: 60, bytes: 4e6 }, now = Date.now, maxKeys = 5e3) {
+    this.perMinute = perMinute;
+    this.now = now;
+    this.maxKeys = maxKeys;
+  }
+  buckets = /* @__PURE__ */ new Map();
+  /** May `key` send a batch of `bytes` now? (Token buckets refilled continuously, capacity one minute's worth.) */
+  take(key, bytes) {
+    const t = this.now();
+    let b = this.buckets.get(key);
+    if (!b) {
+      if (this.buckets.size >= this.maxKeys) this.buckets.delete(this.buckets.keys().next().value);
+      b = { batches: this.perMinute.batches, bytes: this.perMinute.bytes, at: t };
+      this.buckets.set(key, b);
+    }
+    const k = Math.max(0, t - b.at) / 6e4;
+    b.batches = Math.min(this.perMinute.batches, b.batches + k * this.perMinute.batches);
+    b.bytes = Math.min(this.perMinute.bytes, b.bytes + k * this.perMinute.bytes);
+    b.at = t;
+    if (b.batches < 1 || b.bytes < bytes) return false;
+    b.batches -= 1;
+    b.bytes -= bytes;
+    return true;
+  }
+};
+async function ingest(raw, d) {
+  const st = d.now();
+  const checked = checkBatch(raw, "c");
+  if ("error" in checked) return { status: checked.error === "too large" ? 413 : 400, body: { ok: false, error: checked.error, st } };
+  const key = checked.ok[0]?.d ?? checked.ok[0]?.s ?? "unknown";
+  if (!d.limiter.take(key, raw.length)) return { status: 429, body: { ok: false, error: "rate limited", st } };
+  for (const e of checked.ok) e.ts = st;
+  if (checked.ok.length) {
+    let stored = false;
+    try {
+      stored = await d.forward(checked.ok);
+    } catch (e) {
+      d.log?.(`research ingest: ${String(e)}`);
+    }
+    if (!stored) return { status: 503, body: { ok: false, error: "not stored", st: d.now() } };
+  }
+  return { status: 200, body: { ok: true, st, accepted: checked.ok.length, rejected: checked.rejected.length, ...checked.rejected.length ? { why: checked.rejected.slice(0, 5) } : {} } };
+}
+var globalFetch = (u, i) => globalThis.fetch(u, i);
+function databaseWriter(url2, key, sign, fetchFn = globalFetch) {
+  return async (events2) => {
+    const body = JSON.stringify({ events: events2 });
+    const res = await fetchFn(`${url2}/rest/v1/rpc/research_ingest`, { method: "POST", headers: { apikey: key, "content-type": "application/json" }, body: JSON.stringify({ p_body: body, p_sig: await sign(body) }) });
+    if (!res.ok) throw new Error(`research_ingest ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    return true;
+  };
+}
+var INGEST_HEADERS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, GET, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
+
+// ../../packages/research/src/shipper.ts
+var DEFAULTS = { delayMs: 1500, batchEvents: 300, maxWaiting: 5e4, maxBackoffMs: 5 * 6e4 };
+var ResearchShipper = class {
+  constructor(d, o = {}) {
+    this.d = d;
+    this.o = { ...DEFAULTS, ...o };
+  }
+  buf = [];
+  failed = [];
+  timer = null;
+  timerAt = 0;
+  sending = null;
+  tries = 0;
+  retryAt = 0;
+  o;
+  stats = { emitted: 0, sent: 0, dropped: 0, failures: 0 };
+  /** Batches a previous run could not send. */
+  async start() {
+    try {
+      this.failed = await this.d.store?.load() ?? [];
+    } catch (e) {
+      this.d.log?.(`research: store unreadable ${String(e)}`);
+    }
+    if (this.failed.length) this.arm(0);
+  }
+  emit(e) {
+    this.stats.emitted++;
+    this.buf.push(e);
+    if (this.buf.length + this.waitingFailed() > this.o.maxWaiting) {
+      this.buf.shift();
+      this.stats.dropped++;
+    }
+    this.arm(this.buf.length >= this.o.batchEvents ? 0 : this.o.delayMs);
+  }
+  get waiting() {
+    return this.buf.length + this.waitingFailed();
+  }
+  waitingFailed() {
+    return this.failed.reduce((s, f) => s + f.events.length, 0);
+  }
+  arm(ms) {
+    const wait = Math.max(ms, this.retryAt - this.d.now());
+    const at = this.d.now() + wait;
+    if (this.timer !== null) {
+      if (this.timerAt <= at) return;
+      this.d.clearTimer(this.timer);
+    }
+    this.timerAt = at;
+    this.timer = this.d.setTimer(() => {
+      this.timer = null;
+      const p = this.flush();
+      this.d.keepAlive?.(p);
+    }, wait);
+  }
+  /** Send everything waiting (failed batches first). Resolves when done; never throws. */
+  flush() {
+    if (this.sending) return this.sending.then(() => this.flush());
+    const run = this.flushOnce().finally(() => {
+      this.sending = null;
+    });
+    this.sending = run;
+    return run;
+  }
+  async flushOnce() {
+    if (this.failed.length && this.d.now() < this.retryAt) {
+      this.arm(0);
+      return;
+    }
+    while (this.failed.length) {
+      const f = this.failed[0];
+      if (!await this.tryWrite(f.events)) return this.backoff();
+      this.failed.shift();
+      try {
+        await this.d.store?.remove(f.key);
+      } catch {
+      }
+    }
+    while (this.buf.length) {
+      const batch = this.buf.splice(0, this.o.batchEvents);
+      if (!await this.tryWrite(batch)) {
+        const key = `${Math.floor(this.d.now())}-${batch[0].id}`;
+        this.failed.push({ key, events: batch });
+        try {
+          await this.d.store?.put(key, batch);
+        } catch {
+        }
+        return this.backoff();
+      }
+    }
+    this.tries = 0;
+    this.retryAt = 0;
+  }
+  async tryWrite(events2) {
+    try {
+      if (await this.d.write(events2)) {
+        this.stats.sent += events2.length;
+        return true;
+      }
+    } catch (e) {
+      this.d.log?.(`research: write failed ${String(e).slice(0, 200)}`);
+    }
+    this.stats.failures++;
+    return false;
+  }
+  backoff() {
+    this.tries++;
+    this.retryAt = this.d.now() + Math.min(this.o.maxBackoffMs, 2e3 * 2 ** Math.min(this.tries, 10));
+    this.arm(0);
+  }
+};
+
+// ../../packages/table/src/research-tap.ts
+var mono = () => {
+  const p = globalThis.performance;
+  return p ? p.now() : Date.now();
+};
+var RoomTap = class {
+  constructor(sink, ctx, now, defer = (fn) => {
+    setTimeout(fn, 0);
+  }) {
+    this.sink = sink;
+    this.ctx = ctx;
+    this.now = now;
+    this.defer = defer;
+    this.maker = new EnvelopeMaker("s", { wall: now, mono }, `server:${ctx.server}`);
+  }
+  maker;
+  connIds = /* @__PURE__ */ new WeakMap();
+  nextConn = 1;
+  /** A stable small number for a connection (within this server session). */
+  conn(c) {
+    let n = this.connIds.get(c);
+    if (!n) {
+      n = this.nextConn++;
+      this.connIds.set(c, n);
+    }
+    return n;
+  }
+  /** Record an event about `pid` (or the table), now. Never throws. */
+  emit(t, p, pid = null, extra = {}) {
+    try {
+      const at = extra.at ?? this.now();
+      const who = pid ? this.ctx.isAccount(pid) ? { a: pid, g: null } : { a: null, g: pid } : { a: extra.a ?? null, g: extra.g ?? null };
+      const d = extra.d !== void 0 ? extra.d : pid ? this.ctx.deviceOf(pid) : null;
+      const where = { tb: this.ctx.code, gm: this.ctx.gameId(), h: extra.h !== void 0 ? extra.h : this.ctx.handNo(), st: extra.st !== void 0 ? extra.st : this.ctx.street() };
+      this.sink.emit(this.maker.make(t, p, { ...who, d: d ? safeId(d) : null }, where, { tc: at, ts: at }));
+    } catch (e) {
+      warn(e);
+    }
+  }
+  /** A finished hand: replayed after the room has answered (see hand.ts). */
+  hand(rec) {
+    this.defer(() => {
+      let evs;
+      try {
+        evs = handEvents(rec);
+      } catch (e) {
+        warn(e);
+        return;
+      }
+      for (const ev of evs) this.emit(ev.t, ev.p, ev.pid, { h: rec.handNo, st: ev.st, at: ev.at });
+    });
+  }
+};
+var SAFE = /^[A-Za-z0-9_:.-]{1,64}$/;
+var safeId = (s) => SAFE.test(s) ? s : null;
+var warned = 0;
+var warn = (e) => {
+  if (warned++ < 20) console.error("research tap:", e);
+};
+function offlineEvents(up) {
+  const body = up.payload;
+  const gm = body.game.id;
+  const accounts = new Set((body.hand?.players ?? body.players ?? []).filter((p) => p.account).map((p) => p.key));
+  const session = `off-${gm.slice(0, 8)}-${body.hand ? body.hand.no : "end"}`;
+  let q = 0;
+  const env = (t, p, pid, at, h, st) => ({
+    id: detUuid(`${up.id}#${q + 1}`),
+    sv: SCHEMA_VERSION,
+    t,
+    v: EVENT_TYPES[t].v,
+    src: "s",
+    tc: at,
+    tm: 0,
+    s: session,
+    q: ++q,
+    d: null,
+    a: pid && accounts.has(pid) ? pid : null,
+    g: pid && !accounts.has(pid) ? pid : null,
+    tb: "OFFLINE",
+    gm,
+    ...h ? { h } : {},
+    ...st ? { st } : {},
+    app: "server:host-upload",
+    ts: at,
+    p
+  });
+  if (body.hand) {
+    const rec = body.hand.full;
+    const out = [env("offline.hand", { game: body.game, handNo: rec.handNo, players: body.hand.players }, null, rec.endedAt, rec.handNo, null)];
+    for (const ev of handEvents(rec)) out.push(env(ev.t, ev.p, ev.pid, ev.at, rec.handNo, ev.st));
+    return out;
+  }
+  return [env("game.end", { game: body.game, endedAt: body.endedAt ? Date.parse(body.endedAt) : null, players: body.players, offline: true }, null, body.endedAt ? Date.parse(body.endedAt) : Date.now(), null, null)];
+}
+function detUuid(text) {
+  const h = sha256hex(text);
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`;
+}
+
 // ../../packages/table/src/room.ts
 var hashToken = (t) => sha256hex(t);
-var UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+var UUID2 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 var ACKS_KEPT = 64;
 var ACKS_SAVED = 16;
 var REACT_GAP_MS = 800;
@@ -18132,6 +18814,24 @@ var TableRoom = class {
     if (this.opt.offline) this.opt.maxConnections = Math.min(this.opt.maxConnections, OFFLINE_MAX_PLAYERS + 4);
     this.createdAt = clock.now();
     if (saved) this.restore(saved);
+    if (opt.research) {
+      try {
+        this.tap = new RoomTap(opt.research, {
+          code,
+          server: this.opt.server,
+          gameId: () => this.game?.id ?? null,
+          handNo: () => this.engine && this.engine.s.handNo > 0 ? this.engine.s.handNo : null,
+          street: () => this.engine?.s.phase === "hand" ? this.engine.s.hand?.street ?? null : this.engine ? "between" : null,
+          isAccount: (pid) => this.accountSeats.has(pid),
+          deviceOf: (pid) => {
+            for (const st of this.conns.values()) if (st.pid === pid) return st.rs?.d ?? st.device ?? null;
+            return null;
+          }
+        }, () => this.clock.now());
+      } catch {
+        this.tap = null;
+      }
+    }
   }
   code;
   engine = null;
@@ -18175,19 +18875,31 @@ var TableRoom = class {
   batchDepth = 0;
   needSave = false;
   opt;
+  /** Research recording (null when the server does not record). */
+  tap = null;
+  /** Research: run fn with the tap, if recording; nothing it does may reach the game. */
+  R(fn) {
+    if (!this.tap) return;
+    try {
+      fn(this.tap);
+    } catch {
+    }
+  }
   // ---------------- doors in ----------------
   connect(conn) {
     if (this.conns.size >= this.opt.maxConnections) {
       this.send(conn, { t: "error", code: "table_full", message: "This table has too many phones connected" });
       return conn.close(4e3, "table_full");
     }
-    this.conns.set(conn, { pid: null, hello: false, spectator: false, windowStart: this.clock.now(), count: 0, lastReact: 0, lastSeen: this.clock.now() });
+    this.conns.set(conn, { pid: null, hello: false, spectator: false, windowStart: this.clock.now(), count: 0, lastReact: 0, lastSeen: this.clock.now(), openedAt: this.clock.now() });
+    this.R((t) => t.emit("conn.open", { c: t.conn(conn), n: this.conns.size }, null));
     this.reschedule();
   }
   disconnect(conn) {
     const st = this.conns.get(conn);
     if (!st) return;
     this.conns.delete(conn);
+    this.R((t) => t.emit("conn.close", { c: t.conn(conn), pid: st.pid, hello: st.hello, spectator: st.spectator, account: st.account ?? null, ms: this.clock.now() - (st.openedAt ?? this.clock.now()), n: this.conns.size }, st.pid, { d: st.rs?.d ?? st.device ?? null, ...st.pid ? {} : { a: st.account ?? null } }));
     if (st.pid && this.engine?.player(st.pid) && !this.connsOf(st.pid).length) {
       this.goingOffline.set(st.pid, this.clock.now() + this.opt.offlineAfterMs);
       this.trackEmpty();
@@ -18216,15 +18928,31 @@ var TableRoom = class {
     if (m.t === "react") return this.react(conn, st, m.reaction);
     if (m.t === "bg") {
       st.hidden = m.hidden;
+      this.R((t) => t.emit("conn.bg", { c: t.conn(conn), pid: st.pid, hidden: m.hidden }, st.pid, { d: st.rs?.d ?? st.device ?? null }));
       return;
     }
     if (m.t === "seed") return this.onSeed(st, m.handNo, m.seed);
     if (m.t === "moveSeat") return this.moveSeat(conn, st);
-    if (!st.pid || !this.engine) return this.ack(conn, null, m.actionId, "Spectators cannot play");
+    if (!st.pid || !this.engine) {
+      this.tapMsg(conn, st, m, now, "Spectators cannot play", false);
+      return this.ack(conn, null, m.actionId, "Spectators cannot play");
+    }
     const pid = st.pid;
     const done = this.acks.get(pid)?.get(m.actionId);
-    if (done) return this.send(conn, done);
-    this.ack(conn, pid, m.actionId, this.handle(pid, m, now));
+    if (done) {
+      this.tapMsg(conn, st, m, now, done.ok ? null : done.error ?? "refused", true);
+      return this.send(conn, done);
+    }
+    const result = this.handle(pid, m, now);
+    this.tapMsg(conn, st, m, now, result, false);
+    this.ack(conn, pid, m.actionId, result);
+  }
+  /** Research: a player's message, when it arrived (server clock), and what the table answered. */
+  tapMsg(conn, st, m, rx, error46, dup) {
+    this.R((t) => {
+      const { actionId, t: kind, ...rest } = m;
+      t.emit("msg.in", { c: t.conn(conn), pid: st.pid, kind, actionId, msg: rest, ok: error46 === null, error: error46, dup, rx, lag: this.clock.now() - rx }, st.pid, { d: st.rs?.d ?? st.device ?? null, ...st.pid ? {} : { a: st.account ?? null } });
+    });
   }
   /** The clock door: called at (or after) the time last passed to clock.schedule. */
   wake() {
@@ -18266,7 +18994,9 @@ var TableRoom = class {
   }
   // ---------------- messages ----------------
   hello(conn, st, m) {
+    if (m.rs) st.rs = m.rs;
     const fail = (code, message) => {
+      this.tapHello(conn, st, m, { ok: false, code, message });
       this.send(conn, { t: "error", code, message });
       conn.close(4e3, code);
     };
@@ -18299,6 +19029,7 @@ var TableRoom = class {
   seat(conn, st, m, who) {
     const now = this.clock.now();
     const fail = (code, message) => {
+      this.tapHello(conn, st, m, { ok: false, code, message, account: who?.account ?? null });
       this.send(conn, { t: "error", code, message });
       conn.close(4e3, code);
     };
@@ -18316,11 +19047,12 @@ var TableRoom = class {
       st.hello = true;
       st.spectator = true;
       st.pid = null;
+      this.tapHello(conn, st, m, { ok: true, watch: true, asked: !!m.spectate, account: who?.account ?? null });
       this.welcome(conn, null, m.lastSeq);
     };
     if (m.spectate || !m.token && !who) return watch();
     if (!who) {
-      if (UUID.test(m.player) || this.accountSeats.has(m.player)) return fail("not_allowed", "Sign in to take this seat");
+      if (UUID2.test(m.player) || this.accountSeats.has(m.player)) return fail("not_allowed", "Sign in to take this seat");
       const tokenHash = hashToken(m.token);
       if (this.tokens[m.player] && this.tokens[m.player] !== tokenHash) return fail("not_allowed", "That seat belongs to another phone");
     }
@@ -18328,6 +19060,7 @@ var TableRoom = class {
       const holder = this.connsOf(m.player).map((c) => this.conns.get(c)).find((o) => o.device && o.device !== who.device);
       if (holder) {
         watch();
+        this.R((t) => t.emit("seat.move", { kind: "elsewhere", c: t.conn(conn), pid: m.player, heldBy: holder.rs?.d ?? holder.device ?? null, heldInfo: holder.info ?? null }, m.player, { d: st.rs?.d ?? st.device ?? null }));
         if (st.hello) this.send(conn, { t: "seatElsewhere", device: holder.info ?? PLAIN_DEVICE });
         return;
       }
@@ -18336,6 +19069,7 @@ var TableRoom = class {
     if (!this.engine) {
       this.create(m.settings, now);
       this.crew = crew;
+      this.R((t) => t.emit("table.open", { by: m.player, settings: m.settings ?? null, cfg: this.engine.s.cfg, crew, casual: !!m.settings?.casual, gameId: this.game?.id ?? null, server: this.opt.server, offline: this.opt.offline, createdAt: this.createdAt, openedAt: now }, m.player));
     }
     const e = this.engine;
     const isNew = !e.player(m.player);
@@ -18352,6 +19086,10 @@ var TableRoom = class {
       if (m.token && !who) this.tokens[m.player] = hashToken(m.token);
       if (who) this.accountSeats.add(m.player);
       if (!this.host) this.host = m.player;
+      this.R((t) => {
+        const pl = e.player(m.player);
+        t.emit("seat.join", { pid: m.player, name: pl.name, chair: pl.chair, seat: pl.seat, joinIndex: e.s.players.length - 1, ever: e.s.players.length + (e.s.departed?.length ?? 0), stack: pl.stack, waitForBB: pl.waitForBB, host: this.host === m.player, account: !!who, avatar: this.avatars[m.player] ?? null, phase: e.s.phase, handNo: e.s.handNo }, m.player, { d: st.rs?.d ?? who?.device ?? null });
+      });
       this.persist();
     }
     for (const old of this.connsOf(m.player)) {
@@ -18364,6 +19102,7 @@ var TableRoom = class {
     if (wasAway) this.apply({ t: "presence", pid: m.player, connected: true, now });
     st.hello = true;
     st.pid = m.player;
+    this.tapHello(conn, st, m, { ok: true, watch: false, isNew, wasAway, account: who?.account ?? null });
     this.trackEmpty();
     this.welcome(conn, m.player, m.lastSeq);
     if (avChanged && !isNew && !wasAway) this.announce();
@@ -18382,6 +19121,10 @@ var TableRoom = class {
     if (!pid || !e || !e.player(pid) || e.player(pid).leaving) return this.send(conn, { t: "error", code: "bad_message", message: "There is no seat of yours at this table" });
     if (st.pid === pid) return;
     const now = this.clock.now();
+    this.R((t) => t.emit("seat.move", { kind: "moved", c: t.conn(conn), pid, to: st.rs?.d ?? st.device ?? null, toInfo: st.info ?? null, from: this.connsOf(pid).map((c) => {
+      const o = this.conns.get(c);
+      return { c: t.conn(c), d: o.rs?.d ?? o.device ?? null, info: o.info ?? null };
+    }) }, pid, { d: st.rs?.d ?? st.device ?? null }));
     for (const old of this.connsOf(pid)) {
       const o = this.conns.get(old);
       o.pid = null;
@@ -18446,7 +19189,10 @@ var TableRoom = class {
             st.pid = null;
             st.spectator = true;
           }
-          if (this.host === m.pid) this.host = this.pickHost(m.pid);
+          if (this.host === m.pid) {
+            this.host = this.pickHost(m.pid);
+            this.R((t) => t.emit("table.host", { from: m.pid, to: this.host, why: "removed" }, this.host));
+          }
         }
         if (!r && m.cmd === "end") {
           this.running = false;
@@ -18459,11 +19205,31 @@ var TableRoom = class {
       }
     }
   }
+  /** Research: a hello and how it ended (seated, watching, or refused). */
+  tapHello(conn, st, m, r) {
+    this.R((t) => t.emit("conn.hello", {
+      c: t.conn(conn),
+      ...r,
+      player: m.player,
+      v: m.v,
+      lastSeq: m.lastSeq,
+      spectate: !!m.spectate,
+      ticket: !!m.ticket,
+      token: !!m.token,
+      settings: !!m.settings,
+      avatar: m.avatar ?? null,
+      rs: m.rs ?? null,
+      device: st.device ?? null,
+      info: st.info ?? null,
+      offlineClaim: !!m.claim
+    }, r.ok && !r.watch ? m.player : null, { d: m.rs?.d ?? st.device ?? null, ...r.ok && !r.watch ? {} : { a: st.account ?? null } }));
+  }
   react(conn, st, reaction) {
     if (!st.pid) return;
     const now = this.clock.now();
     if (now - st.lastReact < REACT_GAP_MS) return this.send(conn, { t: "error", code: "rate_limited", message: "One reaction at a time" });
     st.lastReact = now;
+    this.R((t) => t.emit("react.send", { pid: st.pid, reaction }, st.pid));
     this.broadcastRaw({ t: "react", from: st.pid, reaction, at: now });
   }
   // ---------------- the table ----------------
@@ -18492,6 +19258,7 @@ var TableRoom = class {
     const r = e.apply(input);
     if (r.error !== void 0) return r.error;
     const events2 = r.events.filter((ev) => ev.t !== "deckReveal");
+    if (!HAND_INPUTS.has(input.t)) this.R((t) => t.emit("game.input", gameInput(e, input, events2), "pid" in input ? input.pid : input.t === "join" ? input.id : null, { at: input.now }));
     if (e.s.phase === "hand") this.inputs.push(input);
     else {
       this.base = e.snapshot();
@@ -18506,6 +19273,10 @@ var TableRoom = class {
       this.lastRecord = rec;
       this.store.appendHand(rec);
       this.toLeague(rec);
+      this.R((t) => {
+        t.hand(rec);
+        for (const p of e.s.players) if (p.stack === 0) t.emit("rebuy.offer", { pid: p.id, handNo: rec.handNo, rebuy: e.rebuyView(p.id), at: input.now }, p.id, { at: input.now });
+      });
       if (this.running && e.s.phase !== "ended") {
         const res = e.s.hand?.results;
         this.nextDealAt = input.now + (this.opt.handPauseMs ?? (res ? resultsPauseMs(res, runoutStreets(r.events, !!e.s.hand?.runout)) : FOLD_PAUSE_MS));
@@ -18598,6 +19369,7 @@ var TableRoom = class {
     if (this.crew && this.game && !this.game.announced && e.s.handNo >= 1) {
       this.game.announced = true;
       const hostName = e.player(this.host ?? "")?.name ?? "Someone";
+      this.R((t) => t.emit("push.sent", { kind: "crewTable", crew: this.crew, except: [...this.accountSeats].length }, this.host));
       this.opt.push({ kind: "crewTable", crew: this.crew, except: [...this.accountSeats], title: "A crew table just started", body: `${hostName} is playing at table ${this.code}. Tap to join.`, url: `/#/t/${this.code}`, tag: `table-${this.code}` });
     }
     const h = e.s.phase === "hand" && !e.s.paused ? e.s.hand : null;
@@ -18612,6 +19384,7 @@ var TableRoom = class {
     if (tp.sent || now < tp.at) return;
     tp.sent = true;
     const looking = this.connsOf(pid).some((c) => !this.conns.get(c).hidden);
+    this.R((t) => t.emit("push.sent", { kind: "turn", looking, waitedMs: this.opt.turnPushMs }, pid));
     if (!looking) this.opt.push({ kind: "turn", accounts: [pid], title: "Your turn", body: `Table ${this.code} is waiting for you.`, url: `/#/t/${this.code}`, tag: `turn-${this.code}` });
   }
   /**
@@ -18636,6 +19409,7 @@ var TableRoom = class {
       return;
     }
     this.hostHandoverAt = null;
+    this.R((t) => t.emit("table.host", { from: this.host, to: next.id, why: "away" }, next.id));
     this.host = next.id;
     this.announce();
   }
@@ -18756,6 +19530,7 @@ var TableRoom = class {
       players.push({ key: p.id, account: this.accountOf(p.id), name: p.name, buyins: p.buyins, final: p.stack, minStack: Math.min(this.minStacks[p.id] ?? p.stack, p.stack) });
     }
     this.store.league("end", `${this.game.id}:end`, { game: this.gameInfo(), endedAt: new Date(this.clock.now()).toISOString(), players });
+    this.R((t) => t.emit("game.end", { game: this.gameInfo(), endedAt: this.clock.now(), hands: e.s.handNo, players }, null));
     this.persist();
   }
   /** Two players called Riya at one table: the second becomes "Riya 2" (names are cut to 14 at the table). */
@@ -18933,6 +19708,23 @@ var TableRoom = class {
     return !!this.conns.get(conn)?.hello;
   }
 };
+var HAND_INPUTS = /* @__PURE__ */ new Set(["act", "tick", "start", "vote", "show"]);
+function gameInput(e, input, events2) {
+  const rest = { ...input };
+  delete rest.now;
+  const pid = "pid" in input ? input.pid : input.t === "join" ? input.id : null;
+  const p = pid ? e.player(pid) ?? e.s.departed?.find((x) => x.id === pid) ?? null : null;
+  return {
+    input: input.t === "join" ? { ...rest, name: rest.name } : rest,
+    events: events2.map((ev) => ev.t === "win" ? { t: "win" } : ev),
+    player: p ? { pid: p.id, stack: p.stack, chair: p.chair, seat: p.seat, sittingOut: p.sittingOut, away: p.away, connected: p.connected, busted: p.busted, leaving: p.leaving, buyins: p.buyins, rebuysUsed: p.rebuysUsed, waitForBB: p.waitForBB, missedSB: p.missedSB, missedBB: p.missedBB, postMissed: p.postMissed, wantsStraddle: p.wantsStraddle, bank: p.bank } : null,
+    phase: e.s.phase,
+    handNo: e.s.handNo,
+    level: e.s.level,
+    paused: e.s.paused,
+    pendingLevel: e.s.pendingLevel
+  };
+}
 var PLAIN_DEVICE = { kind: "phone", name: null };
 var deviceInfo = (who) => ({
   kind: who.deviceKind === "laptop" || who.deviceKind === "tablet" ? who.deviceKind : "phone",
@@ -18948,15 +19740,15 @@ function newGameId() {
 }
 
 // ../../packages/table/src/offline-upload.ts
-var UUID2 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+var UUID3 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 var KEY = /^[A-Za-z0-9_-]{1,64}$/;
 var MAX_UPLOAD_BYTES = 96 * 1024;
 var isInt = (x, min = 0, max = 1e9) => Number.isInteger(x) && x >= min && x <= max;
 function gameInfo(g) {
   const x = g;
   if (!x || typeof x !== "object") throw new Error("no game");
-  if (typeof x.id !== "string" || !UUID2.test(x.id)) throw new Error("bad game id");
-  if (x.crew !== null && (typeof x.crew !== "string" || !UUID2.test(x.crew))) throw new Error("bad crew");
+  if (typeof x.id !== "string" || !UUID3.test(x.id)) throw new Error("bad game id");
+  if (x.crew !== null && (typeof x.crew !== "string" || !UUID3.test(x.crew))) throw new Error("bad crew");
   if (!isInt(x.startStack, 1) || !isInt(x.bigBlind, 1)) throw new Error("bad stakes");
   if (typeof x.startedAt !== "string" || Number.isNaN(Date.parse(x.startedAt))) throw new Error("bad start time");
   return { id: x.id, crew: x.crew ?? null, table: "OFFLINE", server: "host", casual: !!x.casual, startStack: x.startStack, bigBlind: x.bigBlind, startedAt: new Date(x.startedAt).toISOString() };
@@ -18972,7 +19764,7 @@ function checkOfflineUpload(item) {
     if (rec.handNo !== hand.no || !rec.before || !Array.isArray(rec.inputs)) throw new Error("bad record");
     const replayed = Engine.replay(rec.before, rec.inputs).lastHandRecord;
     if (!replayed || replayed.handNo !== rec.handNo || JSON.stringify(replayed.results) !== JSON.stringify(rec.results)) throw new Error("the hand does not replay to its result");
-    const claimed = new Map(hand.players.filter((p) => p && KEY.test(p.key) && typeof p.account === "string" && UUID2.test(p.account) && p.account === p.key).map((p) => [p.key, p.account]));
+    const claimed = new Map(hand.players.filter((p) => p && KEY.test(p.key) && typeof p.account === "string" && UUID3.test(p.account) && p.account === p.key).map((p) => [p.key, p.account]));
     const { rows, pot } = handPlayers(replayed, (pid) => claimed.get(pid) ?? null);
     return {
       fn: "record_hand",
@@ -18985,7 +19777,7 @@ function checkOfflineUpload(item) {
     if (!Array.isArray(players) || !players.length || players.length > 40) throw new Error("bad players");
     const rows = players.map((p) => {
       if (typeof p.key !== "string" || !KEY.test(p.key) || typeof p.name !== "string" || p.name.length > 40 || !isInt(p.buyins) || !isInt(p.final) || !isInt(p.minStack)) throw new Error("bad player");
-      const account = typeof p.account === "string" && UUID2.test(p.account) && p.account === p.key ? p.account : null;
+      const account = typeof p.account === "string" && UUID3.test(p.account) && p.account === p.key ? p.account : null;
       return { key: p.key, account, name: p.name, buyins: p.buyins, final: p.final, minStack: p.minStack };
     });
     if (rows.reduce((s, r) => s + r.final - r.buyins, 0) !== 0) throw new Error("final chips do not add up");
@@ -19139,6 +19931,7 @@ mkdirSync(join(DATA, "tables"), { recursive: true });
 mkdirSync(join(DATA, "hands"), { recursive: true });
 mkdirSync(join(DATA, "outbox"), { recursive: true });
 mkdirSync(join(DATA, "backups"), { recursive: true, mode: 448 });
+mkdirSync(join(DATA, "research"), { recursive: true, mode: 448 });
 async function recorderKey() {
   if (process.env.RECORDER_TOKEN) return process.env.RECORDER_TOKEN;
   try {
@@ -19179,6 +19972,36 @@ void recorderKey().then(async (key) => {
     void recorder?.flush();
   }, 3e4).unref();
 });
+var RESEARCH_OFF = process.env.RESEARCH_OFF === "1";
+var researchDir = join(DATA, "research");
+var researchWrite = async (events2) => {
+  if (!signBody) return false;
+  return databaseWriter(process.env.SUPABASE_URL ?? SUPABASE_URL, SUPABASE_KEY, signBody)(events2);
+};
+var research = RESEARCH_OFF ? null : new ResearchShipper({
+  write: researchWrite,
+  now: Date.now,
+  setTimer: (fn, ms) => setTimeout(fn, ms).unref(),
+  clearTimer: (h) => clearTimeout(h),
+  log: (m) => console.log(m),
+  store: {
+    load: async () => readdirSync(researchDir).filter((f) => f.endsWith(".json")).sort().map((f) => ({ key: f.replace(/\.json$/, ""), events: JSON.parse(readFileSync(join(researchDir, f), "utf8")) })),
+    put: async (key, events2) => {
+      const f = join(researchDir, `${key.replace(/[^A-Za-z0-9_-]/g, "_")}.json`);
+      writeFileSync(`${f}.tmp`, JSON.stringify(events2), { mode: 384 });
+      renameSync(`${f}.tmp`, f);
+    },
+    remove: async (key) => {
+      try {
+        unlinkSync(join(researchDir, `${key.replace(/[^A-Za-z0-9_-]/g, "_")}.json`));
+      } catch {
+      }
+    }
+  }
+});
+void research?.start();
+var researchSink = research ? { emit: (e) => research.emit(e) } : void 0;
+var researchLimiter = new RateLimiter();
 var PUSH_RELAY = process.env.PUSH_RELAY ?? "https://train-poker-tables.apins-subdomain.workers.dev/push/send";
 function handPush(p) {
   if (!signBody || !PUSH_RELAY) return;
@@ -19260,7 +20083,7 @@ function getRoom(code) {
       if (recorder) void recorder.add(fn, id2, payload);
       else void outboxStore.put({ id: id2, fn, body: JSON.stringify(payload), tries: 0, nextAt: 0 });
     }
-  }, saved, { identify, server: "oracle", push: handPush, ...process.env.HAND_PAUSE_MS ? { handPauseMs: Number(process.env.HAND_PAUSE_MS) } : {} });
+  }, saved, { identify, server: "oracle", push: handPush, ...researchSink ? { research: researchSink } : {}, ...process.env.HAND_PAUSE_MS ? { handPauseMs: Number(process.env.HAND_PAUSE_MS) } : {} });
   l.room.settleAfterRestart();
   live.set(code, l);
   return l;
@@ -19285,6 +20108,10 @@ var server = createServer((req, res) => {
   }
   if (url2.pathname === "/offline/upload" && req.method === "POST") {
     offlineUpload(req, res, cors);
+    return;
+  }
+  if (url2.pathname === "/research/ingest" || url2.pathname === "/research/ping") {
+    researchRoute(req, res, url2.pathname);
     return;
   }
   if (url2.pathname === "/latency" || url2.pathname === "/tap") {
@@ -19327,7 +20154,42 @@ function offlineUpload(req, res, cors) {
     }
     if (recorder) void recorder.add(up.fn, up.id, up.payload);
     else void outboxStore.put({ id: up.id, fn: up.fn, body: JSON.stringify(up.payload), tries: 0, nextAt: 0, order: Date.now() });
+    if (research) try {
+      for (const e of offlineEvents(up)) research.emit(e);
+    } catch (e) {
+      console.error("research: offline upload", e);
+    }
     reply(200, { queued: up.id });
+  });
+}
+function researchRoute(req, res, path) {
+  const headers = { ...INGEST_HEADERS, "content-type": "application/json" };
+  const reply = (code, o) => {
+    res.writeHead(code, headers);
+    res.end(JSON.stringify(o));
+  };
+  if (req.method === "OPTIONS") {
+    res.writeHead(204, INGEST_HEADERS);
+    res.end();
+    return;
+  }
+  if (path === "/research/ping") return reply(200, { st: Date.now() });
+  if (req.method !== "POST") return reply(405, { ok: false, error: "POST only" });
+  if (!research) return reply(503, { ok: false, error: "not recording", st: Date.now() });
+  let text = "";
+  req.on("data", (c) => {
+    text += c;
+    if (text.length > 6e5) {
+      reply(413, { ok: false, error: "too large", st: Date.now() });
+      req.destroy();
+    }
+  });
+  req.on("end", () => {
+    if (res.headersSent) return;
+    void ingest(text, { now: Date.now, limiter: researchLimiter, forward: async (events2) => {
+      for (const e of events2) research.emit(e);
+      return true;
+    } }).then((r) => reply(r.status, r.body), () => reply(500, { ok: false, st: Date.now() }));
   });
 }
 var wss = new import_websocket_server.default({ noServer: true, maxPayload: 8 * 1024 });
