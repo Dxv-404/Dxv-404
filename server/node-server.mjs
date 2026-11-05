@@ -18200,6 +18200,7 @@ var EVENT_TYPES = {
   "hand.vote": { v: 1, src: "s" },
   "hand.show": { v: 1, src: "s" },
   "hand.end": { v: 1, src: "s" },
+  "hand.cut": { v: 1, src: "s" },
   "push.sent": { v: 1, src: "s" },
   "offline.hand": { v: 1, src: "s" },
   // ---- app: sessions, device, attention ----
@@ -19255,8 +19256,10 @@ var TableRoom = class {
   /** Apply one input; on success bump seq, tell everyone and save. Returns an error text or null. */
   apply(input) {
     const e = this.engine;
+    const cut = input.t === "host" && input.cmd === "end" && e.s.phase === "hand" && e.s.hand && !e.s.hand.results ? { handNo: e.s.handNo, street: e.s.hand.street, before: this.base, inputs: this.inputs.slice(), hand: JSON.parse(JSON.stringify(e.s.hand)) } : null;
     const r = e.apply(input);
     if (r.error !== void 0) return r.error;
+    if (cut) this.R((t) => t.emit("hand.cut", { ...cut, refunded: true, at: input.now }, null, { h: cut.handNo, st: cut.street, at: input.now }));
     const events2 = r.events.filter((ev) => ev.t !== "deckReveal");
     if (!HAND_INPUTS.has(input.t)) this.R((t) => t.emit("game.input", gameInput(e, input, events2), "pid" in input ? input.pid : input.t === "join" ? input.id : null, { at: input.now }));
     if (e.s.phase === "hand") this.inputs.push(input);
@@ -19486,8 +19489,10 @@ var TableRoom = class {
     const e = this.engine;
     if (!e) return;
     const anyone = e.s.players.some((p) => this.connsOf(p.id).length > 0);
+    const was = this.emptySince;
     if (anyone) this.emptySince = null;
     else if (this.emptySince === null) this.emptySince = this.clock.now();
+    if (was !== this.emptySince) this.persist();
   }
   autoEndAt() {
     const e = this.engine;
@@ -19621,6 +19626,7 @@ var TableRoom = class {
       ...this.game ? { game: this.game } : {},
       minStacks: this.minStacks,
       ...this.continuedFrom ? { continuedFrom: this.continuedFrom } : {},
+      ...this.emptySince !== null ? { emptySince: this.emptySince } : {},
       ...Object.keys(this.avatars).length ? { avatars: { ...this.avatars } } : {}
     };
   }
@@ -19659,6 +19665,7 @@ var TableRoom = class {
     this.game = p.game ?? null;
     this.minStacks = { ...p.minStacks ?? {} };
     this.continuedFrom = p.continuedFrom ?? null;
+    this.emptySince = typeof p.emptySince === "number" ? p.emptySince : null;
     this.avatars = {};
     for (const [pid, av] of Object.entries(p.avatars ?? {})) if (isAvatarId(av)) this.avatars[pid] = av;
     for (const [pid, list] of Object.entries(p.acks ?? {})) this.acks.set(pid, new Map(list.map((a) => [a.actionId, a])));
