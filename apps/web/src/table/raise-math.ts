@@ -19,8 +19,30 @@ export interface Preset { key: PresetKey; label: string; to: number }
 /** Never below the minimum raise, never above the stack; whole chips. */
 export const clampTo = (s: Spot, x: number): number => Math.max(s.minTo, Math.min(s.maxTo, Math.round(Number.isFinite(x) ? x : s.minTo)));
 
-/** − and +: one big blind per step (n steps; Shift with a key moves five). */
-export const stepTo = (s: Spot, to: number, dir: 1 | -1, n = 1): number => clampTo(s, to + dir * n * Math.max(1, s.bb));
+/**
+ * The size of one step at this amount: the largest round number (1, 2 or 5 × a power of ten) that is no
+ * more than 5% of the amount, and never less than `floor`. So the steps grow with the bet: at a big blind
+ * of 100, 1,237 steps by 100, 6,000 by 200, 15,000 by 500, 40,000 by 2,000.
+ */
+export function niceStep(amount: number, floor: number): number {
+  const cap = Math.abs(amount) * 0.05;
+  let best = Math.max(1, floor);
+  for (let p = 1; p <= cap; p *= 10) for (const m of [1, 2, 5]) if (m * p <= cap && m * p > best) best = m * p;
+  return best;
+}
+
+/**
+ * − and +: one step that grows with the bet (never less than the big blind), landing on a round multiple of
+ * that step; n steps at once (Shift moves five). Stops at the minimum raise and at all-in.
+ */
+export function stepTo(s: Spot, to: number, dir: 1 | -1, n = 1): number {
+  let x = clampTo(s, to);
+  for (let i = 0; i < n; i++) {
+    const step = niceStep(x, Math.max(1, s.bb));
+    x = clampTo(s, dir > 0 ? (Math.floor(x / step) + 1) * step : (Math.ceil(x / step) - 1) * step);
+  }
+  return x;
+}
 
 /**
  * Min, ½ pot, ¾ pot, pot and all-in. A pot-sized raise first matches the bet (the call goes into the pot)
@@ -68,15 +90,20 @@ export function typeKey(s: Spot, digits: string, key: string): string {
   return next.length > String(s.maxTo).length + 1 ? digits : next === '0' ? '' : next;
 }
 
-/** The slider: where an amount sits (0 to 1) and the amount at a point (whole big blinds, the ends exact). */
-export const sliderPos = (s: Spot, to: number): number => (s.maxTo <= s.minTo ? 1 : (clampTo(s, to) - s.minTo) / (s.maxTo - s.minTo));
+/**
+ * The slider is curved: the amount grows with the square of the position, so the first half of the track
+ * covers the first quarter of the range (fine control near the minimum, big jumps towards all-in). Between
+ * the ends it snaps to round amounts that grow with the bet (never finer than the small blind); the ends are exact.
+ */
+export const CURVE = 2;
+export const sliderPos = (s: Spot, to: number): number => (s.maxTo <= s.minTo ? 1 : Math.pow((clampTo(s, to) - s.minTo) / (s.maxTo - s.minTo), 1 / CURVE));
 export function sliderTo(s: Spot, f: number): number {
   const x = Math.max(0, Math.min(1, f));
   if (x >= 0.995) return s.maxTo;
   if (x <= 0.005) return s.minTo;
-  const raw = s.minTo + x * (s.maxTo - s.minTo);
-  const bb = Math.max(1, s.bb);
-  return clampTo(s, Math.round(raw / bb) * bb);
+  const raw = s.minTo + Math.pow(x, CURVE) * (s.maxTo - s.minTo);
+  const step = niceStep(raw, Math.max(1, Math.round(s.bb / 2)));
+  return clampTo(s, Math.round(raw / step) * step);
 }
 
 /** Holding − or +: the first repeat after HOLD_START ms, then every 120 ms, every 60 ms once held a second. */

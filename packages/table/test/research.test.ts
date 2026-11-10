@@ -125,17 +125,18 @@ describe('research recording on the table server', () => {
     const e = t.room.engine!;
     const first = e.s.hand!.toAct!;
     t.send(first, { t: 'act', handNo: e.s.handNo, action: { type: 'call' } });
-    const holes = JSON.parse(JSON.stringify(e.s.hand!.holes ?? null));
+    const cards = Object.fromEntries(Object.entries(e.s.hand!.ps).map(([id, hp]) => [id, JSON.parse(JSON.stringify(hp.cards))]));
     t.send('a', { t: 'host', cmd: 'end' });
     await flushTimers();
     const cut = got.find((x) => x.t === 'hand.cut');
     expect(cut).toBeDefined();
-    const p = cut!.p as { handNo: number; inputs: unknown[]; before: unknown; hand: { holes?: unknown } };
+    const p = cut!.p as { handNo: number; inputs: unknown[]; before: unknown; hand: { ps: Record<string, { cards: unknown }> } };
     expect(cut!.h).toBe(1);
     expect(p.handNo).toBe(1);
     expect(p.before).toBeTruthy();
     expect(p.inputs.length).toBeGreaterThanOrEqual(2); // the deal and the call
-    if (holes) expect(p.hand.holes).toEqual(holes);
+    // every player's hole cards travel with the cut hand, so it can be replayed exactly
+    for (const [id, c] of Object.entries(cards)) expect(p.hand.ps[id]?.cards).toEqual(c);
   });
 
   it('a recording that throws never stops the game', async () => {

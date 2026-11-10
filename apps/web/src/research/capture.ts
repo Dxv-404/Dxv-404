@@ -114,7 +114,7 @@ class Capture {
 
   private async send(body: string, beacon: boolean): Promise<SendResult> {
     const base = ingestBase();
-    if (!base) return { ok: false };
+    if (!base) return { ok: false, retry: false };
     const url = `${base}/research/ingest`;
     if (beacon) {
       // the page is going away: a beacon (text/plain, so no preflight), else a keepalive fetch

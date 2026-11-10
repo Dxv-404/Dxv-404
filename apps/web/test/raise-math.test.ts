@@ -14,14 +14,32 @@ describe('raise amounts', () => {
     expect(M.clampTo(BOARD, Number.NaN)).toBe(240);
   });
 
-  it('− and + move one big blind, five with Shift, and stop at the ends', () => {
-    expect(M.stepTo(BOARD, 650, 1)).toBe(670);
-    expect(M.stepTo(BOARD, 650, -1)).toBe(630);
-    expect(M.stepTo(BOARD, 650, 1, 5)).toBe(750);
+  it('− and + move one big blind at small amounts, five with Shift, and stop at the ends', () => {
+    expect(M.stepTo(BOARD, 650, 1)).toBe(660); // snaps up to the next multiple of the step
+    expect(M.stepTo(BOARD, 660, 1)).toBe(680);
+    expect(M.stepTo(BOARD, 650, -1)).toBe(640);
+    expect(M.stepTo(BOARD, 650, 1, 5)).toBe(740);
     expect(M.stepTo(BOARD, 240, -1)).toBe(240);
     expect(M.stepTo(BOARD, 1830, 1)).toBe(1840);
     expect(M.stepTo(BOARD, 1840, 1)).toBe(1840);
     expect(M.stepTo(BOARD, 250, -1, 5)).toBe(240);
+  });
+
+  it('− and + steps grow with the bet (big blind 100)', () => {
+    const big: M.Spot = { minTo: 200, maxTo: 100000, currentBet: 100, toCall: 100, pot: 150, bb: 100, isBet: false };
+    expect(M.stepTo(big, 1237, 1)).toBe(1300);
+    expect(M.stepTo(big, 1237, -1)).toBe(1200);
+    expect(M.stepTo(big, 3000, 1)).toBe(3100);
+    expect(M.stepTo(big, 6000, 1)).toBe(6200);
+    expect(M.stepTo(big, 15000, 1)).toBe(15500);
+    expect(M.stepTo(big, 40000, 1)).toBe(42000);
+    expect(M.stepTo(big, 40000, -1)).toBe(38000);
+    expect(M.stepTo(big, 200, -1)).toBe(200);
+    expect(M.stepTo(big, 99000, 1)).toBe(100000);
+    expect(M.niceStep(1237, 100)).toBe(100);
+    expect(M.niceStep(15000, 100)).toBe(500);
+    expect(M.niceStep(40000, 100)).toBe(2000);
+    expect(M.niceStep(10, 1)).toBe(1);
   });
 
   it('presets: a pot-sized raise first matches the bet, then raises by the pot', () => {
@@ -79,17 +97,25 @@ describe('raise amounts', () => {
     expect(M.typeKey(BOARD, '', '0')).toBe('');
   });
 
-  it('the slider: ends exact, whole big blinds between, positions round-trip', () => {
+  it('the slider: curved, ends exact, round amounts between, positions round-trip', () => {
     expect(M.sliderTo(BOARD, 0)).toBe(240);
     expect(M.sliderTo(BOARD, -1)).toBe(240);
     expect(M.sliderTo(BOARD, 1)).toBe(1840);
     expect(M.sliderTo(BOARD, 0.999)).toBe(1840);
-    expect(M.sliderTo(BOARD, 0.5) % 20).toBe(0);
-    expect(M.sliderTo(BOARD, 0.5)).toBe(1040);
+    // halfway along the track is a quarter of the way through the range: 240 + 1,600 / 4
+    expect(M.sliderTo(BOARD, 0.5)).toBe(640);
     expect(M.sliderPos(BOARD, 240)).toBe(0);
     expect(M.sliderPos(BOARD, 1840)).toBe(1);
-    expect(M.sliderPos(BOARD, 1040)).toBe(0.5);
+    expect(M.sliderPos(BOARD, 640)).toBe(0.5);
     expect(M.sliderPos({ ...BOARD, maxTo: 240 }, 240)).toBe(1);
+    // finer near the minimum: the first tenth of the track moves less than 20 chips
+    expect(M.sliderTo(BOARD, 0.1) - 240).toBeLessThanOrEqual(20);
+    // never runs backwards
+    let last = 0;
+    for (let i = 0; i <= 200; i++) { const v = M.sliderTo(BOARD, i / 200); expect(v).toBeGreaterThanOrEqual(last); last = v; }
+    // bigger stacks snap to bigger round amounts
+    const big: M.Spot = { minTo: 200, maxTo: 100000, currentBet: 100, toCall: 100, pot: 150, bb: 100, isBet: false };
+    expect(M.sliderTo(big, 0.7) % 1000).toBe(0);
   });
 
   it('holding: repeats every 120 ms, every 60 ms after a second', () => {

@@ -48,6 +48,8 @@ export class RaiseSheet {
   private off: (() => void)[] = [];
   private restore: { el: HTMLElement; html: string } | null = null;
   private traced = false;
+  private opened = performance.now();
+  private lastChange = performance.now();
   private tr(kind: string, d: Record<string, unknown>): void { try { this.o.trace?.(kind, d); } catch { /* never into the sheet */ } }
 
   constructor(private o: RaiseOpts, frame: Frame) {
@@ -180,7 +182,8 @@ export class RaiseSheet {
     const prev = this.value();
     this.digits = null; this.pad = false;
     this.to = M.clampTo(s, to);
-    if (how !== 'drag') this.tr(how, { v: how === 'step' ? dir : this.picked ?? 'key' });
+    if (how !== 'drag') this.tr(how, how === 'step' ? { v: dir, from: prev, to: this.to, size: Math.abs(this.to - prev) } : { v: this.picked ?? 'key', to: this.to });
+    this.lastChange = performance.now();
     const sl = this.box.querySelector('.rsl') as HTMLElement;
     sl.classList.toggle('snap', how === 'snap');
     this.update();
@@ -289,7 +292,7 @@ export class RaiseSheet {
 
   commit(): void {
     const a = M.actionFor(this.spot, this.value());
-    if (!this.traced) { this.traced = true; this.tr('close', { result: 'go', to: this.value(), action: a }); }
+    if (!this.traced) { this.traced = true; this.tr('close', { result: 'go', to: this.value(), action: a, ms: Math.round(performance.now() - this.opened), settleMs: Math.round(performance.now() - this.lastChange) }); }
     this.o.go(a);
   }
 
@@ -358,7 +361,7 @@ export class RaiseSheet {
   }
 
   destroy(): void {
-    if (!this.traced) { this.traced = true; this.tr('close', { result: 'cancel', to: this.value() }); }
+    if (!this.traced) { this.traced = true; this.tr('close', { result: 'cancel', to: this.value(), ms: Math.round(performance.now() - this.opened) }); }
     this.stopHold();
     this.unlabelDock();
     for (const f of this.off) f();

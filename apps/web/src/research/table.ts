@@ -182,12 +182,15 @@ export const raiseTrace = R.guard((kind: string, d: Record<string, unknown>) => 
   if (kind === 'close') {
     if (r.timer) clearTimeout(r.timer);
     if (r.pending !== null) r.stream.add(now, { to: r.pending }, true);
-    R.emit('raise.path', { spot: r.spot, ms: Math.round(now - r.open), result: d.result ?? null, final: d.to ?? r.last, marks: r.marks, batch: r.stream.take() });
+    R.emit('raise.path', { spot: r.spot, ms: Math.round(now - r.open), settleMs: (d.settleMs as number | undefined) ?? null, curve: 2, result: d.result ?? null, final: d.to ?? r.last, marks: r.marks, batch: r.stream.take() });
     raise = null;
     return;
   }
   // a mark: a preset, a step, typing, a drag starting or ending
-  r.marks.push([Math.round(now - r.open), kind, (d.v as string | number | undefined) ?? '']);
+  // a step also keeps its size (steps grow with the bet), so the dataset shows how far each press moved
+  const mark: (string | number)[] = [Math.round(now - r.open), kind, (d.v as string | number | undefined) ?? ''];
+  if (kind === 'step' && typeof d.size === 'number') mark.push(d.size);
+  r.marks.push(mark);
 });
 
 export const tableVia = (via: string): void => { try { current?.setVia(via); } catch { /* ignore */ } };
