@@ -102,10 +102,11 @@ export function runHistory(x: CrewExport): Report {
 /** The whole result as one signed-call body for public.record_achievements (the profile migration): every
  * achievement of every player who has an account, and their bluff counts. `ref` makes it land only once.
  * The table servers send it after each night (packages/table achievements-run.ts). */
-export function recordBody(r: Report, ref: string, whole = false): { ref: string; earned: object[]; counts: object[] } {
+export function recordBody(r: Report, ref: string, whole = false, crew?: string): { ref: string; crew?: string; earned: object[]; counts: object[] } {
   const players = r.players.filter((p) => p.account);
   return {
     ref,
+    ...(crew ? { crew } : {}), // (a run over the crew's whole history: the database notes the crew is up to date)
     earned: players.flatMap((p) => p.earned.map((e) => ({ account: p.pid, id: e.id, tier: e.tier ?? 0, reveal: e.reveal, at: new Date(e.at).toISOString(), ...(e.hand ? { hand: e.hand } : {}), ...(e.game ? { game: e.game } : {}), ...(e.detail ? { detail: e.detail } : {}) }))),
     // `whole`: this run covered the crew's whole history, so the counts are totals to set (a run after every
     // night repeats the history; adding would count the old hands again)

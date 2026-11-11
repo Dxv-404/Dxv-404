@@ -85,6 +85,13 @@ revoke all on public.achievements, public.achievement_counters, public.card_conf
 --  "counts":[{"account":"<uuid>","key":"bluffs","add":1}]}
 -- A seat without an account (a guest) is left out by the server; an account that no longer exists is skipped.
 -- An achievement a player already has is kept as it was (first time earned).
+-- when each crew's history last went through the checker (a table server does it after every night, and
+-- looks every few minutes for crews with a finished game since: the first fill, and nights that were missed)
+create table private.achievement_runs (
+  crew_id uuid primary key references public.crews(id) on delete cascade,
+  ran_at timestamptz not null default now()
+);
+
 create function public.record_achievements(p_body text, p_sig text) returns text
 language plpgsql security definer set search_path = '' as $$
 declare b jsonb; r text; gid uuid; g uuid; e jsonb; acc uuid;
@@ -128,6 +135,14 @@ begin
       select acc, e ->> 'key', coalesce((e ->> 'add')::int, (e ->> 'set')::int) where exists (select 1 from public.accounts a where a.id = acc and a.deleted_at is null)
       on conflict (account_id, key) do update set n = case when e ? 'set' then greatest(public.achievement_counters.n, excluded.n) else public.achievement_counters.n + excluded.n end;
   end loop;
+  -- a run over a crew's whole history says so: the crew is up to date as of now (achievements_due)
+  begin
+    if (b ->> 'crew') is not null then
+      insert into private.achievement_runs (crew_id) select c.id from public.crews c where c.id = (b ->> 'crew')::uuid
+        on conflict (crew_id) do update set ran_at = now();
+    end if;
+  exception when others then null; -- (not a crew id: nothing to mark)
+  end;
   return 'ok';
 end $$;
 
@@ -162,8 +177,17 @@ select jsonb_build_object(
 )
   );
 end $$;
-revoke all on function public.achievements_feed(text, text) from public, anon, authenticated;
-grant execute on function public.achievements_feed(text, text) to anon;
+-- the crews with a finished game the checker has not seen yet
+create function public.achievements_due(p_body text, p_sig text) returns jsonb
+language plpgsql stable security definer set search_path = '' as $$
+begin
+  if not private.recorder_ok(p_body, p_sig) then raise exception 'Not a table server' using errcode = '42501'; end if;
+  return (select coalesce(jsonb_agg(c.id), '[]'::jsonb) from public.crews c
+    where exists (select 1 from public.games g where g.crew_id = c.id and g.status = 'ended' and not g.casual
+      and g.ended_at > coalesce((select r.ran_at from private.achievement_runs r where r.crew_id = c.id), '-infinity'::timestamptz)));
+end $$;
+revoke all on function public.achievements_feed(text, text), public.achievements_due(text, text) from public, anon, authenticated;
+grant execute on function public.achievements_feed(text, text), public.achievements_due(text, text) to anon;
 
 -- ---------------------------------------------------------------- what a phone may change: its own card, what it has seen, what it shows
 -- {"frame":"four-corners","backdrop":null,"pose":"smirk","finish":"matte","title":"the-closer","stats":["wins","best_night","hands"],

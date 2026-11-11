@@ -239,5 +239,13 @@ select is(private.backup_tables() @> array['public.achievements', 'public.achiev
 select testing.as_phone(:PC, 'select public.delete_my_account()');
 select is(testing.as_phone(:PA, 'select public.profile_page() as p') -> 0 -> 'p' ->> 'own', 'true', 'the page still opens after a crew mate deletes their account');
 
+-- which crews the checker still has to see: any with a finished game since its last whole run
+select pg_temp.rec('record_game_end', pg_temp.ended(pg_temp.game(gen_random_uuid()::text, :'crew', now() - interval '1 hour'), now() - interval '30 minutes', :'abc', :'nabc', '{1000,1000,1000}', '{1100,900,1000}', '{1000,900,1000}'));
+select is(pg_temp.rec('achievements_due', '{"due":1}')::jsonb ? :'crew', true, 'a crew with a finished game is due');
+select is(testing.one(null, format('select public.achievements_due(%L, %L)', '{}', 'bad')), 'Not a table server', 'only a table server asks');
+select is(pg_temp.rec('record_achievements', format('{"ref":"due:1","crew":"%s","earned":[]}', :'crew')), 'ok', 'a whole run names its crew');
+select is(pg_temp.rec('achievements_due', '{"due":2}')::jsonb ? :'crew', false, 'and the crew is up to date');
+select is(pg_temp.rec('record_achievements', '{"ref":"due:2","crew":"not-a-crew","earned":[]}'), 'ok', 'a crew that is not one marks nothing');
+
 select * from finish();
 rollback;

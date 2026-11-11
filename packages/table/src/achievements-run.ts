@@ -16,13 +16,27 @@ export function crewOfEnd(body: string): { crew: string; game: string } | null {
   } catch { return null; }
 }
 
-export async function achievementsAfterNight(crew: string, game: string, d: AchievementsDeps): Promise<string> {
+export async function achievementsAfterNight(crew: string, game: string, d: AchievementsDeps, ref = `night:${game}`): Promise<string> {
   const ask = JSON.stringify({ crew, game });
   const x = (await d.rpc('achievements_feed', ask, await d.sign(ask))) as CrewExport | null;
   if (!x?.crew) return 'no crew';
   const report = runHistory(x);
-  const out = JSON.stringify(recordBody(report, `night:${game}`, true));
+  const out = JSON.stringify(recordBody(report, ref, true, x.crew.id));
   const res = String(await d.rpc('record_achievements', out, await d.sign(out)));
   d.log?.(`achievements: ${x.crew.name} after ${game.slice(0, 8)}: ${report.hands} hands, ${report.players.reduce((n, p) => n + p.earned.length, 0)} held in all, ${res}`);
   return res;
+}
+
+/**
+ * Crews with a finished game the checker has not seen (the first fill after this went live, a night whose
+ * run failed, games another server hosted): run them now. Returns how many crews were run.
+ */
+export async function achievementsDue(d: AchievementsDeps, now: () => number = Date.now): Promise<number> {
+  const ask = JSON.stringify({ due: now() });
+  const crews = (await d.rpc('achievements_due', ask, await d.sign(ask))) as string[] | null;
+  let n = 0;
+  for (const crew of crews ?? []) {
+    try { await achievementsAfterNight(crew, 'due', d, `due:${crew}:${now()}`); n++; } catch (e) { d.log?.(`achievements: crew ${crew.slice(0, 8)}: ${String(e)}`); }
+  }
+  return n;
 }

@@ -9,7 +9,7 @@ import { gzipSync } from 'node:zlib';
 import { dirname, join } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { PROTOCOL_VERSION } from '@tp/protocol';
-import { TableRoom, Recorder, tokenSigner, supabaseSend, supabaseRpc, crewOfEnd, achievementsAfterNight, checkOfflineUpload, offlineEvents, MAX_UPLOAD_BYTES, type Conn, type Persisted, type OutboxItem, type PushRequest } from '@tp/table';
+import { TableRoom, Recorder, tokenSigner, supabaseSend, supabaseRpc, crewOfEnd, achievementsAfterNight, achievementsDue, checkOfflineUpload, offlineEvents, MAX_UPLOAD_BYTES, type Conn, type Persisted, type OutboxItem, type PushRequest } from '@tp/table';
 import { INGEST_HEADERS, RateLimiter, ResearchShipper, databaseWriter, ingest, type Envelope } from '@tp/research';
 import { cachedTicketChecker, SUPABASE_KEY, SUPABASE_URL } from '@tp/account/ticket';
 import { LATENCY_PAGE } from './latency-page';
@@ -65,6 +65,10 @@ void recorderKey().then(async (key) => {
     const end = it.fn === 'record_game_end' ? crewOfEnd(it.body) : null;
     if (end) void achievementsAfterNight(end.crew, end.game, { sign, rpc, log: (m) => console.log(m) }).catch((e: unknown) => console.log(`achievements: ${String(e)}`));
   };
+  // and every ten minutes: crews with a finished game the checker has not seen (the first fill, a missed night)
+  const due = (): void => { void achievementsDue({ sign, rpc, log: (m) => console.log(m) }).then((k) => { if (k) console.log(`achievements: ${k} crew(s) brought up to date`); }).catch((e: unknown) => console.log(`achievements due: ${String(e)}`)); };
+  setTimeout(due, 20_000);
+  setInterval(due, 10 * 60_000).unref();
   await recorder.start();
   console.log(`league recorder ready (${recorder.pending} waiting in the outbox)`);
   void recorder.flush();
