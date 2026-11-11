@@ -9,7 +9,7 @@ import { gzipSync } from 'node:zlib';
 import { dirname, join } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { PROTOCOL_VERSION } from '@tp/protocol';
-import { TableRoom, Recorder, tokenSigner, supabaseSend, checkOfflineUpload, offlineEvents, MAX_UPLOAD_BYTES, type Conn, type Persisted, type OutboxItem, type PushRequest } from '@tp/table';
+import { TableRoom, Recorder, tokenSigner, supabaseSend, supabaseRpc, crewOfEnd, achievementsAfterNight, checkOfflineUpload, offlineEvents, MAX_UPLOAD_BYTES, type Conn, type Persisted, type OutboxItem, type PushRequest } from '@tp/table';
 import { INGEST_HEADERS, RateLimiter, ResearchShipper, databaseWriter, ingest, type Envelope } from '@tp/research';
 import { cachedTicketChecker, SUPABASE_KEY, SUPABASE_URL } from '@tp/account/ticket';
 import { LATENCY_PAGE } from './latency-page';

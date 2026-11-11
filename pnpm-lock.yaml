@@ -166,6 +166,9 @@ importers:
 
   packages/table:
     dependencies:
+      '@tp/achievements':
+        specifier: workspace:*
+        version: link:../achievements
       '@tp/engine':
         specifier: workspace:*
         version: link:../engine

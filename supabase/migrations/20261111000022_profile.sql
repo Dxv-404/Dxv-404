@@ -137,28 +137,28 @@ end $$;
 -- and sends the result to record_achievements. {"crew":"<uuid>"}
 create function public.achievements_feed(p_body text, p_sig text) returns jsonb
 language plpgsql stable security definer set search_path = '' as $$
-declare c uuid;
+declare v_crew uuid;
 begin
   if not private.recorder_ok(p_body, p_sig) then raise exception 'Not a table server' using errcode = '42501'; end if;
-  begin c := (p_body::jsonb ->> 'crew')::uuid; exception when others then c := null; end;
-  if c is null then raise exception 'Which crew?' using errcode = '22023'; end if;
+  begin v_crew := (p_body::jsonb ->> 'crew')::uuid; exception when others then v_crew := null; end;
+  if v_crew is null then raise exception 'Which crew?' using errcode = '22023'; end if;
   return (
 select jsonb_build_object(
   'v', 1,
-  'crew', (select jsonb_build_object('id', c.id, 'name', c.name) from public.crews c where c.id = c),
+  'crew', (select jsonb_build_object('id', c.id, 'name', c.name) from public.crews c where c.id = v_crew),
   'members', (select coalesce(jsonb_agg(jsonb_build_object('account', m.account_id, 'name', a.name, 'joined', m.joined_at)), '[]'::jsonb)
-    from public.crew_members m join public.accounts a on a.id = m.account_id where m.crew_id = c and m.status = 'active'),
+    from public.crew_members m join public.accounts a on a.id = m.account_id where m.crew_id = v_crew and m.status = 'active'),
   'seasons', (select coalesce(jsonb_agg(jsonb_build_object('id', s.id, 'name', coalesce(s.title, s.name), 'ends', s.ends_at, 'closed', s.closed_at,
-      'ranks', (select coalesce(jsonb_agg(jsonb_build_object('account', l.account_id, 'rank', l.rank)), '[]'::jsonb) from private.league_standings(c, s.id, false) l)) order by s.starts_at), '[]'::jsonb)
-    from public.seasons s where s.crew_id = c),
+      'ranks', (select coalesce(jsonb_agg(jsonb_build_object('account', l.account_id, 'rank', l.rank)), '[]'::jsonb) from private.league_standings(v_crew, s.id, false) l)) order by s.starts_at), '[]'::jsonb)
+    from public.seasons s where s.crew_id = v_crew),
   'games', (select coalesce(jsonb_agg(jsonb_build_object('id', g.id, 'table', g.table_code, 'started', g.started_at, 'ended', g.ended_at,
       'start_stack', g.start_stack, 'big_blind', g.big_blind, 'casual', g.casual, 'season', g.season_id,
       'host', (select t.opened_by from public.crew_tables t where t.crew_id = g.crew_id and t.table_code = g.table_code and t.opened_at <= g.started_at order by t.opened_at desc limit 1),
       'players', (select jsonb_agg(jsonb_build_object('key', p.player_key, 'account', p.account_id, 'name', p.name, 'place', p.place, 'net', p.net, 'buyins', p.buyins, 'hands', p.hands))
         from public.game_players p where p.game_id = g.id)) order by g.started_at), '[]'::jsonb)
-    from public.games g where g.crew_id = c and g.status = 'ended'),
+    from public.games g where g.crew_id = v_crew and g.status = 'ended'),
   'hands', (select coalesce(jsonb_agg(jsonb_build_object('game', r.game_id, 'no', r.hand_no, 'record', r.record) order by g.started_at, r.hand_no), '[]'::jsonb)
-    from private.hand_records r join public.games g on g.id = r.game_id where g.crew_id = c and g.status = 'ended')
+    from private.hand_records r join public.games g on g.id = r.game_id where g.crew_id = v_crew and g.status = 'ended')
 )
   );
 end $$;

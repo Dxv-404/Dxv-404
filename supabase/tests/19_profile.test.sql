@@ -86,6 +86,19 @@ select is(pg_temp.rec('record_achievements', format('{"ref":"r3","earned":[{"acc
 select is(pg_temp.rec('record_achievements', format('{"ref":"r4","earned":[{"account":"%s","id":"quads"}]}', :'a')), 'That is not a list of achievements', 'and one without a time');
 select is(pg_temp.rec('record_achievements', format('{"ref":"r5","counts":[{"account":"%s","key":"bluffs","add":-5}]}', :'a')), 'That is not a list of achievements', 'a count only goes up');
 select is((select count(*)::int from private.achievement_calls), 2, 'a refused call is not remembered');
+-- a run over the whole history sets the totals (it never counts the old hands twice, and never lowers a count)
+select is(pg_temp.rec('record_achievements', format('{"ref":"night:n1","counts":[{"account":"%s","key":"bluffs","set":7}]}', :'a')), 'ok', 'a total is set');
+select is((select n from achievement_counters where account_id = :'a' and key = 'bluffs'), 7, 'to what the run counted');
+select is(pg_temp.rec('record_achievements', format('{"ref":"night:n2","counts":[{"account":"%s","key":"bluffs","set":5}]}', :'a')), 'ok', 'a smaller total');
+select is((select n from achievement_counters where account_id = :'a' and key = 'bluffs'), 7, 'does not lower it');
+select is(pg_temp.rec('record_achievements', format('{"ref":"r6","counts":[{"account":"%s","key":"bluffs","set":5,"add":1}]}', :'a')), 'That is not a list of achievements', 'set or add, not both');
+update achievement_counters set n = 3 where account_id = :'a' and key = 'bluffs';
+-- what a table server reads for the run
+select is(testing.one(null, format('select public.achievements_feed(%L, %L)', format('{"crew":"%s"}', :'crew'), 'deadbeef')), 'Not a table server', 'only a signed table server reads a crew''s hands');
+select is(testing.one(:PA, format('select public.achievements_feed(%L, %L)', '{}', 'x')), 'permission denied for function achievements_feed', 'no phone can');
+select is((pg_temp.rec('achievements_feed', format('{"crew":"%s"}', :'crew'))::jsonb -> 'crew' ->> 'id'), :'crew', 'the feed names the crew');
+select is(jsonb_typeof(pg_temp.rec('achievements_feed', format('{"crew":"%s"}', :'crew'))::jsonb -> 'hands'), 'array', 'with its hands');
+select is(pg_temp.rec('achievements_feed', '{"crew":"nope"}'), 'Which crew?', 'a call without a crew is refused');
 -- tiers, a held one, and one from the crew's history (no hand)
 select is(pg_temp.rec('record_achievements', format('{"ref":"%s:end","game":"%s","earned":[{"account":"%s","id":"regular","tier":1,"at":"%s","hand":2},{"account":"%s","id":"great_fold","reveal":"night","at":"%s","hand":1},{"account":"%s","id":"nemesis","reveal":"night","at":"%s","detail":{"name":"Bala"}}]}',
   :'G2', :'G2', :'a', :'t2', :'a', :'t2', :'a', :'t2')), 'ok', 'tiers and held ones are recorded');

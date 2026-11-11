@@ -1,7 +1,7 @@
 // The Cloudflare table server (the backup to the Oracle server in Hyderabad): one Durable Object per table.
 import { DurableObject } from 'cloudflare:workers';
 import { PROTOCOL_VERSION, VAPID_PUBLIC_KEY, PUSH_SUBJECT } from '@tp/protocol';
-import { TableRoom, Recorder, tokenSigner, supabaseSend, supabaseRpc, deliver, drainOutbox, verifySigned, checkOfflineUpload, offlineEvents, MAX_UPLOAD_BYTES, type Conn, type ConnInfo, type Persisted, type OutboxItem, type PushDeps, type PushRequest } from '@tp/table';
+import { TableRoom, Recorder, tokenSigner, supabaseSend, supabaseRpc, crewOfEnd, achievementsAfterNight, deliver, drainOutbox, verifySigned, checkOfflineUpload, offlineEvents, MAX_UPLOAD_BYTES, type Conn, type ConnInfo, type Persisted, type OutboxItem, type PushDeps, type PushRequest } from '@tp/table';
 import { INGEST_HEADERS, RateLimiter, ResearchShipper, archiveDb, databaseWriter, ingest, runArchive, type Envelope } from '@tp/research';
 import { cachedTicketChecker, checkTicket, SUPABASE_KEY, SUPABASE_URL } from '@tp/account/ticket';
 
@@ -118,6 +118,12 @@ export class Table extends DurableObject<Env> {
           put: async (it) => { await storage.put(`outbox:${it.id}`, it); },
           remove: async (id) => { await storage.delete(`outbox:${id}`); },
         }, tokenSigner(env.RECORDER_TOKEN), supabaseSend(SUPABASE_URL, SUPABASE_KEY), Date.now, (m) => console.log(m));
+        // a crew's night is stored: check the crew's achievements (never in the way of the game)
+        const token = env.RECORDER_TOKEN;
+        this.recorder.onStored = (it) => {
+          const end = it.fn === 'record_game_end' ? crewOfEnd(it.body) : null;
+          if (end) ctx.waitUntil(achievementsAfterNight(end.crew, end.game, { sign: tokenSigner(token), rpc: supabaseRpc(SUPABASE_URL, SUPABASE_KEY), log: (m) => console.log(m) }).catch((e: unknown) => console.error('achievements failed', e)));
+        };
         await this.recorder.start();
       }
       const write = researchWriter(env);
