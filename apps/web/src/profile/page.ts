@@ -5,16 +5,20 @@
 // screens: phones (one column), sideways phones (the card fixed on the left), tablets (two columns),
 // laptops and desktops (the rail and three columns). Colours, type and corners are the theme's own tokens.
 import type { HandTile, ProfileDay, ProfileNight, ProfilePage } from '@tp/account';
-import { navBar, railBar, type MenuActions } from '../ui/shell';
+import { navBar, openPicker, railBar, type MenuActions } from '../ui/shell';
 import { applyFeel, av, btn, cardImg, el, esc, fmtN, ic, level, ordinal, sizeOf, type Size } from '../crews/kit';
 import { existing, ensure } from '../crews/data';
 import { myAvatar } from '../avatars';
 import { currentTheme } from '../table/screen';
 import { allBars, areaOf, cabinet, cardStats, dayText, graphGeo, heatGrid, heatSummary, istDayKey, nextBars, pathOf, rankSteps, serialOf, sideOf, signed, titleOf, type Bar, type GraphMark, type Slot } from './math';
 import { demoProfile } from './demo';
+import { hasPoster, posterUrl, stageSvg } from './poster';
 import { track, watchSections } from './track';
 
 type Sheet = { close(): void; sheet: HTMLElement };
+
+// a tap on the card's animated poster plays the character's move; the poster's page says so
+if (typeof window !== 'undefined') window.addEventListener('message', (e) => { const d = e.data as { t?: string; id?: string } | null; if (e.origin === location.origin && d?.t === 'tp-poster') track('profile-card', { what: 'move', poster: String(d.id ?? '').slice(0, 40) }); });
 export interface ProfileDeps {
   screen(build: (el: HTMLElement) => void | (() => void)): void;
   openSheet(content: HTMLElement, o?: { label?: string; onClose?: () => void; tall?: boolean }): Sheet;
@@ -79,10 +83,33 @@ export function profileUi(deps: ProfileDeps) {
       const p = await a.profilePage(target.account, target.crew);
       if (p.own) store.set('tp-profile-news', 0);
       done('ok', p);
+      if (p.own) welcome(p);
     } catch {
       // the database part of the profile may not be live yet (or the phone is offline): say so kindly
       done(navigator.onLine === false ? 'offline' : 'setup');
     }
+  }
+
+  /**
+   * What is new since the profile was last opened, in a sheet: the first time ever, everything already
+   * earned ("Welcome: you've already earned 6"); after that, the new ones.
+   */
+  function welcome(p: ProfilePage): void {
+    let first = true;
+    try { first = !localStorage.getItem('tp-profile-welcomed'); } catch { /* blocked: greets again */ }
+    const fresh = cabinet(p).filter((a) => a.owned && (first || a.owned.new));
+    store.set('tp-profile-welcomed', 1);
+    if (!fresh.length) return;
+    const order = ['mythic', 'legendary', 'epic', 'rare', 'uncommon', 'common'];
+    fresh.sort((x, y) => order.indexOf(x.rarity) - order.indexOf(y.rarity));
+    const box = el('div', 'cw cw-sheet pf-welcome');
+    applyFeel(box);
+    box.dataset.testid = 'profile-welcome';
+    box.innerHTML = `<div class="hrow"><b class="sh2">${first ? `Welcome: you’ve already earned ${fresh.length}` : `New since last time: ${fresh.length}`}</b></div>`
+      + `<p class="hint flat">${first ? 'Every hand you have played here was checked. These are yours already.' : 'Earned at the table since you last looked.'}</p>`
+      + `<div class="pf-wlist">${fresh.map((a, i) => `<div class="pf-wrow" style="--i:${Math.min(i, 12)}">${medal(a, 44)}<span><b>${esc(a.name)}</b><small>${esc(a.rarity)}${a.unlocks.length ? ` · ${esc(a.unlocks.join(', '))}` : ''}</small></span></div>`).join('')}</div>`;
+    track('profile-welcome', { first, n: fresh.length });
+    deps.openSheet(box, { label: 'Profile welcome', tall: fresh.length > 5 });
   }
 
   /** The profile was looked at: its new achievements count as seen and the bars remember where they were. */
@@ -201,16 +228,26 @@ export function profileUi(deps: ProfileDeps) {
   function face(p: ProfilePage, px: number): string {
     return av({ id: p.account.id, name: p.account.name, avatar: p.own && state === 'ok' && !target.demo ? myAvatar() ?? p.account.avatar : p.account.avatar }, px);
   }
+  /** The avatar a profile shows (my own pick is on this phone before the account has it). */
+  const pickOf = (p: ProfilePage): string | null => ((p.own && state === 'ok') || target.demo || state === 'guest' ? myAvatar() ?? p.account.avatar : p.account.avatar) ?? null;
   function cardSec(p: ProfilePage): HTMLElement {
     const s = section('card', 'pf-cardsec');
     const title = titleOf(p);
     const stats = cardStats(p);
-    s.innerHTML = `<div class="pf-card" data-testid="profile-card" role="group" aria-label="${esc(p.account.name)}'s card">`
+    const pick = pickOf(p);
+    const lv = level();
+    // the character's animated poster (drawn for the characters players have picked so far); everyone else:
+    // their picture, or an empty chair, under the theme's spotlight
+    const port = hasPoster(pick)
+      ? `<div class="pf-c-port poster" data-poster="${esc(pick!)}"><iframe class="pf-poster" title="${esc(p.account.name)}'s character. Tap to see its move." src="${posterUrl(pick!, lv)}" loading="lazy" scrolling="no"></iframe></div>`
+      : `<${p.own && state === 'ok' ? 'button data-x="pick-avatar"' : 'div'} class="pf-c-port stage${pick ? '' : ' empty'}" ${p.own && state === 'ok' ? `aria-label="${pick ? 'Change your character' : 'Choose your character'}"` : 'aria-hidden="true"'}>${stageSvg(!pick)}${pick ? face(p, 112) : ''}`
+        + `${pick ? '' : `<span class="pf-c-none">${p.own ? 'No character yet<small>Tap to choose one</small>' : 'No character yet'}</span>`}</${p.own && state === 'ok' ? 'button' : 'div'}>`;
+    s.innerHTML = `<div class="pf-card${hasPoster(pick) ? ' has-poster' : ''}" data-testid="profile-card" role="group" aria-label="${esc(p.account.name)}'s card">`
       + `<div class="pf-c-top"><span>${esc(serialOf(p))}</span></div>`
-      + `<div class="pf-c-port" aria-hidden="true">${face(p, 112)}</div>`
+      + port
       + `<div class="pf-c-name"><b>${esc(p.account.name)}</b><small>${title ? esc(title) : 'No title yet'}</small>${p.card?.tagline ? `<i>${esc(p.card.tagline)}</i>` : ''}</div>`
-      + `<div class="pf-c-stats">${stats.map((x) => `<span><b>${esc(x.value)}</b><small>${esc(x.label)}</small></span>`).join('')}</div></div>`
-      + `<p class="hint pf-c-note">The card's frames, portraits and finishes are being drawn. What you unlock now will be waiting for it.</p>`;
+      + `<div class="pf-c-stats">${stats.map((x) => `<span><b>${esc(x.value)}</b><small>${esc(x.label)}</small></span>`).join('')}</div></div>`;
+    s.querySelector('[data-x="pick-avatar"]')?.addEventListener('click', () => { track('profile-card', { what: 'pick-avatar' }); void openPicker(() => { if (root?.isConnected) paint(false); }); });
     return s;
   }
   /** Phones: the card as a slim bar once the real one has scrolled away. */

@@ -1231,7 +1231,13 @@ export function crewsUi(deps: CrewsDeps) {
       + `<div class="pnl"><span class="klbl">Best hand this season</span>${best}</div>`
       + `<div class="pnl"><div class="hrow"><span class="klbl">Last ${pc.form.length || 8} games</span><span class="sp"></span><span class="acc">${spark([0, ...pc.form.map(Number)], 140)}</span></div>${pc.form_points?.length ? `<div class="formp" data-testid="form-points" aria-label="Points, last ${pc.form_points.length} nights">${pc.form_points.map((v) => `<span class="${v > 0 ? 'tu' : v < 0 ? 'td' : ''}">${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v)}</span>`).join('')}</div>` : ''}</div>`
       + `<div class="pnl"><span class="klbl">Trophies</span>${pc.trophies.length ? `<div class="troph">${pc.trophies.slice(0, 6).map((t) => `<span><i>${TROPHY[t.kind]?.[0] ?? '🏅'}</i><small>${t.kind === 'season_winner' && t.season ? `Season ${t.season}` : TROPHY[t.kind]?.[1] ?? t.kind}</small></span>`).join('')}</div>` : '<p class="hint flat">None yet.</p>'}</div>`;
-    pane.onclick = (e) => { if ((e.target as HTMLElement).closest('[data-x=back]')) back(); };
+    // their profile: the card, the achievements they show, their nights with this crew
+    pane.insertAdjacentHTML('beforeend', `<button class="bb s" data-x="profile" data-testid="player-profile">${esc(pc.name)}’s card and achievements</button>`);
+    pane.onclick = (e) => {
+      const t = e.target as HTMLElement;
+      if (t.closest('[data-x=back]')) back();
+      else if (t.closest('[data-x=profile]')) location.hash = `#/profile/${pc.account_id}`;
+    };
   }
 
   // ---------------------------------------------------------------- routes

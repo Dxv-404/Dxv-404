@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Velvet Peacock</title>
+<script>(function(){var h=location.hash.slice(1);if(h==='calm'||h==='still')document.documentElement.classList.add(h)})()</script>
+<style>
+@font-face{font-family:'Yuji Syuku';src:url(/tp/fonts/yujisyuku-regular.woff2) format('woff2');font-weight:400;font-style:normal;font-display:block}
+html,body{margin:0;height:100%;background:transparent;overflow:hidden}
+</style>
+<style id="pk-css">
+/* ---- pk: root + motion levels ---- */
+.pk-root{position:relative;width:100%;aspect-ratio:3/4;overflow:hidden;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;contain:layout paint;line-height:0}
+.pk-root svg{position:absolute;left:0;top:0;width:100%;height:100%;display:block}
+.pk-sheen{position:absolute;left:0;top:0;width:100%;height:100%;opacity:0;pointer-events:none;
+  background:linear-gradient(100deg,rgba(255,255,255,0) 38%,rgba(255,255,255,.34) 50%,rgba(255,255,255,0) 62%)}
+/* paused while off screen / tab hidden */
+.pk-off *{animation-play-state:paused!important}
+/* calm: no idle loops, entrance is one soft fade.  still: nothing moves. */
+:is(.calm,.still) .pk-root *, .pk-root:is(.calm,.still) *{animation:none!important}
+@keyframes pk-calm-in{from{opacity:0}to{opacity:1}}
+.calm .pk-root.pk-go, .pk-root.calm.pk-go{animation:pk-calm-in .5s ease-out both}
+@media (prefers-reduced-motion: reduce){ .pk-root, .pk-root *{animation:none!important} }
+
+/* ---- pk: Velvet Peacock ---- */
+.pk-root{background:#1a0510}
+.pk-svg *{transform-box:view-box}
+/* idle: the fan breathes: the whole fan layer spreads a hair wider and settles (compositor-only, no repaint) */
+.pk-fanclip{position:absolute;left:6%;top:4.5%;width:88%;height:91%;overflow:hidden}
+@keyframes pk-breathe{0%,100%{transform:scale(1,1)}50%{transform:scale(1.022,.99)}}
+.pk-root .pk-fan{transform-origin:50% 82.42%;will-change:transform;animation:pk-breathe 4.4s ease-in-out infinite}
+.pk-l-back{will-change:transform}
+/* idle: crest stalks bobble on their own springs */
+@keyframes pk-bob{0%,100%{transform:rotate(-3deg)}22%{transform:rotate(4.5deg)}41%{transform:rotate(-1.5deg)}58%{transform:rotate(2.5deg)}76%{transform:rotate(-.5deg)}}
+.pk-cs{animation:pk-bob 2.9s ease-in-out infinite}
+/* idle: now and then a glint ripples across the eyes */
+@keyframes pk-shine{0%,100%{opacity:0}3%{opacity:.85}8%{opacity:0}}
+.pk-shine{opacity:0;animation:pk-shine 7.5s linear infinite}
+/* entrance: the scene comes up; the tail itself opens via the move (JS) */
+@keyframes pk-in{from{opacity:0}to{opacity:1}}
+.pk-go.pk-root{animation:pk-in .3s ease-out backwards}
+</style>
+</head><body>
+<div class="pk-root" role="img" aria-label="Velvet Peacock">
+<!-- layer 1: velvet sunburst (repaints only during the move) -->
+<svg class="pk-svg pk-l-back" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+<defs>
+<linearGradient id="pk-gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f6dc96"/><stop offset=".5" stop-color="#d4a64a"/><stop offset="1" stop-color="#9c7124"/></linearGradient>
+<linearGradient id="pk-vane" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#0f4c5c"/><stop offset=".6" stop-color="#16707a"/><stop offset="1" stop-color="#2aa38e"/></linearGradient>
+<radialGradient id="pk-bg" cx=".5" cy=".75" r=".8"><stop offset="0" stop-color="#7a1f34"/><stop offset="1" stop-color="#2a0814"/></radialGradient>
+<linearGradient id="pk-neck" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2f62c4"/><stop offset=".55" stop-color="#1d3f8a"/><stop offset="1" stop-color="#0f2558"/></linearGradient>
+<clipPath id="pk-frame"><rect x="18" y="18" width="264" height="364" rx="2"/></clipPath>
+</defs>
+<rect width="300" height="400" fill="#1a0510"/>
+<g clip-path="url(#pk-frame)">
+<rect width="300" height="400" fill="url(#pk-bg)"/>
+<g class="pk-rays" fill="#a0304a" opacity=".22" style="transform-origin:150px 318px"><path d="M150 318 L549.3 294.0 L549.3 342.0 Z"/><path d="M150 318 L541.9 398.2 L529.5 444.5 Z"/><path d="M150 318 L507.8 496.9 L483.8 538.4 Z"/><path d="M150 318 L449.3 583.4 L415.4 617.3 Z"/><path d="M150 318 L370.4 651.8 L328.9 675.8 Z"/><path d="M150 318 L276.5 697.5 L230.2 709.9 Z"/><path d="M150 318 L174.0 717.3 L126.0 717.3 Z"/><path d="M150 318 L69.8 709.9 L23.5 697.5 Z"/><path d="M150 318 L-28.9 675.8 L-70.4 651.8 Z"/><path d="M150 318 L-115.4 617.3 L-149.3 583.4 Z"/><path d="M150 318 L-183.8 538.4 L-207.8 496.9 Z"/><path d="M150 318 L-229.5 444.5 L-241.9 398.2 Z"/><path d="M150 318 L-249.3 342.0 L-249.3 294.0 Z"/><path d="M150 318 L-241.9 237.8 L-229.5 191.5 Z"/><path d="M150 318 L-207.8 139.1 L-183.8 97.6 Z"/><path d="M150 318 L-149.3 52.6 L-115.4 18.7 Z"/><path d="M150 318 L-70.4 -15.8 L-28.9 -39.8 Z"/><path d="M150 318 L23.5 -61.5 L69.8 -73.9 Z"/><path d="M150 318 L126.0 -81.3 L174.0 -81.3 Z"/><path d="M150 318 L230.2 -73.9 L276.5 -61.5 Z"/><path d="M150 318 L328.9 -39.8 L370.4 -15.8 Z"/><path d="M150 318 L415.4 18.7 L449.3 52.6 Z"/><path d="M150 318 L483.8 97.6 L507.8 139.1 Z"/><path d="M150 318 L529.5 191.5 L541.9 237.8 Z"/></g>
+<g class="pk-arcs" fill="none" stroke="url(#pk-gold)" opacity=".5" style="transform-origin:150px 318px"><circle cx="150" cy="318" r="236" stroke-width="1"/><circle cx="150" cy="318" r="244" stroke-width="2.5"/></g>
+</g>
+</svg>
+<!-- layer 2: the fan, clipped to the frame; idle breathing is one compositor transform on this layer -->
+<div class="pk-fanclip"><svg class="pk-svg pk-fan" xmlns="http://www.w3.org/2000/svg" viewBox="18 18 264 364" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+<!-- tail: 15 vanes, then their 15 eyes on top, then the short gold scales at the base -->
+<g class="pk-tail"><g transform="rotate(-75.00 150 318)"><g class="pk-f" data-a="-75.00" data-r="7" style="transform-origin:150px 318px"><path d="M150 318 C143 245.55 131 201 150 157 C169 201 157 245.55 150 318 Z" fill="url(#pk-vane)" stroke="#0b3a40" stroke-width="1"/>
+    <path d="M150 318 L150 163" stroke="url(#pk-gold)" stroke-width="1.2" opacity=".85"/>
+    <path d="M144 267.65 L150 261.65 L156 267.65" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/><path d="M144 243.5 L150 237.5 L156 243.5" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/><path d="M144 224.18 L150 218.18 L156 224.18" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/></g></g><g transform="rotate(-64.29 150 318)"><g class="pk-f" data-a="-64.29" data-r="6" style="transform-origin:150px 318px"><path d="M150 318 C143 242.39999999999998 131 194 150 150 C169 194 157 242.39999999999998 150 318 Z" fill="url(#pk-vane)" stroke="#0b3a40" stroke-width="1"/>
+    <path d="M150 318 L150 156" stroke="url(#pk-gold)" stroke-width="1.2" opacity=".85"/>
+    <path d="M144 265.2 L150 259.2 L156 265.2" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/><path d="M144 240 L150 234 L156 240" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/><path d="M144 219.84 L150 213.84 L156 219.84" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/></g></g><g transform="rotate(-53.57 150 318)"><g class="pk-f" data-a="-53.57" data-r="5" style="transform-origin:150px 318px"><path d="M150 318 C143 239.25 131 187 150 143 C169 187 157 239.25 150 318 Z" fill="url(#pk-vane)" stroke="#0b3a40" stroke-width="1"/>
+    <path d="M150 318 L150 149" stroke="url(#pk-gold)" stroke-width="1.2" opacity=".85"/>
+    <path d="M144 262.75 L150 256.75 L156 262.75" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/><path d="M144 236.5 L150 230.5 L156 236.5" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/><path d="M144 215.5 L150 209.5 L156 215.5" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/></g></g><g transform="rotate(-42.86 150 318)"><g class="pk-f" data-a="-42.86" data-r="4" style="transform-origin:150px 318px"><path d="M150 318 C143 236.1 131 180 150 136 C169 180 157 236.1 150 318 Z" fill="url(#pk-vane)" stroke="#0b3a40" stroke-width="1"/>
+    <path d="M150 318 L150 142" stroke="url(#pk-gold)" stroke-width="1.2" opacity=".85"/>
+    <path d="M144 260.3 L150 254.3 L156 260.3" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/><path d="M144 233 L150 227 L156 233" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/><path d="M144 211.16 L150 205.16 L156 211.16" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/></g></g><g transform="rotate(-32.14 150 318)"><g class="pk-f" data-a="-32.14" data-r="3" style="transform-origin:150px 318px"><path d="M150 318 C143 232.95 131 173 150 129 C169 173 157 232.95 150 318 Z" fill="url(#pk-vane)" stroke="#0b3a40" stroke-width="1"/>
+    <path d="M150 318 L150 135" stroke="url(#pk-gold)" stroke-width="1.2" opacity=".85"/>
+    <path d="M144 257.85 L150 251.85000000000002 L156 257.85" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/><path d="M144 229.5 L150 223.5 L156 229.5" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/><path d="M144 206.82 L150 200.82 L156 206.82" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/></g></g><g transform="rotate(-21.43 150 318)"><g class="pk-f" data-a="-21.43" data-r="2" style="transform-origin:150px 318px"><path d="M150 318 C143 229.8 131 166 150 122 C169 166 157 229.8 150 318 Z" fill="url(#pk-vane)" stroke="#0b3a40" stroke-width="1"/>
+    <path d="M150 318 L150 128" stroke="url(#pk-gold)" stroke-width="1.2" opacity=".85"/>
+    <path d="M144 255.4 L150 249.4 L156 255.4" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/><path d="M144 226 L150 220 L156 226" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/><path d="M144 202.48000000000002 L150 196.48000000000002 L156 202.48000000000002" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/></g></g><g transform="rotate(-10.71 150 318)"><g class="pk-f" data-a="-10.71" data-r="1" style="transform-origin:150px 318px"><path d="M150 318 C143 226.64999999999998 131 159 150 115 C169 159 157 226.64999999999998 150 318 Z" fill="url(#pk-vane)" stroke="#0b3a40" stroke-width="1"/>
+    <path d="M150 318 L150 121" stroke="url(#pk-gold)" stroke-width="1.2" opacity=".85"/>
+    <path d="M144 252.95 L150 246.95 L156 252.95" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/><path d="M144 222.5 L150 216.5 L156 222.5" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/><path d="M144 198.14 L150 192.14 L156 198.14" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/></g></g><g transform="rotate(0.00 150 318)"><g class="pk-f" data-a="0.00" data-r="0" style="transform-origin:150px 318px"><path d="M150 318 C143 223.5 131 152 150 108 C169 152 157 223.5 150 318 Z" fill="url(#pk-vane)" stroke="#0b3a40" stroke-width="1"/>
+    <path d="M150 318 L150 114" stroke="url(#pk-gold)" stroke-width="1.2" opacity=".85"/>
+    <path d="M144 250.5 L150 244.5 L156 250.5" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/><path d="M144 219 L150 213 L156 219" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/><path d="M144 193.8 L150 187.8 L156 193.8" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/></g></g><g transform="rotate(10.71 150 318)"><g class="pk-f" data-a="10.71" data-r="1" style="transform-origin:150px 318px"><path d="M150 318 C143 226.64999999999998 131 159 150 115 C169 159 157 226.64999999999998 150 318 Z" fill="url(#pk-vane)" stroke="#0b3a40" stroke-width="1"/>
+    <path d="M150 318 L150 121" stroke="url(#pk-gold)" stroke-width="1.2" opacity=".85"/>
+    <path d="M144 252.95 L150 246.95 L156 252.95" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/><path d="M144 222.5 L150 216.5 L156 222.5" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/><path d="M144 198.14 L150 192.14 L156 198.14" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/></g></g><g transform="rotate(21.43 150 318)"><g class="pk-f" data-a="21.43" data-r="2" style="transform-origin:150px 318px"><path d="M150 318 C143 229.8 131 166 150 122 C169 166 157 229.8 150 318 Z" fill="url(#pk-vane)" stroke="#0b3a40" stroke-width="1"/>
+    <path d="M150 318 L150 128" stroke="url(#pk-gold)" stroke-width="1.2" opacity=".85"/>
+    <path d="M144 255.4 L150 249.4 L156 255.4" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/><path d="M144 226 L150 220 L156 226" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/><path d="M144 202.48000000000002 L150 196.48000000000002 L156 202.48000000000002" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/></g></g><g transform="rotate(32.14 150 318)"><g class="pk-f" data-a="32.14" data-r="3" style="transform-origin:150px 318px"><path d="M150 318 C143 232.95 131 173 150 129 C169 173 157 232.95 150 318 Z" fill="url(#pk-vane)" stroke="#0b3a40" stroke-width="1"/>
+    <path d="M150 318 L150 135" stroke="url(#pk-gold)" stroke-width="1.2" opacity=".85"/>
+    <path d="M144 257.85 L150 251.85000000000002 L156 257.85" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/><path d="M144 229.5 L150 223.5 L156 229.5" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/><path d="M144 206.82 L150 200.82 L156 206.82" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/></g></g><g transform="rotate(42.86 150 318)"><g class="pk-f" data-a="42.86" data-r="4" style="transform-origin:150px 318px"><path d="M150 318 C143 236.1 131 180 150 136 C169 180 157 236.1 150 318 Z" fill="url(#pk-vane)" stroke="#0b3a40" stroke-width="1"/>
+    <path d="M150 318 L150 142" stroke="url(#pk-gold)" stroke-width="1.2" opacity=".85"/>
+    <path d="M144 260.3 L150 254.3 L156 260.3" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/><path d="M144 233 L150 227 L156 233" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/><path d="M144 211.16 L150 205.16 L156 211.16" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/></g></g><g transform="rotate(53.57 150 318)"><g class="pk-f" data-a="53.57" data-r="5" style="transform-origin:150px 318px"><path d="M150 318 C143 239.25 131 187 150 143 C169 187 157 239.25 150 318 Z" fill="url(#pk-vane)" stroke="#0b3a40" stroke-width="1"/>
+    <path d="M150 318 L150 149" stroke="url(#pk-gold)" stroke-width="1.2" opacity=".85"/>
+    <path d="M144 262.75 L150 256.75 L156 262.75" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/><path d="M144 236.5 L150 230.5 L156 236.5" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/><path d="M144 215.5 L150 209.5 L156 215.5" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/></g></g><g transform="rotate(64.29 150 318)"><g class="pk-f" data-a="64.29" data-r="6" style="transform-origin:150px 318px"><path d="M150 318 C143 242.39999999999998 131 194 150 150 C169 194 157 242.39999999999998 150 318 Z" fill="url(#pk-vane)" stroke="#0b3a40" stroke-width="1"/>
+    <path d="M150 318 L150 156" stroke="url(#pk-gold)" stroke-width="1.2" opacity=".85"/>
+    <path d="M144 265.2 L150 259.2 L156 265.2" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/><path d="M144 240 L150 234 L156 240" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/><path d="M144 219.84 L150 213.84 L156 219.84" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/></g></g><g transform="rotate(75.00 150 318)"><g class="pk-f" data-a="75.00" data-r="7" style="transform-origin:150px 318px"><path d="M150 318 C143 245.55 131 201 150 157 C169 201 157 245.55 150 318 Z" fill="url(#pk-vane)" stroke="#0b3a40" stroke-width="1"/>
+    <path d="M150 318 L150 163" stroke="url(#pk-gold)" stroke-width="1.2" opacity=".85"/>
+    <path d="M144 267.65 L150 261.65 L156 267.65" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/><path d="M144 243.5 L150 237.5 L156 243.5" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/><path d="M144 224.18 L150 218.18 L156 224.18" stroke="#d4a64a" stroke-width=".8" fill="none" opacity=".55"/></g></g></g>
+<g class="pk-eyes"><g transform="rotate(-75.00 150 318)"><g class="pk-f" data-a="-75.00" data-r="7" style="transform-origin:150px 318px"><g class="pk-eye" data-i="0" style="transform-origin:150px 185px">
+    <ellipse cx="150" cy="183" rx="13" ry="17" fill="url(#pk-gold)"/>
+    <ellipse cx="150" cy="184" rx="10" ry="13" fill="#1a8a7a"/>
+    <ellipse cx="150" cy="186" rx="6.5" ry="8.5" fill="#1d3f8a"/>
+    <ellipse cx="150" cy="188" rx="3.2" ry="4.2" fill="#0a1430"/>
+    <ellipse cx="148.5" cy="184" rx="1.4" ry="2" fill="#f3d58a"/>
+    <g class="pk-shine" style="animation-delay:0.00s"><ellipse cx="150" cy="183" rx="13" ry="17" fill="#fff6d0" opacity=".3"/><ellipse cx="150" cy="184" rx="10" ry="13" fill="#7dffe0" opacity=".34"/>
+    <ellipse cx="150" cy="183" rx="14.5" ry="18.5" fill="none" stroke="#fffbe6" stroke-width="1.6"/>
+    <path d="M148 173 L149.4 181.6 L157 183 L149.4 184.4 L148 193 L146.6 184.4 L139 183 L146.6 181.6 Z" fill="#ffffff"/></g>
+  </g></g></g><g transform="rotate(-64.29 150 318)"><g class="pk-f" data-a="-64.29" data-r="6" style="transform-origin:150px 318px"><g class="pk-eye" data-i="1" style="transform-origin:150px 178px">
+    <ellipse cx="150" cy="176" rx="13" ry="17" fill="url(#pk-gold)"/>
+    <ellipse cx="150" cy="177" rx="10" ry="13" fill="#1a8a7a"/>
+    <ellipse cx="150" cy="179" rx="6.5" ry="8.5" fill="#1d3f8a"/>
+    <ellipse cx="150" cy="181" rx="3.2" ry="4.2" fill="#0a1430"/>
+    <ellipse cx="148.5" cy="177" rx="1.4" ry="2" fill="#f3d58a"/>
+    <g class="pk-shine" style="animation-delay:0.11s"><ellipse cx="150" cy="176" rx="13" ry="17" fill="#fff6d0" opacity=".3"/><ellipse cx="150" cy="177" rx="10" ry="13" fill="#7dffe0" opacity=".34"/>
+    <ellipse cx="150" cy="176" rx="14.5" ry="18.5" fill="none" stroke="#fffbe6" stroke-width="1.6"/>
+    <path d="M148 166 L149.4 174.6 L157 176 L149.4 177.4 L148 186 L146.6 177.4 L139 176 L146.6 174.6 Z" fill="#ffffff"/></g>
+  </g></g></g><g transform="rotate(-53.57 150 318)"><g class="pk-f" data-a="-53.57" data-r="5" style="transform-origin:150px 318px"><g class="pk-eye" data-i="2" style="transform-origin:150px 171px">
+    <ellipse cx="150" cy="169" rx="13" ry="17" fill="url(#pk-gold)"/>
+    <ellipse cx="150" cy="170" rx="10" ry="13" fill="#1a8a7a"/>
+    <ellipse cx="150" cy="172" rx="6.5" ry="8.5" fill="#1d3f8a"/>
+    <ellipse cx="150" cy="174" rx="3.2" ry="4.2" fill="#0a1430"/>
+    <ellipse cx="148.5" cy="170" rx="1.4" ry="2" fill="#f3d58a"/>
+    <g class="pk-shine" style="animation-delay:0.22s"><ellipse cx="150" cy="169" rx="13" ry="17" fill="#fff6d0" opacity=".3"/><ellipse cx="150" cy="170" rx="10" ry="13" fill="#7dffe0" opacity=".34"/>
+    <ellipse cx="150" cy="169" rx="14.5" ry="18.5" fill="none" stroke="#fffbe6" stroke-width="1.6"/>
+    <path d="M148 159 L149.4 167.6 L157 169 L149.4 170.4 L148 179 L146.6 170.4 L139 169 L146.6 167.6 Z" fill="#ffffff"/></g>
+  </g></g></g><g transform="rotate(-42.86 150 318)"><g class="pk-f" data-a="-42.86" data-r="4" style="transform-origin:150px 318px"><g class="pk-eye" data-i="3" style="transform-origin:150px 164px">
+    <ellipse cx="150" cy="162" rx="13" ry="17" fill="url(#pk-gold)"/>
+    <ellipse cx="150" cy="163" rx="10" ry="13" fill="#1a8a7a"/>
+    <ellipse cx="150" cy="165" rx="6.5" ry="8.5" fill="#1d3f8a"/>
+    <ellipse cx="150" cy="167" rx="3.2" ry="4.2" fill="#0a1430"/>
+    <ellipse cx="148.5" cy="163" rx="1.4" ry="2" fill="#f3d58a"/>
+    <g class="pk-shine" style="animation-delay:0.33s"><ellipse cx="150" cy="162" rx="13" ry="17" fill="#fff6d0" opacity=".3"/><ellipse cx="150" cy="163" rx="10" ry="13" fill="#7dffe0" opacity=".34"/>
+    <ellipse cx="150" cy="162" rx="14.5" ry="18.5" fill="none" stroke="#fffbe6" stroke-width="1.6"/>
+    <path d="M148 152 L149.4 160.6 L157 162 L149.4 163.4 L148 172 L146.6 163.4 L139 162 L146.6 160.6 Z" fill="#ffffff"/></g>
+  </g></g></g><g transform="rotate(-32.14 150 318)"><g class="pk-f" data-a="-32.14" data-r="3" style="transform-origin:150px 318px"><g class="pk-eye" data-i="4" style="transform-origin:150px 157px">
+    <ellipse cx="150" cy="155" rx="13" ry="17" fill="url(#pk-gold)"/>
+    <ellipse cx="150" cy="156" rx="10" ry="13" fill="#1a8a7a"/>
+    <ellipse cx="150" cy="158" rx="6.5" ry="8.5" fill="#1d3f8a"/>
+    <ellipse cx="150" cy="160" rx="3.2" ry="4.2" fill="#0a1430"/>
+    <ellipse cx="148.5" cy="156" rx="1.4" ry="2" fill="#f3d58a"/>
+    <g class="pk-shine" style="animation-delay:0.44s"><ellipse cx="150" cy="155" rx="13" ry="17" fill="#fff6d0" opacity=".3"/><ellipse cx="150" cy="156" rx="10" ry="13" fill="#7dffe0" opacity=".34"/>
+    <ellipse cx="150" cy="155" rx="14.5" ry="18.5" fill="none" stroke="#fffbe6" stroke-width="1.6"/>
+    <path d="M148 145 L149.4 153.6 L157 155 L149.4 156.4 L148 165 L146.6 156.4 L139 155 L146.6 153.6 Z" fill="#ffffff"/></g>
+  </g></g></g><g transform="rotate(-21.43 150 318)"><g class="pk-f" data-a="-21.43" data-r="2" style="transform-origin:150px 318px"><g class="pk-eye" data-i="5" style="transform-origin:150px 150px">
+    <ellipse cx="150" cy="148" rx="13" ry="17" fill="url(#pk-gold)"/>
+    <ellipse cx="150" cy="149" rx="10" ry="13" fill="#1a8a7a"/>
+    <ellipse cx="150" cy="151" rx="6.5" ry="8.5" fill="#1d3f8a"/>
+    <ellipse cx="150" cy="153" rx="3.2" ry="4.2" fill="#0a1430"/>
+    <ellipse cx="148.5" cy="149" rx="1.4" ry="2" fill="#f3d58a"/>
+    <g class="pk-shine" style="animation-delay:0.55s"><ellipse cx="150" cy="148" rx="13" ry="17" fill="#fff6d0" opacity=".3"/><ellipse cx="150" cy="149" rx="10" ry="13" fill="#7dffe0" opacity=".34"/>
+    <ellipse cx="150" cy="148" rx="14.5" ry="18.5" fill="none" stroke="#fffbe6" stroke-width="1.6"/>
+    <path d="M148 138 L149.4 146.6 L157 148 L149.4 149.4 L148 158 L146.6 149.4 L139 148 L146.6 146.6 Z" fill="#ffffff"/></g>
+  </g></g></g><g transform="rotate(-10.71 150 318)"><g class="pk-f" data-a="-10.71" data-r="1" style="transform-origin:150px 318px"><g class="pk-eye" data-i="6" style="transform-origin:150px 143px">
+    <ellipse cx="150" cy="141" rx="13" ry="17" fill="url(#pk-gold)"/>
+    <ellipse cx="150" cy="142" rx="10" ry="13" fill="#1a8a7a"/>
+    <ellipse cx="150" cy="144" rx="6.5" ry="8.5" fill="#1d3f8a"/>
+    <ellipse cx="150" cy="146" rx="3.2" ry="4.2" fill="#0a1430"/>
+    <ellipse cx="148.5" cy="142" rx="1.4" ry="2" fill="#f3d58a"/>
+    <g class="pk-shine" style="animation-delay:0.66s"><ellipse cx="150" cy="141" rx="13" ry="17" fill="#fff6d0" opacity=".3"/><ellipse cx="150" cy="142" rx="10" ry="13" fill="#7dffe0" opacity=".34"/>
+    <ellipse cx="150" cy="141" rx="14.5" ry="18.5" fill="none" stroke="#fffbe6" stroke-width="1.6"/>
+    <path d="M148 131 L149.4 139.6 L157 141 L149.4 142.4 L148 151 L146.6 142.4 L139 141 L146.6 139.6 Z" fill="#ffffff"/></g>
+  </g></g></g><g transform="rotate(0.00 150 318)"><g class="pk-f" data-a="0.00" data-r="0" style="transform-origin:150px 318px"><g class="pk-eye" data-i="7" style="transform-origin:150px 136px">
+    <ellipse cx="150" cy="134" rx="13" ry="17" fill="url(#pk-gold)"/>
+    <ellipse cx="150" cy="135" rx="10" ry="13" fill="#1a8a7a"/>
+    <ellipse cx="150" cy="137" rx="6.5" ry="8.5" fill="#1d3f8a"/>
+    <ellipse cx="150" cy="139" rx="3.2" ry="4.2" fill="#0a1430"/>
+    <ellipse cx="148.5" cy="135" rx="1.4" ry="2" fill="#f3d58a"/>
+    <g class="pk-shine" style="animation-delay:0.77s"><ellipse cx="150" cy="134" rx="13" ry="17" fill="#fff6d0" opacity=".3"/><ellipse cx="150" cy="135" rx="10" ry="13" fill="#7dffe0" opacity=".34"/>
+    <ellipse cx="150" cy="134" rx="14.5" ry="18.5" fill="none" stroke="#fffbe6" stroke-width="1.6"/>
+    <path d="M148 124 L149.4 132.6 L157 134 L149.4 135.4 L148 144 L146.6 135.4 L139 134 L146.6 132.6 Z" fill="#ffffff"/></g>
+  </g></g></g><g transform="rotate(10.71 150 318)"><g class="pk-f" data-a="10.71" data-r="1" style="transform-origin:150px 318px"><g class="pk-eye" data-i="8" style="transform-origin:150px 143px">
+    <ellipse cx="150" cy="141" rx="13" ry="17" fill="url(#pk-gold)"/>
+    <ellipse cx="150" cy="142" rx="10" ry="13" fill="#1a8a7a"/>
+    <ellipse cx="150" cy="144" rx="6.5" ry="8.5" fill="#1d3f8a"/>
+    <ellipse cx="150" cy="146" rx="3.2" ry="4.2" fill="#0a1430"/>
+    <ellipse cx="148.5" cy="142" rx="1.4" ry="2" fill="#f3d58a"/>
+    <g class="pk-shine" style="animation-delay:0.88s"><ellipse cx="150" cy="141" rx="13" ry="17" fill="#fff6d0" opacity=".3"/><ellipse cx="150" cy="142" rx="10" ry="13" fill="#7dffe0" opacity=".34"/>
+    <ellipse cx="150" cy="141" rx="14.5" ry="18.5" fill="none" stroke="#fffbe6" stroke-width="1.6"/>
+    <path d="M148 131 L149.4 139.6 L157 141 L149.4 142.4 L148 151 L146.6 142.4 L139 141 L146.6 139.6 Z" fill="#ffffff"/></g>
+  </g></g></g><g transform="rotate(21.43 150 318)"><g class="pk-f" data-a="21.43" data-r="2" style="transform-origin:150px 318px"><g class="pk-eye" data-i="9" style="transform-origin:150px 150px">
+    <ellipse cx="150" cy="148" rx="13" ry="17" fill="url(#pk-gold)"/>
+    <ellipse cx="150" cy="149" rx="10" ry="13" fill="#1a8a7a"/>
+    <ellipse cx="150" cy="151" rx="6.5" ry="8.5" fill="#1d3f8a"/>
+    <ellipse cx="150" cy="153" rx="3.2" ry="4.2" fill="#0a1430"/>
+    <ellipse cx="148.5" cy="149" rx="1.4" ry="2" fill="#f3d58a"/>
+    <g class="pk-shine" style="animation-delay:0.99s"><ellipse cx="150" cy="148" rx="13" ry="17" fill="#fff6d0" opacity=".3"/><ellipse cx="150" cy="149" rx="10" ry="13" fill="#7dffe0" opacity=".34"/>
+    <ellipse cx="150" cy="148" rx="14.5" ry="18.5" fill="none" stroke="#fffbe6" stroke-width="1.6"/>
+    <path d="M148 138 L149.4 146.6 L157 148 L149.4 149.4 L148 158 L146.6 149.4 L139 148 L146.6 146.6 Z" fill="#ffffff"/></g>
+  </g></g></g><g transform="rotate(32.14 150 318)"><g class="pk-f" data-a="32.14" data-r="3" style="transform-origin:150px 318px"><g class="pk-eye" data-i="10" style="transform-origin:150px 157px">
+    <ellipse cx="150" cy="155" rx="13" ry="17" fill="url(#pk-gold)"/>
+    <ellipse cx="150" cy="156" rx="10" ry="13" fill="#1a8a7a"/>
+    <ellipse cx="150" cy="158" rx="6.5" ry="8.5" fill="#1d3f8a"/>
+    <ellipse cx="150" cy="160" rx="3.2" ry="4.2" fill="#0a1430"/>
+    <ellipse cx="148.5" cy="156" rx="1.4" ry="2" fill="#f3d58a"/>
+    <g class="pk-shine" style="animation-delay:1.10s"><ellipse cx="150" cy="155" rx="13" ry="17" fill="#fff6d0" opacity=".3"/><ellipse cx="150" cy="156" rx="10" ry="13" fill="#7dffe0" opacity=".34"/>
+    <ellipse cx="150" cy="155" rx="14.5" ry="18.5" fill="none" stroke="#fffbe6" stroke-width="1.6"/>
+    <path d="M148 145 L149.4 153.6 L157 155 L149.4 156.4 L148 165 L146.6 156.4 L139 155 L146.6 153.6 Z" fill="#ffffff"/></g>
+  </g></g></g><g transform="rotate(42.86 150 318)"><g class="pk-f" data-a="42.86" data-r="4" style="transform-origin:150px 318px"><g class="pk-eye" data-i="11" style="transform-origin:150px 164px">
+    <ellipse cx="150" cy="162" rx="13" ry="17" fill="url(#pk-gold)"/>
+    <ellipse cx="150" cy="163" rx="10" ry="13" fill="#1a8a7a"/>
+    <ellipse cx="150" cy="165" rx="6.5" ry="8.5" fill="#1d3f8a"/>
+    <ellipse cx="150" cy="167" rx="3.2" ry="4.2" fill="#0a1430"/>
+    <ellipse cx="148.5" cy="163" rx="1.4" ry="2" fill="#f3d58a"/>
+    <g class="pk-shine" style="animation-delay:1.21s"><ellipse cx="150" cy="162" rx="13" ry="17" fill="#fff6d0" opacity=".3"/><ellipse cx="150" cy="163" rx="10" ry="13" fill="#7dffe0" opacity=".34"/>
+    <ellipse cx="150" cy="162" rx="14.5" ry="18.5" fill="none" stroke="#fffbe6" stroke-width="1.6"/>
+    <path d="M148 152 L149.4 160.6 L157 162 L149.4 163.4 L148 172 L146.6 163.4 L139 162 L146.6 160.6 Z" fill="#ffffff"/></g>
+  </g></g></g><g transform="rotate(53.57 150 318)"><g class="pk-f" data-a="53.57" data-r="5" style="transform-origin:150px 318px"><g class="pk-eye" data-i="12" style="transform-origin:150px 171px">
+    <ellipse cx="150" cy="169" rx="13" ry="17" fill="url(#pk-gold)"/>
+    <ellipse cx="150" cy="170" rx="10" ry="13" fill="#1a8a7a"/>
+    <ellipse cx="150" cy="172" rx="6.5" ry="8.5" fill="#1d3f8a"/>
+    <ellipse cx="150" cy="174" rx="3.2" ry="4.2" fill="#0a1430"/>
+    <ellipse cx="148.5" cy="170" rx="1.4" ry="2" fill="#f3d58a"/>
+    <g class="pk-shine" style="animation-delay:1.32s"><ellipse cx="150" cy="169" rx="13" ry="17" fill="#fff6d0" opacity=".3"/><ellipse cx="150" cy="170" rx="10" ry="13" fill="#7dffe0" opacity=".34"/>
+    <ellipse cx="150" cy="169" rx="14.5" ry="18.5" fill="none" stroke="#fffbe6" stroke-width="1.6"/>
+    <path d="M148 159 L149.4 167.6 L157 169 L149.4 170.4 L148 179 L146.6 170.4 L139 169 L146.6 167.6 Z" fill="#ffffff"/></g>
+  </g></g></g><g transform="rotate(64.29 150 318)"><g class="pk-f" data-a="64.29" data-r="6" style="transform-origin:150px 318px"><g class="pk-eye" data-i="13" style="transform-origin:150px 178px">
+    <ellipse cx="150" cy="176" rx="13" ry="17" fill="url(#pk-gold)"/>
+    <ellipse cx="150" cy="177" rx="10" ry="13" fill="#1a8a7a"/>
+    <ellipse cx="150" cy="179" rx="6.5" ry="8.5" fill="#1d3f8a"/>
+    <ellipse cx="150" cy="181" rx="3.2" ry="4.2" fill="#0a1430"/>
+    <ellipse cx="148.5" cy="177" rx="1.4" ry="2" fill="#f3d58a"/>
+    <g class="pk-shine" style="animation-delay:1.43s"><ellipse cx="150" cy="176" rx="13" ry="17" fill="#fff6d0" opacity=".3"/><ellipse cx="150" cy="177" rx="10" ry="13" fill="#7dffe0" opacity=".34"/>
+    <ellipse cx="150" cy="176" rx="14.5" ry="18.5" fill="none" stroke="#fffbe6" stroke-width="1.6"/>
+    <path d="M148 166 L149.4 174.6 L157 176 L149.4 177.4 L148 186 L146.6 177.4 L139 176 L146.6 174.6 Z" fill="#ffffff"/></g>
+  </g></g></g><g transform="rotate(75.00 150 318)"><g class="pk-f" data-a="75.00" data-r="7" style="transform-origin:150px 318px"><g class="pk-eye" data-i="14" style="transform-origin:150px 185px">
+    <ellipse cx="150" cy="183" rx="13" ry="17" fill="url(#pk-gold)"/>
+    <ellipse cx="150" cy="184" rx="10" ry="13" fill="#1a8a7a"/>
+    <ellipse cx="150" cy="186" rx="6.5" ry="8.5" fill="#1d3f8a"/>
+    <ellipse cx="150" cy="188" rx="3.2" ry="4.2" fill="#0a1430"/>
+    <ellipse cx="148.5" cy="184" rx="1.4" ry="2" fill="#f3d58a"/>
+    <g class="pk-shine" style="animation-delay:1.54s"><ellipse cx="150" cy="183" rx="13" ry="17" fill="#fff6d0" opacity=".3"/><ellipse cx="150" cy="184" rx="10" ry="13" fill="#7dffe0" opacity=".34"/>
+    <ellipse cx="150" cy="183" rx="14.5" ry="18.5" fill="none" stroke="#fffbe6" stroke-width="1.6"/>
+    <path d="M148 173 L149.4 181.6 L157 183 L149.4 184.4 L148 193 L146.6 184.4 L139 183 L146.6 181.6 Z" fill="#ffffff"/></g>
+  </g></g></g></g>
+<g class="pk-scales"><g transform="rotate(-75.00 150 318)"><g class="pk-f" data-a="-75.00" data-r="7" style="transform-origin:150px 318px"><path d="M150 318 C141 288 142 264 150 256 C158 264 159 288 150 318 Z" fill="#5a1626" stroke="url(#pk-gold)" stroke-width="1.3"/></g></g><g transform="rotate(-60.00 150 318)"><g class="pk-f" data-a="-60.00" data-r="5.6" style="transform-origin:150px 318px"><path d="M150 318 C141 288 142 264 150 256 C158 264 159 288 150 318 Z" fill="#5a1626" stroke="url(#pk-gold)" stroke-width="1.3"/></g></g><g transform="rotate(-45.00 150 318)"><g class="pk-f" data-a="-45.00" data-r="4.2" style="transform-origin:150px 318px"><path d="M150 318 C141 288 142 264 150 256 C158 264 159 288 150 318 Z" fill="#5a1626" stroke="url(#pk-gold)" stroke-width="1.3"/></g></g><g transform="rotate(-30.00 150 318)"><g class="pk-f" data-a="-30.00" data-r="2.8000000000000007" style="transform-origin:150px 318px"><path d="M150 318 C141 288 142 264 150 256 C158 264 159 288 150 318 Z" fill="#5a1626" stroke="url(#pk-gold)" stroke-width="1.3"/></g></g><g transform="rotate(-15.00 150 318)"><g class="pk-f" data-a="-15.00" data-r="1.4000000000000004" style="transform-origin:150px 318px"><path d="M150 318 C141 288 142 264 150 256 C158 264 159 288 150 318 Z" fill="#5a1626" stroke="url(#pk-gold)" stroke-width="1.3"/></g></g><g transform="rotate(0.00 150 318)"><g class="pk-f" data-a="0.00" data-r="0" style="transform-origin:150px 318px"><path d="M150 318 C141 288 142 264 150 256 C158 264 159 288 150 318 Z" fill="#5a1626" stroke="url(#pk-gold)" stroke-width="1.3"/></g></g><g transform="rotate(15.00 150 318)"><g class="pk-f" data-a="15.00" data-r="1.3999999999999986" style="transform-origin:150px 318px"><path d="M150 318 C141 288 142 264 150 256 C158 264 159 288 150 318 Z" fill="#5a1626" stroke="url(#pk-gold)" stroke-width="1.3"/></g></g><g transform="rotate(30.00 150 318)"><g class="pk-f" data-a="30.00" data-r="2.799999999999999" style="transform-origin:150px 318px"><path d="M150 318 C141 288 142 264 150 256 C158 264 159 288 150 318 Z" fill="#5a1626" stroke="url(#pk-gold)" stroke-width="1.3"/></g></g><g transform="rotate(45.00 150 318)"><g class="pk-f" data-a="45.00" data-r="4.199999999999999" style="transform-origin:150px 318px"><path d="M150 318 C141 288 142 264 150 256 C158 264 159 288 150 318 Z" fill="#5a1626" stroke="url(#pk-gold)" stroke-width="1.3"/></g></g><g transform="rotate(60.00 150 318)"><g class="pk-f" data-a="60.00" data-r="5.6" style="transform-origin:150px 318px"><path d="M150 318 C141 288 142 264 150 256 C158 264 159 288 150 318 Z" fill="#5a1626" stroke="url(#pk-gold)" stroke-width="1.3"/></g></g><g transform="rotate(75.00 150 318)"><g class="pk-f" data-a="75.00" data-r="7" style="transform-origin:150px 318px"><path d="M150 318 C141 288 142 264 150 256 C158 264 159 288 150 318 Z" fill="#5a1626" stroke="url(#pk-gold)" stroke-width="1.3"/></g></g></g>
+</svg></div>
+<!-- layer 3: body, ground band, frame -->
+<svg class="pk-svg pk-l-front" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+<!-- body, neck, head, crest, wing -->
+<g class="pk-body" style="transform-origin:150px 362px">
+<path d="M126 360 C118 330 128 300 146 288 C158 280 162 262 156 240 C152 224 150 206 156 192 C162 180 176 178 182 188 C186 196 182 204 174 206 C166 210 166 222 172 240 C180 266 182 294 172 318 C166 334 162 350 166 362 Z" fill="url(#pk-neck)"/>
+<path d="M150 204 C148 222 152 238 158 258 C163 276 162 294 150 308" stroke="#5aa0ff" stroke-width="1.6" fill="none" opacity=".6"/>
+<path d="M181 191 L198 196 L181 199 Z" fill="url(#pk-gold)"/>
+<path d="M164 186 C168 182 176 182 179 188 C174 186 168 187 164 190 Z" fill="#f1e4c8"/>
+<circle cx="173" cy="189" r="2" fill="#0a1430"/>
+<g class="pk-crest" style="transform-origin:171px 184px"><g class="pk-cs" style="transform-origin:166px 181px;animation-delay:0.00s"><path d="M166 181 L156 158" stroke="#1d3f8a" stroke-width="1.2" fill="none"/><circle cx="156" cy="157" r="3" fill="url(#pk-gold)"/></g><g class="pk-cs" style="transform-origin:170px 180px;animation-delay:-0.13s"><path d="M170 180 L166 154" stroke="#1d3f8a" stroke-width="1.2" fill="none"/><circle cx="166" cy="153" r="3" fill="url(#pk-gold)"/></g><g class="pk-cs" style="transform-origin:174px 180px;animation-delay:-0.26s"><path d="M174 180 L176 155" stroke="#1d3f8a" stroke-width="1.2" fill="none"/><circle cx="176" cy="154" r="3" fill="url(#pk-gold)"/></g><g class="pk-cs" style="transform-origin:177px 182px;animation-delay:-0.39s"><path d="M177 182 L186 160" stroke="#1d3f8a" stroke-width="1.2" fill="none"/><circle cx="186" cy="159" r="3" fill="url(#pk-gold)"/></g></g>
+<path d="M132 352 C126 326 136 304 152 296 C160 318 160 340 150 364 Z" fill="#0f4c5c"/>
+<path d="M136 312 L146 306 L154 314" stroke="url(#pk-gold)" stroke-width="1" fill="none" opacity=".75"/><path d="M138 324 L147 318 L154 326" stroke="url(#pk-gold)" stroke-width="1" fill="none" opacity=".75"/><path d="M140 336 L148 330 L154 338" stroke="url(#pk-gold)" stroke-width="1" fill="none" opacity=".75"/><path d="M142 348 L149 342 L154 350" stroke="url(#pk-gold)" stroke-width="1" fill="none" opacity=".75"/>
+</g>
+<g clip-path="url(#pk-frame)">
+<!-- velvet ground band -->
+<rect x="0" y="362" width="300" height="40" fill="#14040b"/>
+<path d="M0 362 H300" stroke="url(#pk-gold)" stroke-width="2"/>
+<path d="M10 382 l11 -12 l11 12" stroke="url(#pk-gold)" stroke-width="1" fill="none" opacity=".5"/><path d="M32 382 l11 -12 l11 12" stroke="url(#pk-gold)" stroke-width="1" fill="none" opacity=".5"/><path d="M54 382 l11 -12 l11 12" stroke="url(#pk-gold)" stroke-width="1" fill="none" opacity=".5"/><path d="M76 382 l11 -12 l11 12" stroke="url(#pk-gold)" stroke-width="1" fill="none" opacity=".5"/><path d="M98 382 l11 -12 l11 12" stroke="url(#pk-gold)" stroke-width="1" fill="none" opacity=".5"/><path d="M120 382 l11 -12 l11 12" stroke="url(#pk-gold)" stroke-width="1" fill="none" opacity=".5"/><path d="M142 382 l11 -12 l11 12" stroke="url(#pk-gold)" stroke-width="1" fill="none" opacity=".5"/><path d="M164 382 l11 -12 l11 12" stroke="url(#pk-gold)" stroke-width="1" fill="none" opacity=".5"/><path d="M186 382 l11 -12 l11 12" stroke="url(#pk-gold)" stroke-width="1" fill="none" opacity=".5"/><path d="M208 382 l11 -12 l11 12" stroke="url(#pk-gold)" stroke-width="1" fill="none" opacity=".5"/><path d="M230 382 l11 -12 l11 12" stroke="url(#pk-gold)" stroke-width="1" fill="none" opacity=".5"/><path d="M252 382 l11 -12 l11 12" stroke="url(#pk-gold)" stroke-width="1" fill="none" opacity=".5"/><path d="M274 382 l11 -12 l11 12" stroke="url(#pk-gold)" stroke-width="1" fill="none" opacity=".5"/>
+</g>
+<!-- deco frame with stepped corners -->
+<rect x="18" y="18" width="264" height="364" fill="none" stroke="url(#pk-gold)" stroke-width="2.5"/>
+<rect x="10" y="10" width="280" height="380" fill="none" stroke="url(#pk-gold)" stroke-width="1"/>
+<path d="M10 32 h8 v-14 h14 v-8" stroke="url(#pk-gold)" stroke-width="1.5" fill="none"/><path d="M290 32 h-8 v-14 h-14 v-8" stroke="url(#pk-gold)" stroke-width="1.5" fill="none"/><path d="M10 368 h8 v14 h14 v8" stroke="url(#pk-gold)" stroke-width="1.5" fill="none"/><path d="M290 368 h-8 v14 h-14 v8" stroke="url(#pk-gold)" stroke-width="1.5" fill="none"/>
+<path d="M140 18 L150 8 L160 18" fill="#1a0510" stroke="url(#pk-gold)" stroke-width="1.5"/><circle cx="150" cy="14" r="2" fill="url(#pk-gold)"/>
+</svg>
+<div class="pk-sheen"></div>
+</div>
+<script id="pk-js">
+(function(){
+'use strict';
+var P='pk', AUTO=1200;
+var RM=window.matchMedia?window.matchMedia('(prefers-reduced-motion: reduce)'):null;
+var MANUAL=/manual/.test(location.hash);           // test harness: no automatic start
+// Velvet Peacock: the tail folds shut, then snaps open feather by feather (centre outwards,
+// each overshooting), and a shimmer runs across all fifteen eyes. Entrance = the same move from closed.
+var H={
+  move:function(I,first){
+    var SHUT=first?0:230, OPEN=first?330:440, STEP=34, T=OPEN+2000;
+    var closed=function(a){return 'rotate('+(-a*.94).toFixed(2)+'deg) scale(.8,.52)'};
+    I.qa('.pk-f').forEach(function(f){
+      var a=+f.dataset.a, r=+f.dataset.r, t0=OPEN+r*STEP, fr=[];
+      if(!first)fr.push([Math.max(0,(7-r)*9),{transform:'rotate(0deg) scale(1,1)'},'cubic-bezier(.6,0,.9,.6)']);
+      fr.push([first?0:SHUT,{transform:closed(a)}]);
+      fr.push([t0,{transform:closed(a)},'cubic-bezier(.3,.6,.2,1)']);
+      fr.push([t0+240,{transform:'rotate('+(a*.085).toFixed(2)+'deg) scale(1.03,1.06)'},'ease-in-out']);
+      fr.push([t0+390,{transform:'rotate('+(-a*.03).toFixed(2)+'deg) scale(.995,.985)'},'ease-in-out']);
+      fr.push([t0+540,{transform:'rotate(0deg) scale(1,1)'}]);
+      I.tl(f,T,fr);
+    });
+    // body: tucks while folded, rises proud as the fan lands
+    var B=OPEN+7*STEP;
+    I.tl(I.q('.pk-body'),T,[[0,{transform:first?'translateY(4px) scale(1,.975)':'translateY(0px) scale(1,1)'},'ease-in-out'],
+      [first?1:SHUT,{transform:'translateY(4px) scale(1,.975)'}],[OPEN,{transform:'translateY(4px) scale(1,.975)'},'cubic-bezier(.2,.8,.2,1)'],
+      [B+150,{transform:'translateY(-3px) scale(1,1.03)'},'ease-in-out'],[B+520,{transform:'translateY(0px) scale(1,1)'}]]);
+    I.tl(I.q('.pk-crest'),T,[[0,{transform:first?'rotate(-22deg) scale(.8)':'rotate(0deg) scale(1)'},'ease-in'],
+      [first?1:SHUT,{transform:'rotate(-22deg) scale(.8)'}],[OPEN+60,{transform:'rotate(-22deg) scale(.8)'},'cubic-bezier(.2,.9,.2,1)'],
+      [OPEN+260,{transform:'rotate(12deg) scale(1.15)'},'ease-in-out'],[OPEN+440,{transform:'rotate(-5deg) scale(.98)'},'ease-in-out'],
+      [OPEN+620,{transform:'rotate(2deg) scale(1)'},'ease-in-out'],[OPEN+800,{transform:'rotate(0deg) scale(1)'}]]);
+    // sunburst turns exactly one ray (15deg) with the snap, so it ends where it began
+    I.tl(I.q('.pk-rays'),T,[[OPEN,{transform:'rotate(0deg)',opacity:.22},'cubic-bezier(.2,.8,.2,1)'],[B+200,{transform:'rotate(11deg)',opacity:.5},'ease-out'],[B+900,{transform:'rotate(15deg)',opacity:.22}]]);
+    I.tl(I.q('.pk-arcs'),T,[[B,{transform:'scale(1)',opacity:.5},'cubic-bezier(.2,.8,.2,1)'],[B+180,{transform:'scale(1.035)',opacity:1},'ease-in-out'],[B+700,{transform:'scale(1)',opacity:.5}]]);
+    // shimmer: light runs across every eye in sequence, left to right
+    var SH=B+330;
+    I.qa('.pk-eye').forEach(function(e){
+      var t=SH+(+e.dataset.i)*46;
+      I.tl(e,T,[[t,{transform:'scale(1)'},'cubic-bezier(.2,.8,.2,1)'],[t+110,{transform:'scale(1.24)'},'ease-in-out'],[t+420,{transform:'scale(1)'}]]);
+      I.tl(e.querySelector('.pk-shine'),T,[[t-1,{opacity:0}],[t+90,{opacity:1}],[t+200,{opacity:.75}],[t+460,{opacity:0}]]);
+    });
+  },
+  enter:function(I,lv){if(lv!=='full')return false;H.move(I,true);return true}
+};
+
+var all=[];
+function make(root){
+  var I={root:root,anims:[],run:true,vis:true,started:false,timer:0};
+  I.q=function(s){return root.querySelector(s)};
+  I.qa=function(s){return Array.prototype.slice.call(root.querySelectorAll(s))};
+  I.level=function(){
+    if((RM&&RM.matches)||root.closest('.still'))return 'still';
+    return root.closest('.calm')?'calm':'full';
+  };
+  // Web Animations wrapper: remembered so a replay can cancel it
+  I.anim=function(el,kf,o){
+    if(!el||!el.animate)return null;
+    var a=el.animate(kf,o);I.anims.push(a);if(!I.run)a.pause();return a;
+  };
+  // timeline helper: fr=[[ms,{props},easing?],...] on a shared clock of T ms
+  I.tl=function(el,T,fr){
+    var kf=fr.map(function(f){var k={offset:Math.max(0,Math.min(1,f[0]/T))};for(var p in f[1])k[p]=f[1][p];if(f[2])k.easing=f[2];return k});
+    if(kf[0].offset>0){var a={};for(var p in kf[0])a[p]=kf[0][p];a.offset=0;delete a.easing;kf.unshift(a)}
+    var l=kf[kf.length-1];if(l.offset<1){var b={};for(var p2 in l)b[p2]=l[p2];b.offset=1;kf.push(b)}
+    return I.anim(el,kf,{duration:T,fill:'none'});
+  };
+  I.stop=function(){
+    I.anims.forEach(function(a){try{a.cancel()}catch(e){}});I.anims=[];
+    clearTimeout(I.timer);if(H.reset)H.reset(I);
+  };
+  return I;
+}
+function play(I){
+  var lv=I.level();I.stop();
+  if(lv==='still')return;
+  if(lv==='calm'){                                   // brief highlight instead of the move
+    I.anim(I.q('.'+P+'-sheen'),[{transform:'translateX(-110%)',opacity:1},{transform:'translateX(110%)',opacity:1}],{duration:650,easing:'ease-in-out'});
+    return;
+  }
+  H.move(I);
+}
+function enter(I){
+  var lv=I.level();I.stop();I.started=true;
+  I.root.classList.remove(P+'-go');void I.root.offsetWidth;
+  if(lv!=='still')I.root.classList.add(P+'-go');
+  var own=H.enter?H.enter(I,lv):false;               // a hook may run the move itself
+  if(lv==='full'&&!MANUAL&&!own)I.timer=setTimeout(function(){play(I)},AUTO);
+}
+function setRun(I){
+  var on=I.vis&&!document.hidden;
+  if(on===I.run)return;I.run=on;
+  I.root.classList.toggle(P+'-off',!on);
+  I.anims.forEach(function(a){try{if(on){if(a.playState==='paused')a.play()}else if(a.playState==='running')a.pause()}catch(e){}});
+  if(H.run)H.run(I,on);
+  if(on&&!I.started&&!MANUAL)enter(I);
+}
+function init(root){
+  if(root.__pk)return root.__pk;
+  var I=root.__pk=make(root);all.push(I);
+  root.addEventListener('click',function(){play(I)});
+  if('IntersectionObserver' in window){
+    new IntersectionObserver(function(es){I.vis=es[es.length-1].isIntersecting;setRun(I)},{threshold:.02}).observe(root);
+  }
+  if(H.init)H.init(I);
+  if(document.hidden){I.run=false;root.classList.add(P+'-off');if(H.run)H.run(I,false)}
+  else if(!MANUAL)enter(I);
+  return I;
+}
+document.addEventListener('visibilitychange',function(){all.forEach(setRun)});
+function each(fn,el){all.forEach(function(I){if(!el||I.root===el||el.contains(I.root))fn(I)})}
+// public API
+window.pkInit=function(el){[].forEach.call((el||document).querySelectorAll('.'+P+'-root'),init)}; // call after injecting markup
+window.pkPlay=function(el){each(play,el)};      // signature move (or calm highlight)
+window.pkEnter=function(el){each(enter,el)};    // replay entrance; call after changing the motion level
+window.pkDbg=all;
+window.pkInit();
+})();
+</script>
+<script>
+// a tap plays the move (the poster does that itself); the app is told, for its records
+document.addEventListener('click',function(){try{parent.postMessage({t:'tp-poster',id:"velvet-peacock-plume",what:'play'},location.origin)}catch(e){}});
+// the app can ask for the move too (the card's own tap target, a key press)
+addEventListener('message',function(e){if(e.origin===location.origin&&e.data&&e.data.t==='tp-poster-play'&&window.pkPlay)window.pkPlay()});
+</script>
+</body></html>

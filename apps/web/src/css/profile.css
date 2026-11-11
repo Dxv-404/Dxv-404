@@ -260,3 +260,26 @@
 .tp.app.th-pixel .pf-lay[data-motion=calm] .pf-sec{animation-timing-function:steps(3,end)}
 /* off (and a phone that asks for less motion): everything is simply there */
 .tp.app .pf-lay[data-motion=off] *,.tp.app .pf-lay[data-motion=off] *::before,.tp.app .pf-lay[data-motion=off] *::after{animation:none!important;transition:none!important}
+
+/* ---- the card's portrait: an animated poster (profile/poster.ts), or the theme's spotlight ---- */
+.tp.app .pf-card.has-poster{aspect-ratio:auto;grid-template-rows:auto auto auto auto}
+.tp.app .pf-c-port.poster{aspect-ratio:3/4;container-type:normal;background:var(--bg);display:block}
+.tp.app .pf-poster{display:block;width:100%;height:100%;border:0;background:transparent}
+.tp.app .pf-lay.s-side .pf-card.has-poster{width:min(100%,calc((100dvh - 96px) * .53))}
+.tp.app .pf-c-port.stage{position:relative;color:var(--acc);background:linear-gradient(var(--chipbg),var(--chipbg)),var(--bg);border:0;padding:0;font:inherit;width:100%}
+.tp.app button.pf-c-port.stage{cursor:pointer}
+.tp.app .pf-stage{position:absolute;inset:0;width:100%;height:100%}
+.tp.app .pf-c-port.stage .av{position:relative;z-index:1;transform:translateY(12%);filter:drop-shadow(0 6px 10px rgba(0,0,0,.35))}
+.tp.app .pf-c-none{position:absolute;left:8px;right:8px;bottom:7%;z-index:1;text-align:center;font:800 10.5px var(--ui);letter-spacing:.14em;text-transform:uppercase;color:var(--tx)}
+.tp.app .pf-c-none small{display:block;margin-top:2px;font:500 11.5px var(--ui);letter-spacing:0;text-transform:none;color:var(--cw-mut)}
+.tp.app .pf-lay[data-motion=full] .pf-beam{animation:pfbeam 5.5s ease-in-out infinite}
+.tp.app.th-pixel .pf-lay[data-motion=full] .pf-beam{animation-timing-function:steps(3,end)}
+@keyframes pfbeam{0%,100%{opacity:1}46%{opacity:.82}50%{opacity:.55}54%{opacity:.9}}
+/* the welcome sheet: what you have earned, most precious first */
+.tp.app .pf-wlist,.sheet .pf-wlist{display:grid;gap:8px;margin-top:6px}
+.pf-wrow{display:flex;align-items:center;gap:12px;min-height:52px}
+.pf-wrow>span:last-child{display:grid;gap:2px;min-width:0}
+.pf-wrow b{font:700 15px var(--ui)}
+.pf-wrow small{font-size:12px;color:var(--cw-mut,var(--mut));text-transform:capitalize}
+.pf-welcome[data-motion=full] .pf-wrow{animation:pfwrow calc(.35s * var(--cw-k,1)) var(--cw-ease,ease) both;animation-delay:calc(var(--i) * 55ms)}
+@keyframes pfwrow{from{opacity:0;transform:translateY(8px)}}

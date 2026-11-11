@@ -266,6 +266,12 @@ export function menuScreen(root: HTMLElement, a: MenuActions & { onPlay?: never 
   // some themes style the menu by the theme and menu classes on one element (the design's single page)
   document.getElementById('app')?.classList.add('menu');
   if (!refreshing && me?.account) void refreshCrews().then((changed) => { if (changed && root.isConnected) menuScreen(root, a); });
+  // new achievements since the profile was last opened: the Profile tab gets its dot
+  if (me?.account) void import('../crews/data').then((d) => d.existing()).then((acc) => acc?.profileNews()).then((n) => {
+    if (typeof n !== 'number' || n === profileNews()) return;
+    store.set('tp-profile-news', n);
+    if (root.isConnected) root.querySelector(':scope > nav.nav')?.replaceWith(navBar('play', a));
+  }).catch(() => undefined);
 }
 
 /** "Choose your avatar" (loaded when first opened); signed-in phones keep the pick on their account. */
