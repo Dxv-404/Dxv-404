@@ -440,5 +440,5 @@ export function accountScreens({ screen, openSheet, home, nav, crews = null }) {
     return false;
   }
 
-  return { profile, invite, route, addDevice: () => addDevice(dev), useAccount: () => useAccount(dev), notices: () => checkDeviceNotices(dev), crew: crewScreen, league: (c) => lg.league(c, () => profile()), history: () => lg.history(), game: (id, back) => lg.game(id, back) };
+  return { profile, invite, route, addDevice: () => addDevice(dev), useAccount: () => useAccount(dev), notices: () => checkDeviceNotices(dev), crew: crewScreen, league: (c) => lg.league(c, () => profile()), history: () => lg.history(), game: (id, back) => lg.game(id, back), replay: (id, n, back) => lg.replay(id, n, back) };
 }

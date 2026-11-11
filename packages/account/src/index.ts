@@ -11,6 +11,8 @@ export { SUPABASE_KEY, SUPABASE_URL };
 import type { Badge, CrewCard, CrewGame, CrewLeague, CrewMemberV3, CrewPage, CrewPreview, CrewSettings, Dispute, Hosted, Invitation, JoinRequest, PendingRequest, PlayerCard, Scoring, SeasonInfo, SeasonMonths, TableRules, WhoHosts, WrongCode } from './crews';
 export * from './crews';
 export * from './devices';
+export * from './profile';
+import type { CardConfig, ProfilePage } from './profile';
 
 export interface Profile { id: string; name: string; avatar_url: string | null; settings: Record<string, unknown>; created_at: string; deleted_at: string | null }
 export type Role = 'owner' | 'admin' | 'member';
@@ -438,6 +440,16 @@ export class Account {
   // ---------------- live tables ----------------
   /** A ticket for one table; the phone sends it in its hello and the table server checks it. */
   ticket(table: string): Promise<string> { return this.rpc<string>('table_ticket', { p_table: table }); }
+
+  // ---------------- the Profile page (20261111000022_profile.sql) ----------------
+  /** Everything the Profile page shows: my own (no account given), or a crew mate's. */
+  profilePage(account?: string | null, crew?: string | null): Promise<ProfilePage> { return this.rpc('profile_page', { p_account: account ?? null, p_crew: crew ?? null }); }
+  /** The profile was opened: its achievements count as seen and the milestone bars remember where they were. */
+  markProfileSeen(milestones?: Record<string, number>): Promise<void> { return this.rpc('mark_profile_seen', { p_milestones: milestones ?? null }); }
+  /** New achievements since the profile was last opened (the dot on the tab). */
+  profileNews(): Promise<number> { return this.rpc('profile_news'); }
+  showAchievement(id: string, shown: boolean): Promise<void> { return this.rpc('show_achievement', { p_achievement: id, p_shown: shown }); }
+  saveCard(card: Partial<CardConfig>): Promise<CardConfig> { return this.rpc('save_card', { p_card: card }); }
 
   // ---------------- plumbing ----------------
   private need(): Profile {

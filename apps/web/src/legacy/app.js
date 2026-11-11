@@ -14,6 +14,7 @@ import { setTheme, currentTheme, TableScreen } from '../table/screen.ts';
 import { settingsScreen, installErrorReporting, noteScreen } from '../more-screens.ts';
 import { rebuyBlock, withRebuyDefaults, setupHead, setupFoot, blindsSeg, rulesContent, rebuysUsedText } from '../rebuys-setup.ts';
 import { crewsUi } from '../crews/screens.ts';
+import { profileUi } from '../profile/page.ts';
 import { noteScreenView, noteSheet } from '../research/app.ts';
 import { bellButton, bellReminder } from '../bell.ts';
 import { existing as existingAccount } from '../crews/data.ts';
@@ -74,7 +75,9 @@ const crews = crewsUi({
   joinOffline: () => offlineJoin(ui),
 });
 const accounts = accountScreens({ screen, openSheet, home: () => home(), nav: () => navBar('play', menuActions()), crews });
-window.addEventListener('hashchange', () => { if (!routeOnline(ui) && !crews.route()) accounts.route(); });
+// the Profile tab: the card, milestones, the night chip graph, the calendar and the achievements
+const profile = profileUi({ screen, openSheet, nav: () => menuActions(), openGame: (id, back) => accounts.game(id, back), openReplay: (g, n, back) => accounts.replay(g, n, back) });
+window.addEventListener('hashchange', () => { if (!routeOnline(ui) && !crews.route() && !profile.route()) accounts.route(); });
 
 // (the old floating info button: the table and Settings have their own way to the hand rankings)
 $('#info-btn')?.remove();
@@ -104,6 +107,7 @@ function menuActions() {
     joinOffline: () => joinCode(ui),
     host: () => hostChoice(),
     profile: () => accounts.profile(),
+    profileTab: () => profile.tab(),
     settings: () => settingsScreen(ui),
     crew: (id) => crews.open(id),
     rejoin: (code) => playOnline(ui, code),
@@ -528,5 +532,5 @@ window.__tp = { get host() { return host; }, get guest() { return guest; }, get 
 // on the host phone's own page (http://<hotspot>:8765): the offline table, or the host app's screen
 if (onHostPhonePage()) {
   if (location.pathname === '/join') hostPhoneTable(ui); else hostPhoneHome(ui);
-} else loadingScreen(() => { if (!routeOnline(ui) && !crews.route() && !accounts.route()) home(); });
+} else loadingScreen(() => { if (!routeOnline(ui) && !crews.route() && !profile.route() && !accounts.route()) home(); });
 installErrorReporting();

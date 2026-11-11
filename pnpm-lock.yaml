@@ -115,6 +115,9 @@ importers:
       '@tp/account':
         specifier: workspace:*
         version: link:../../packages/account
+      '@tp/achievements':
+        specifier: workspace:*
+        version: link:../../packages/achievements
       '@tp/engine':
         specifier: workspace:*
         version: link:../../packages/engine

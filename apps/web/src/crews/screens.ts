@@ -5,19 +5,17 @@
 // tablets (two panes over the bar), laptops (a rail with the logo, the crews column, the crew) and desktops (and
 // a members column).
 import { bellButton } from '../bell';
-import screensJson from '../ui/screens.json';
 import type { Account, Badge, CrewCard, CrewGame, CrewLeague, CrewMemberV3, CrewPage, CrewPreview, Invitation, JoinRequest, LeagueRowV3, PendingRequest, PlayerCard, Scoring, SeasonLength, TableRules, WhoHosts } from '@tp/account';
 import { cleanCrewCode, crewLink, formatCrewCode, isCrewCode, parseCrewLink, restSeconds, seasonLabel, seasonLengthArgs, seasonLengthOf } from '@tp/account/crews';
 import { evalBest, parseCard, cardStr } from '@tp/engine';
 import type { TableSettings } from '@tp/protocol';
-import { navBar, type MenuActions } from '../ui/shell';
-import { myAvatar } from '../avatars';
+import { navBar, railBar, type MenuActions } from '../ui/shell';
 import { currentTheme } from '../table/screen';
 import { ask, toast } from '../legacy/ui.js';
 import { qrSvg, Scanner } from '../legacy/qr.js';
 import { enablePush, pushSupported } from '../more-screens';
 import { mountPushPrompt } from './push-prompt';
-import { BADGES, COLORS, COLOR_NAMES, ICON, applyFeel, ago, av, bbText, btn, cardImg, clock, cwToast, dayMonth, duration, el, emblem, endsIn, esc, fmtN, ic, level, monthDay, monthName, ms, ordinal, spark, stack, upDown, usualText, weekGroup } from './kit';
+import { BADGES, COLORS, COLOR_NAMES, ICON, applyFeel, ago, av, bbText, cardImg, clock, cwToast, dayMonth, duration, el, emblem, endsIn, esc, fmtN, ic, level, monthDay, monthName, ms, ordinal, spark, stack, upDown, usualText, weekGroup } from './kit';
 import { DEFAULT_RULES, rulesText, sizeOf, type Size } from './format';
 export { rulesText, sizeOf };
 import { cachedLists, ensure, existing, fetchLists, forget, type Lists } from './data';
@@ -55,7 +53,6 @@ type View =
   | { k: 'player'; crewId: string; accountId: string };
 const FLOWS = new Set<View['k']>(['create', 'made', 'join', 'preview', 'waiting', 'settings']);
 
-const S = screensJson as unknown as { themes: Record<string, { menu: { logo: string } }> };
 const HAND_NAMES = ['High card', 'One pair', 'Two pair', 'Three of a kind', 'Straight', 'Flush', 'Full house', 'Four of a kind', 'Straight flush', 'Royal flush'];
 const TROPHY: Record<string, [string, string]> = {
   season_winner: ['🏆', 'Season'], iron_chair: ['🪑', 'Iron chair'], royal_flush: ['👑', 'Royal flush'],
@@ -137,22 +134,8 @@ export function crewsUi(deps: CrewsDeps) {
   }
   const live = (my: number): boolean => my === token && !!root;
 
-  function railEl(withLogo: boolean): HTMLElement {
-    const a = deps.nav();
-    const me = (() => { try { return JSON.parse(localStorage.getItem('tp-me') || 'null') as { account: string; name: string } | null; } catch { return null; } })();
-    const name = me?.name ?? (localStorage.getItem('tp-name') || 'Player');
-    const n = el('nav', 'rail' + (withLogo ? ' w' : ''));
-    n.setAttribute('aria-label', 'Main');
-    n.innerHTML = `<div class="rlogo">${withLogo ? S.themes[currentTheme()]?.menu.logo ?? '' : ''}</div>`;
-    const items: [string, string, string, () => void][] = [['play', '♠', 'Play', deps.play], ['crews', '⬢', 'Crews', home], ['replays', '↺', 'Replays', a.replays], ['theme', '◐', 'Theme', a.theme]];
-    for (const [k, i, t, f] of items) {
-      const b = btn(k === 'crews' ? 'on' : '', `<i aria-hidden="true">${i}</i><span>${t}</span>`, () => f(), { 'data-testid': `rail-${k}`, 'aria-label': t });
-      if (k === 'crews') b.setAttribute('aria-current', 'page');
-      n.append(b);
-    }
-    n.append(el('span', 'sp'), btn('rme', `${av({ id: me?.account ?? `guest-${name}`, name, avatar: myAvatar() }, 34)}${withLogo ? `<b>${esc(name)}</b>` : ''}`, a.profile, { 'aria-label': 'Profile' }));
-    return n;
-  }
+  /** The rail of the app's five places; here Play is this screen's own way back and Crews its own list. */
+  const railEl = (withLogo: boolean): HTMLElement => railBar('crews', { ...deps.nav(), play: deps.play }, withLogo, home);
 
   // ---------------------------------------------------------------- the list column
   async function drawList(col: HTMLElement, my: number): Promise<void> {

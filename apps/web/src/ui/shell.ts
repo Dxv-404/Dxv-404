@@ -124,26 +124,60 @@ export interface MenuActions {
   joinOnline(code: string): void; joinOffline(): void; host(): void;
   profile(): void; settings(): void; crew(id: string): void; rejoin(code: string): void; resumeHost?: { sub: string; go: () => void };
   crews(): void; replays(): void; theme(): void; play?: () => void;
+  /** the Profile tab (the page of cards, achievements and graphs); `profile` is the account screen */
+  profileTab?: () => void;
   /** the notifications bell (a button with its unread badge) */
   bell?: () => HTMLElement;
 }
-type Tab = 'play' | 'crews' | 'replays' | 'theme';
+export type Tab = 'play' | 'crews' | 'profile' | 'replays' | 'theme';
 
-/** The bottom bar of the menu screens: Play · Crews · Replays · Theme (v3: Crews replaced League; a league
- *  belongs to a crew). The Crews tab carries the number of invitations and requests waiting. */
+/** The Profile tab's own mark: a card with a figure on it (drawn here; the themes draw theirs with the card art). */
+const PROFILE_ICON = '<svg viewBox="0 0 20 20" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><rect x="3.6" y="1.6" width="12.8" height="16.8" rx="2"/><circle cx="10" cy="8" r="2.6"/><path d="M6 15.4c.6-2.3 2.1-3.4 4-3.4s3.4 1.1 4 3.4" stroke-linecap="round"/></svg>';
+/** The five places of the app, in the bar's order. `crews` and `profile` may be given their own action (a
+ *  screen that is already that tab goes to its own top). */
+function tabs(a: MenuActions): [Tab, string, string, () => void][] {
+  return [['play', '♠', 'Play', a.play ?? (() => undefined)], ['crews', '⬢', 'Crews', a.crews], ['profile', PROFILE_ICON, 'Profile', a.profileTab ?? a.profile], ['replays', '↺', 'Replays', a.replays], ['theme', '◐', 'Theme', a.theme]];
+}
+/** New achievements since the profile was last opened (kept on the phone by the Profile page). */
+const profileNews = (): number => store.get<number>('tp-profile-news') ?? 0;
+
+/** The bottom bar of the menu screens: Play · Crews · Profile · Replays · Theme. The Crews tab carries the
+ *  number of invitations and requests waiting; the Profile tab a dot when there is a new achievement. */
 export function navBar(on: Tab, a: MenuActions): HTMLElement {
   const n = el('nav', 'nav'); n.setAttribute('aria-label', 'Main');
   if (settings.motion === 'off') n.dataset.motion = 'off'; // the tab underline appears at once
-  const items: [Tab, string, string, () => void][] = [['play', '♠', 'Play', a.play ?? (() => undefined)], ['crews', '⬢', 'Crews', a.crews], ['replays', '↺', 'Replays', a.replays], ['theme', '◐', 'Theme', a.theme]];
   const waiting = store.get<number>('tp-crews-badge') ?? 0;
-  for (const [k, icon, label, go] of items) {
-    const badge = k === 'crews' && waiting > 0 ? `<b class="bdg" aria-label="${waiting} waiting">${waiting > 9 ? '9+' : waiting}</b>` : '';
+  for (const [k, icon, label, go] of tabs(a)) {
+    const badge = k === 'crews' && waiting > 0 ? `<b class="bdg" aria-label="${waiting} waiting">${waiting > 9 ? '9+' : waiting}</b>`
+      : k === 'profile' && k !== on && profileNews() > 0 ? '<b class="bdg dot" aria-label="New achievement"></b>' : '';
     const b = el('button', k === on ? 'on' : '', `<i aria-hidden="true">${icon}</i>${label}${badge}`);
     b.dataset.testid = `nav-${k}`;
     if (k === on) b.setAttribute('aria-current', 'page');
     b.addEventListener('click', () => { if (k !== on) go(); });
     n.append(b);
   }
+  return n;
+}
+
+/** The same five places as a rail down the left: sideways phones (icons only) and laptops (with the logo
+ *  and names). `again` runs when the open tab itself is pressed (back to its first screen). */
+export function railBar(on: Tab, a: MenuActions, withLogo: boolean, again?: () => void): HTMLElement {
+  const me = store.get<{ account: string; name: string }>('tp-me');
+  const name = me?.name ?? (localStorage.getItem('tp-name') || 'Player');
+  const n = el('nav', 'rail' + (withLogo ? ' w' : ''));
+  n.setAttribute('aria-label', 'Main');
+  n.innerHTML = `<div class="rlogo">${withLogo ? S.themes[currentTheme()]?.menu.logo ?? '' : ''}</div>`;
+  for (const [k, icon, label, go] of tabs(a)) {
+    const b = el('button', k === on ? 'on' : '', `<i aria-hidden="true">${icon}</i><span>${label}</span>`);
+    b.type = 'button'; b.dataset.testid = `rail-${k}`; b.setAttribute('aria-label', label);
+    if (k === on) b.setAttribute('aria-current', 'page');
+    b.addEventListener('click', () => (k === on ? again?.() : go()));
+    n.append(b);
+  }
+  const who = el('button', 'rme', `<span class="av" style="--av:34px">${avatar(THEMES[currentTheme()]!, me?.account ?? `guest-${name}`, name, myAvatar())}</span>${withLogo ? `<b>${esc(name)}</b>` : ''}`);
+  who.type = 'button'; who.setAttribute('aria-label', 'Account');
+  who.addEventListener('click', a.profile);
+  n.append(el('span', 'sp'), who);
   return n;
 }
 

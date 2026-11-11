@@ -1,0 +1,262 @@
+/* The Profile tab (src/profile/page.ts). It sits inside the crews kit (.cw: panels, buttons, chips, the rail)
+   and uses only the theme's own tokens: --bg --tx --mut --acc --line --chipbg for colour, --dsp --ui --num for
+   type, --r-panel --r-btn for corners (0 in Pixel), --cw-pos / --cw-neg for won and lost. Motion follows
+   data-motion on the layout: full (arrivals, the line drawing, bars filling), calm (short fades) and off
+   (everything in its final state; also what a redraw and "reduce motion" get). Pixel moves in steps. */
+
+/* ---------------------------------------------------------------- the layouts */
+.tp.app .pf-lay{display:flex;min-height:100dvh;position:relative;--pf-step:ease}
+.tp.app.th-pixel .pf-lay{--pf-step:steps(8,end)}
+.tp.app .pf-body{flex:1;min-width:0}
+.tp.app .pf-col{display:flex;flex-direction:column;gap:14px;min-width:0}
+.tp.app .pf-head,.tp.app .pf-c-note,.tp.app .pf-wait{text-shadow:0 0 5px var(--bg),0 0 2px var(--bg)}
+/* phones: one column under the head, the bottom bar pinned */
+.tp.app .pf-lay.s-phone{display:block}
+.tp.app .pf-lay.s-phone .pf-body{max-width:460px;margin:0 auto;padding:calc(18px + env(safe-area-inset-top)) 16px calc(100px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:14px}
+/* bigger screens: columns side by side, each scrolling on its own */
+.tp.app .pf-lay:not(.s-phone){height:100dvh;overflow:hidden}
+.tp.app .pf-lay:not(.s-phone) .pf-body{display:flex;gap:18px;padding:0 18px}
+.tp.app .pf-lay:not(.s-phone) .pf-col{overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:20px 2px 26px}
+.tp.app .pf-lay.s-tab{height:calc(100dvh - 74px - env(safe-area-inset-bottom));min-height:0}
+.tp.app .pf-screen[data-size=tab]>.nav{left:0;right:0;width:auto;transform:none;border-radius:0;box-shadow:inset 0 1px 0 var(--line)}
+.tp.app .pf-col.left{width:300px;flex:none}
+.tp.app .pf-lay.s-tab .pf-col.left{width:296px}
+.tp.app .pf-lay.s-desk .pf-col.left{width:350px}
+.tp.app .pf-col.rest,.tp.app .pf-col.mid,.tp.app .pf-col.right{flex:1}
+/* sideways phones: the card fixed on the left third, the rest scrolls */
+.tp.app .pf-lay.s-side .pf-body{gap:12px;padding:0 12px}
+.tp.app .pf-lay.s-side .pf-col{padding:10px 2px 14px;gap:10px}
+.tp.app .pf-lay.s-side .pf-col.fix{width:32%;max-width:250px;flex:none}
+.tp.app .pf-lay.s-side .pf-card{width:min(100%,calc((100dvh - 96px) * 5 / 7))}
+.tp.app .pf-lay.s-side .pf-c-note{display:none}
+.tp.app .pf-lay.s-side .pf-head{min-height:40px}
+/* states with no page: one panel in the middle */
+.tp.app .pf-screen:not([data-state=ok]):not([data-state=guest]) .pf-body{display:flex;flex-direction:column;gap:14px;max-width:460px;margin:0 auto;padding:calc(18px + env(safe-area-inset-top)) 16px 24px}
+.tp.app .pf-notice .ttl{white-space:normal}
+.tp.app .pf-notice .bb,.tp.app .pf-guest .bb{justify-self:start}
+.tp.app .pf-guest .bb{min-width:200px}
+
+/* ---------------------------------------------------------------- small pieces */
+.tp.app .pf .pf-sec{grid-template-columns:minmax(0,1fr);min-width:0}
+.tp.app .pf .pf-sh{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;min-height:28px}
+.tp.app .pf .pf-sh .ttl{flex:1 1 auto;min-width:0;white-space:normal}
+.tp.app .pf .pf-link{font:700 12.5px var(--ui);color:var(--cw-accn);min-height:44px;margin:-8px 0;padding:0 2px;white-space:nowrap;text-decoration:underline;text-underline-offset:3px;background:none}
+.tp.app .pf .pos{color:var(--cw-pos)}.tp.app .pf .neg{color:var(--cw-neg)}
+.tp.app .pf .pf-sub{display:grid;gap:8px;padding-top:11px;box-shadow:inset 0 1px 0 var(--line)}
+.tp.app .pf .pf-crewbtn{display:block;max-width:min(46vw,170px);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;line-height:44px;padding:0 12px}
+.tp.app .pf-lay.s-side .pf-crewbtn{max-width:112px}
+.tp.app .pf button:focus-visible,.tp.app .pf .mk:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+
+/* ---------------------------------------------------------------- 1. the card (its slot until the art is drawn) */
+.tp.app .pf-cardsec{display:grid;gap:8px}
+.tp.app .pf-card{aspect-ratio:5/7;width:min(100%,300px);margin:0 auto;position:relative;display:grid;grid-template-rows:auto minmax(0,1fr) auto auto;gap:9px;padding:15px 15px 11px;
+  border-radius:var(--r-panel,16px);background:linear-gradient(var(--panel,var(--chipbg)),var(--panel,var(--chipbg))),var(--bg);box-shadow:var(--panelsh,inset 0 0 0 1px var(--line));color:var(--tx);text-shadow:none}
+/* the inner rule a printed card has */
+.tp.app .pf-card::before{content:"";position:absolute;inset:6px;border-radius:max(0px,calc(var(--r-panel,16px) - 5px));box-shadow:inset 0 0 0 1px var(--acc);opacity:.5;pointer-events:none}
+.tp.app .pf-c-top{font:800 9.5px var(--ui);letter-spacing:.14em;text-transform:uppercase;color:var(--cw-mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* the portrait window: the player's avatar on a ruled ground, where the full-body art will stand */
+.tp.app .pf-c-port{display:grid;place-items:center;min-height:0;overflow:hidden;border-radius:max(0px,calc(var(--r-panel,16px) - 9px));box-shadow:inset 0 0 0 1px var(--line);
+  background:repeating-linear-gradient(135deg,transparent 0 10px,var(--line) 10px 11px),linear-gradient(var(--chipbg),var(--chipbg)),var(--bg)}
+.tp.app .pf-c-port .av{--av:min(112px,42cqh)!important}
+.tp.app .pf-c-port{container-type:size}
+.tp.app .pf-c-name{display:grid;gap:3px;min-width:0}
+.tp.app .pf-c-name b{font:var(--dspw,700) 25px/1.05 var(--dsp);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tp.app .pf-c-name small{font:800 10px var(--ui);letter-spacing:.18em;text-transform:uppercase;color:var(--cw-accn)}
+.tp.app .pf-c-name i{font:500 12px var(--ui);font-style:normal;color:var(--cw-mut)}
+.tp.app .pf-c-stats{display:grid;grid-template-columns:repeat(3,1fr);padding-top:9px;box-shadow:inset 0 1px 0 var(--line)}
+.tp.app .pf-c-stats span{display:grid;gap:1px;min-width:0;padding-left:9px}
+.tp.app .pf-c-stats span:first-child{padding-left:0}
+.tp.app .pf-c-stats span+span{box-shadow:inset 1px 0 0 var(--line)}
+.tp.app .pf-c-stats b{font:var(--numw,700) 18px/1.1 var(--num);white-space:nowrap}
+.tp.app .pf-c-stats small{font-size:9.5px;color:var(--cw-mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tp.app.th-pixel .pf-c-name b{font-size:17px}.tp.app.th-pixel .pf-c-stats b{font-size:13px}
+.tp.app .pf .pf-c-note{max-width:300px;margin:0 auto;padding:6px 10px;border-radius:var(--r-btn,12px);background:color-mix(in srgb,var(--bg) 72%,transparent)}
+.tp.app .pf-lay.sample .pf-c-top{padding-right:64px}
+.tp.app .pf-lay.sample .pf-card::after{content:"Sample";position:absolute;top:13px;right:14px;font:800 9px var(--ui);letter-spacing:.14em;text-transform:uppercase;padding:2px 6px;background:var(--acc);color:var(--acctx)}
+/* phones: the card as a slim bar once it has scrolled away */
+.tp.app .pf-sticky{position:fixed;top:0;left:0;right:0;z-index:15;display:flex;align-items:center;gap:9px;padding:calc(6px + env(safe-area-inset-top)) 16px 6px;background:color-mix(in srgb,var(--bg) 92%,transparent);
+  -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-shadow:inset 0 -1px 0 var(--line);transform:translateY(-102%);transition:transform calc(.22s * var(--cw-k,1)) var(--pf-step);text-shadow:none}
+.tp.app .pf-sticky.on{transform:none}
+.tp.app .pf-sticky b{font:var(--dspw,700) 16px var(--dsp)}
+.tp.app .pf-lay[data-motion=off] .pf-sticky{transition:none}
+
+/* ---------------------------------------------------------------- 2. milestones */
+.tp.app .pf-bar{display:grid;gap:5px}
+.tp.app .pf-bar-h{display:flex;align-items:baseline;gap:8px;min-width:0}
+.tp.app .pf-bar-h>b{font:700 14px var(--ui);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tp.app .pf-bar-n{font:var(--numw,700) 12.5px var(--num);color:var(--cw-mut);white-space:nowrap}.tp.app .pf-bar-n b{color:var(--tx);font:inherit}
+.tp.app .pf-gain{font:800 10.5px var(--num);color:var(--cw-pos);white-space:nowrap}
+.tp.app .pf-bar>small{font-size:11.5px;color:var(--cw-mut)}
+.tp.app .pf-track{height:10px;border-radius:min(5px,var(--r-btn,5px));background:linear-gradient(var(--chipbg),var(--chipbg)),var(--bg);box-shadow:inset 0 0 0 1px var(--line);overflow:hidden;position:relative}
+.tp.app .pf-track i{display:block;height:100%;background:var(--acc);transform-origin:left center;transform:scaleX(var(--to))}
+.tp.app .pf-bar.done .pf-track i{background:var(--cw-pos)}
+/* Pixel: ten blocks */
+.tp.app.th-pixel .pf-track::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(90deg,transparent 0 calc(10% - 2px),var(--panel,var(--bg)) calc(10% - 2px) 10%)}
+
+/* ---------------------------------------------------------------- 3. the season strip */
+.tp.app .pf-strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr))}
+.tp.app .pf-strip span{display:grid;gap:2px;padding:2px 0 2px 10px;min-width:0;align-content:start}
+.tp.app .pf-strip span:first-child{padding-left:0}
+.tp.app .pf-strip span+span{box-shadow:inset 1px 0 0 var(--line)}
+.tp.app .pf-strip b{font:var(--numw,700) 20px/1.1 var(--num);white-space:nowrap}
+.tp.app .pf-strip .k b{color:var(--cw-accn)}
+.tp.app .pf-strip small{font-size:10.5px;line-height:1.2;color:var(--cw-mut)}
+.tp.app.th-pixel .pf-strip b{font-size:14px}
+
+/* ---------------------------------------------------------------- 4. the night chip graph */
+.tp.app .pf-pager{display:flex;align-items:center;gap:8px;font:600 11.5px var(--num)}
+.tp.app .pf .pf-pager .ib{width:36px;height:36px;font-size:18px}
+.tp.app .pf .pf-pager .ib:disabled{opacity:.35}
+.tp.app .pf-gh{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:12.5px}
+.tp.app .pf-gh>b:first-child{font:700 14px var(--ui)}
+.tp.app .pf-gh>b{font:var(--numw,700) 15px var(--num)}
+.tp.app .pf-gwrap{touch-action:pan-y;margin:0 -4px}
+.tp.app .pf-graph{display:block;width:100%;height:auto;overflow:visible}
+.tp.app .pf-graph .grid{stroke:var(--line);stroke-width:1;fill:none}
+.tp.app .pf-graph .ax{font:600 9.5px var(--ui);fill:var(--cw-mut)}
+.tp.app .pf-graph .line{fill:none;stroke:var(--tx);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.tp.app .pf-graph.stepped .line{stroke-linejoin:miter;stroke-linecap:butt;stroke-width:2.5}
+.tp.app .pf-graph .g-up{fill:color-mix(in srgb,var(--cw-pos) 28%,transparent)}
+.tp.app .pf-graph .g-dn{fill:color-mix(in srgb,var(--cw-neg) 28%,transparent)}
+.tp.app .pf-graph .buy{fill:none;stroke:var(--cw-mut);stroke-width:1.2;stroke-dasharray:5 4}
+.tp.app .pf-graph .other{fill:none;stroke:var(--cw-mut);stroke-width:1.1;opacity:.5}
+.tp.app .pf-graph .mk .s{stroke:var(--panel,var(--bg));stroke-width:1.5;paint-order:stroke}
+.tp.app .pf-graph .mk.best .s{fill:var(--cw-pos)}.tp.app .pf-graph .mk.worst .s{fill:var(--cw-neg)}
+.tp.app .pf-graph .mk.rebuy .s{fill:var(--cw-mut);stroke:none}.tp.app .pf-graph .mk.earned .s{fill:var(--acc)}.tp.app .pf-graph .mk.end .s{fill:var(--tx)}
+.tp.app .pf-graph .hit{fill:transparent}
+.tp.app .pf-graph .mk[role=button]{cursor:pointer}
+.tp.app .pf-legend{display:flex;flex-wrap:wrap;align-items:center;gap:5px 14px;font-size:11.5px;color:var(--cw-mut)}
+.tp.app .pf-legend .pk{display:inline-flex;align-items:center;gap:6px}
+.tp.app .pf-legend .pk>i{width:0;height:0;border:5px solid transparent;flex:none}
+.tp.app .pf-legend .pk.pk-w>i{border-bottom:8px solid var(--cw-pos);border-top:0}
+.tp.app .pf-legend .pk.pk-l>i{border-top:8px solid var(--cw-neg);border-bottom:0}
+.tp.app .pf-legend .pk.pk-r>i{width:4px;height:11px;border:0;background:var(--cw-mut)}
+.tp.app .pf-gfoot{display:flex;gap:18px;min-height:28px;align-items:center}
+.tp.app .pf-gfoot:empty{display:none}
+
+/* ---------------------------------------------------------------- 5. the calendar */
+.tp.app .pf-heat{display:flex;gap:6px;min-width:0;--cell:12px;--gap:3px}
+.tp.app .pf-lay.s-tab .pf-heat{--cell:14px}
+.tp.app .pf-lay.s-desk .pf-heat{--cell:9px;--gap:2px}
+.tp.app .pf-days{display:grid;grid-template-rows:repeat(7,var(--cell));gap:var(--gap);padding-top:17px;font:600 9px/var(--cell) var(--ui);color:var(--cw-mut);flex:none}
+.tp.app .pf-heat-scroll{flex:1;min-width:0;display:flex;gap:var(--gap);overflow-x:auto;overscroll-behavior-x:contain;padding:17px 2px 6px;scrollbar-width:thin}
+.tp.app .pf-heat .pf-wk{flex:none;width:var(--cell);display:grid;grid-template-rows:repeat(7,var(--cell));gap:var(--gap);position:relative}
+.tp.app .pf-heat .pf-mo{position:absolute;top:-15px;left:0;font:600 9.5px var(--ui);color:var(--cw-mut);white-space:nowrap}
+.tp.app .pf .pf-d{display:block;width:var(--cell,12px);height:var(--cell,12px);padding:0;position:relative;border-radius:min(3px,var(--r-btn,3px));background:linear-gradient(var(--chipbg),var(--chipbg)),var(--bg);box-shadow:inset 0 0 0 1px var(--line);flex:none}
+.tp.app .pf .pf-d.none{visibility:hidden}
+.tp.app .pf .pf-d[class*=" l"]{box-shadow:none;cursor:pointer}
+.tp.app .pf .pf-d.ln3{background:color-mix(in srgb,var(--cw-neg) 94%,var(--bg))}
+.tp.app .pf .pf-d.ln2{background:color-mix(in srgb,var(--cw-neg) 62%,var(--bg))}
+.tp.app .pf .pf-d.ln1{background:color-mix(in srgb,var(--cw-neg) 34%,var(--bg))}
+.tp.app .pf .pf-d.lp0,.tp.app .pf .pf-d.ln0{background:color-mix(in srgb,var(--tx) 32%,var(--bg))}
+.tp.app .pf .pf-d.lp1{background:color-mix(in srgb,var(--cw-pos) 34%,var(--bg))}
+.tp.app .pf .pf-d.lp2{background:color-mix(in srgb,var(--cw-pos) 62%,var(--bg))}
+.tp.app .pf .pf-d.lp3{background:color-mix(in srgb,var(--cw-pos) 94%,var(--bg))}
+.tp.app .pf .pf-d.today{outline:1.5px solid var(--tx);outline-offset:1px}
+/* a night won: a small crown cut out of the square; an achievement that day: a dot in its corner */
+.tp.app .pf .pf-d.won::before{content:"";position:absolute;left:50%;top:50%;width:64%;height:48%;transform:translate(-50%,-50%);background:var(--bg);clip-path:polygon(0 100%,0 15%,25% 60%,50% 0,75% 60%,100% 15%,100% 100%)}
+.tp.app .pf .pf-d.ach::after{content:"";position:absolute;right:-1px;top:-1px;width:4px;height:4px;border-radius:50%;background:var(--tx);box-shadow:0 0 0 1px var(--panel,var(--bg))}
+.tp.app.th-pixel .pf .pf-d.ach::after{border-radius:0}
+.tp.app .pf-legend.heat{gap:3px}.tp.app .pf-legend.heat .pk{margin-left:10px;gap:5px}
+.tp.app .pf-legend.heat .pf-d{--cell:11px;cursor:default}.tp.app .pf-legend.heat .pk>.pf-d{border:0;width:11px;height:11px}
+.tp.app .pf-daysheet .row{flex-wrap:wrap}
+
+/* ---------------------------------------------------------------- 6. big moments */
+.tp.app .pf .pf-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:8px}
+.tp.app .pf .pf-tile{display:grid;gap:4px;align-content:start;padding:11px;text-align:left;border-radius:var(--r-btn,12px);background:linear-gradient(var(--chipbg),var(--chipbg)),var(--bg);box-shadow:inset 0 0 0 1px var(--line);color:var(--tx);min-width:0}
+.tp.app .pf .pf-tile>b{font:var(--numw,700) 22px/1.1 var(--num)}
+.tp.app .pf .pf-tile>small{font-size:11px;line-height:1.35;color:var(--cw-mut)}
+.tp.app .pf-tc{display:flex;flex-wrap:wrap;align-items:flex-end;gap:5px 9px;margin-top:3px}
+.tp.app .pf-cards{display:inline-flex;gap:2px}
+.tp.app.th-pixel .pf .pf-tile>b{font-size:15px}
+.tp.app .pf-wh{display:grid;grid-template-columns:minmax(96px,34%) 1fr 36px;align-items:center;gap:9px;font-size:12.5px}
+.tp.app .pf-wh i{height:6px;background:linear-gradient(var(--chipbg),var(--chipbg)),var(--bg);box-shadow:inset 0 0 0 1px var(--line);overflow:hidden}
+.tp.app .pf-wh i b{display:block;height:100%;background:var(--tx);transform-origin:left center;transform:scaleX(var(--to))}
+.tp.app .pf-wh small{font:var(--numw,700) 11.5px var(--num);color:var(--cw-mut);text-align:right}
+
+/* ---------------------------------------------------------------- 7. streaks and history */
+.tp.app .pf-streak,.tp.app .pf-srow{display:flex;align-items:center;gap:10px;min-height:42px}
+.tp.app .pf-streak .txt b,.tp.app .pf-srow .txt b{font:700 13.5px var(--ui)}
+.tp.app .pf-streak .txt small,.tp.app .pf-srow .txt small{font-size:11px;color:var(--cw-mut)}
+.tp.app .pf-streak .n,.tp.app .pf-srow .n{font:var(--numw,700) 20px var(--num);min-width:26px;text-align:right}
+.tp.app .pf-streak .u,.tp.app .pf-srow .u{font:600 10.5px var(--num);color:var(--cw-mut);width:38px}
+.tp.app .pf-pips{display:inline-grid;grid-template-columns:repeat(8,6px);gap:2px}
+.tp.app .pf-pips i{height:10px;background:linear-gradient(var(--chipbg),var(--chipbg)),var(--bg);box-shadow:inset 0 0 0 1px var(--line)}
+.tp.app .pf-pips i.on{background:var(--acc);box-shadow:none}
+.tp.app .pf-lay.s-side .pf-pips,.tp.app .pf-lay.s-lap .pf-pips{display:none}
+.tp.app .pf-rank{position:relative;padding-left:30px}
+.tp.app .pf-rank svg{display:block;width:100%;height:64px;box-shadow:inset 1px 0 0 var(--line),inset 0 -1px 0 var(--line)}
+.tp.app .pf-rank .line{fill:none;stroke:var(--tx);stroke-width:2.2}
+.tp.app .pf-rank .ax{position:absolute;left:0;top:3px;font:600 9.5px var(--ui);color:var(--cw-mut)}.tp.app .pf-rank .ax.b{top:auto;bottom:3px}
+.tp.app .pf-career{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+.tp.app.th-pixel .pf-career .stat b{font-size:13px}
+
+/* ---------------------------------------------------------------- 8. the cabinet */
+.tp.app .pf-cab{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:12px 4px}
+.tp.app .pf .pf-ach{display:grid;justify-items:center;align-content:start;gap:4px;padding:4px 2px;text-align:center;min-width:0;color:var(--tx);background:none}
+.tp.app .pf-ach>b{font:700 11.5px/1.2 var(--ui);max-width:100%;overflow-wrap:anywhere}
+.tp.app .pf-ach>small{font-size:10px;line-height:1.25;color:var(--cw-mut);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.tp.app .pf-ach.has>small{text-transform:uppercase;letter-spacing:.1em;font-weight:800;font-size:9px}
+.tp.app .pf-ach:not(.has)>b{color:var(--cw-mut)}
+.tp.app .pf-medal{width:var(--m,54px);height:var(--m,54px);position:relative;display:grid;place-items:center;flex:none}
+.tp.app .pf-medal svg{position:absolute;inset:0;width:100%;height:100%}
+.tp.app .pf-medal .o{fill:var(--panel,var(--bg));stroke:var(--cw-mut);stroke-width:1.4}
+.tp.app .pf-medal .in{fill:none;stroke:var(--line);stroke-width:1}
+.tp.app .pf-medal .dots{fill:none;stroke:var(--acc);stroke-width:1.7;stroke-dasharray:.1 5.4;stroke-linecap:round}
+.tp.app .pf-medal>b{position:relative;font:var(--dspw,700) calc(var(--m,54px) * .3)/1 var(--dsp);letter-spacing:.02em}
+.tp.app .pf-medal>i{position:absolute;right:-3px;bottom:-2px;font:800 9px/1 var(--num);font-style:normal;padding:2px 4px;background:var(--acc);color:var(--acctx)}
+/* how rare: a plain ring, a firm ring, the accent, a double ring, a studded one, and a filled one */
+.tp.app .pf-medal.r-uncommon .o{stroke:var(--tx)}
+.tp.app .pf-medal.r-rare .o{stroke:var(--acc);stroke-width:2}
+.tp.app .pf-medal.r-epic .o,.tp.app .pf-medal.r-legendary .o{stroke:var(--acc);stroke-width:2.2}
+.tp.app .pf-medal.r-epic .in,.tp.app .pf-medal.r-legendary .in{stroke:var(--acc)}
+.tp.app .pf-medal.r-mythic .o{fill:var(--acc);stroke:var(--tx);stroke-width:2.2}.tp.app .pf-medal.r-mythic .in{stroke:var(--acctx)}.tp.app .pf-medal.r-mythic>b{color:var(--acctx)}
+.tp.app .pf-medal.r-mythic .dots{stroke:var(--acctx)}
+/* not earned: the bare shell, faint and dashed */
+.tp.app .pf-medal.locked{opacity:.42}
+.tp.app .pf-medal.locked .o{stroke-dasharray:3 3;fill:none}.tp.app .pf-medal.locked.r-mythic .o{fill:none;stroke:var(--acc)}
+.tp.app .pf-medal.locked .dots{display:none}
+.tp.app .pf-ach.new .pf-medal::after{content:"";position:absolute;top:1px;right:1px;width:9px;height:9px;border-radius:50%;background:var(--red,#d33);box-shadow:0 0 0 2px var(--panel,var(--bg))}
+/* Pixel: square shells */
+.tp.app.th-pixel .pf-medal svg{display:none}
+.tp.app.th-pixel .pf-medal{background:var(--bg);box-shadow:inset 0 0 0 2px var(--cw-mut),inset 0 0 0 4px var(--bg),inset 0 0 0 5px var(--line)}
+.tp.app.th-pixel .pf-medal.r-uncommon{box-shadow:inset 0 0 0 2px var(--tx),inset 0 0 0 4px var(--bg),inset 0 0 0 5px var(--line)}
+.tp.app.th-pixel .pf-medal.r-rare,.tp.app.th-pixel .pf-medal.r-epic,.tp.app.th-pixel .pf-medal.r-legendary{box-shadow:inset 0 0 0 2px var(--acc),inset 0 0 0 4px var(--bg),inset 0 0 0 5px var(--line)}
+.tp.app.th-pixel .pf-medal.r-epic,.tp.app.th-pixel .pf-medal.r-legendary{box-shadow:inset 0 0 0 2px var(--acc),inset 0 0 0 4px var(--bg),inset 0 0 0 6px var(--acc)}
+.tp.app.th-pixel .pf-medal.r-mythic{background:var(--acc);box-shadow:inset 0 0 0 2px var(--tx)}
+.tp.app.th-pixel .pf-medal>b{font-size:calc(var(--m,54px) * .22)}
+.tp.app.th-pixel .pf-ach.new .pf-medal::after{border-radius:0}
+.tp.app .pf-achsheet .pf-how{font-size:14px;line-height:1.45;margin:0;color:var(--tx)}
+.tp.app .pf-achsheet .pf-medal{margin:2px 4px 2px 2px}
+.tp.app .pf-achsheet .bb{justify-self:start}
+/* the Profile tab's dot on the bottom bar (a new achievement) */
+.tp.app .nav .bdg.dot{min-width:8px;width:8px;height:8px;padding:0;right:22px;top:-1px}
+
+/* ---------------------------------------------------------------- motion */
+@keyframes pfin{from{opacity:0;transform:translateY(12px)}}
+@keyframes pfcard{0%{opacity:0;transform:translateY(26px)}70%{opacity:1;transform:translateY(-4px)}}
+@keyframes pffade{from{opacity:0}}
+@keyframes pfbar{from{transform:scaleX(var(--from,0))}}
+@keyframes pfgrow{from{transform:scaleX(0)}}
+@keyframes pfpop{from{opacity:0}}
+/* full: sections arrive one after another, the card settles with a slight overshoot, bars fill from where they
+   were, the chip line is uncovered from left to right with its marks after it, the year fills week by week */
+.tp.app .pf-lay[data-motion=full] .pf-sec:not([data-again]){animation:pfin calc(.42s * var(--cw-k,1)) var(--cw-ease,ease) both}
+.tp.app .pf-lay[data-motion=full] .pf-col>.pf-sec:nth-child(2){animation-delay:.05s}
+.tp.app .pf-lay[data-motion=full] .pf-col>.pf-sec:nth-child(3){animation-delay:.1s}
+.tp.app .pf-lay[data-motion=full] .pf-col>.pf-sec:nth-child(n+4){animation-delay:.15s}
+.tp.app .pf-lay[data-motion=full] .pf-cardsec:not([data-again]) .pf-card{animation:pfcard calc(.55s * var(--cw-k,1)) var(--cw-ease,ease) both}
+.tp.app .pf-lay[data-motion=full] .pf-sec:not([data-again]) .pf-track i{animation:pfbar calc(.7s * var(--cw-k,1)) var(--cw-ease,ease) .2s both}
+.tp.app .pf-lay[data-motion=full] .pf-sec:not([data-again]) .pf-wh i b{animation:pfgrow calc(.6s * var(--cw-k,1)) var(--cw-ease,ease) .2s both}
+.tp.app .pf-lay[data-motion=full] .pf-sec:not([data-again]) .pf-graph .reveal{transform-origin:0 0;animation:pfgrow calc(1.2s * var(--cw-k,1)) var(--cw-ease,ease) .15s both}
+.tp.app .pf-lay[data-motion=full] .pf-sec:not([data-again]) .pf-graph .mk{animation:pfpop .25s ease both;animation-delay:calc(1s * var(--cw-k,1) + var(--i,0) * 70ms)}
+.tp.app .pf-lay[data-motion=full] .pf-sec:not([data-again]) .pf-heat .pf-wk{animation:pffade .25s ease both;animation-delay:calc(.2s + var(--i,0) * 11ms)}
+/* Pixel moves in steps, never eased */
+.tp.app.th-pixel .pf-lay[data-motion=full] .pf-sec,.tp.app.th-pixel .pf-lay[data-motion=full] .pf-card,.tp.app.th-pixel .pf-lay[data-motion=full] .pf-track i,
+.tp.app.th-pixel .pf-lay[data-motion=full] .pf-wh i b,.tp.app.th-pixel .pf-lay[data-motion=full] .pf-heat .pf-wk{animation-timing-function:steps(6,end)!important}
+.tp.app.th-pixel .pf-lay[data-motion=full] .pf-sec:not([data-again]) .pf-graph .reveal{animation-timing-function:steps(12,end)}
+/* calm: one short fade for each section, nothing drawn on, nothing counting */
+.tp.app .pf-lay[data-motion=calm] .pf-sec:not([data-again]){animation:pffade calc(.3s * var(--cw-k,1)) ease both}
+.tp.app.th-pixel .pf-lay[data-motion=calm] .pf-sec{animation-timing-function:steps(3,end)}
+/* off (and a phone that asks for less motion): everything is simply there */
+.tp.app .pf-lay[data-motion=off] *,.tp.app .pf-lay[data-motion=off] *::before,.tp.app .pf-lay[data-motion=off] *::after{animation:none!important;transition:none!important}
