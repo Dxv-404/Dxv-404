@@ -297,6 +297,14 @@ export default {
       if (!isPush(p)) return new Response('bad push', { status: 400 });
       return Response.json(await deliver(p, d));
     }
+    // the database says something was just queued for phones (its push_kick trigger): send it now, not at the
+    // next timed look. Anyone may call this: it only sends what is already waiting, and each row goes once.
+    if (url.pathname === '/push/drain' && request.method === 'POST') {
+      const d = pushDeps(env);
+      if (!d) return new Response('push is not set up', { status: 503 });
+      try { return Response.json(await drainOutbox(d), { headers: cors }); }
+      catch (e) { console.error('push drain failed', e); return new Response('try again', { status: 502 }); }
+    }
     // nights played offline go through one table object (it has a recorder and an outbox)
     if (url.pathname === '/offline/upload' && request.method === 'POST') return env.TABLES.get(env.TABLES.idFromName('__offline_uploads__'), { locationHint: 'apac' }).fetch(request);
     const echo = url.pathname.match(/^\/echo\/([A-Z0-9]{4,12})$/);
@@ -323,7 +331,8 @@ export default {
   async scheduled(event, env, ctx): Promise<void> {
     // daily: research events older than RESEARCH_KEEP_DAYS go to the R2 archive (checked), then leave the database
     if (event.cron === RESEARCH_CRON) { ctx.waitUntil(researchArchive(env).catch((e: unknown) => console.error('research archive failed', e))); return; }
-    // every few minutes: pushes the database queued (approved into a crew, trophies, a season's end)
+    // every minute, as the safety net (the database calls /push/drain the moment it queues one): pushes the
+    // database queued (a crew table opened, approved into a crew, trophies, a season's end)
     if (event.cron !== '23 21 * * *') {
       const d = pushDeps(env);
       if (d) ctx.waitUntil(drainOutbox(d).then((r) => { if (r.sent + r.gone + r.failed) console.log(`push outbox: ${JSON.stringify(r)}`); }, (e: unknown) => console.error('push outbox failed', e)));

@@ -177,7 +177,7 @@ export async function openBell(ctx: BellCtx, changed: () => void = () => undefin
         const r = await account.sendTestPush();
         emit('test-sent', { phones: r.phones });
         b.disabled = false;
-        const st = sw.querySelector('.btest-st'); if (st) st.textContent = 'Sent. It arrives within about 3 minutes; you can close the app to see it land.';
+        const st = sw.querySelector('.btest-st'); if (st) st.textContent = 'Sent. It should land in a few seconds; close the app to see it arrive.';
         return;
       }
     } catch (err) { toast((err as Error).message || 'That did not work'); emit('error', { what, err: String((err as Error)?.message ?? err).slice(0, 120) }); }

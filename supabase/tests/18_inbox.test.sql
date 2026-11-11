@@ -33,5 +33,10 @@ select is(testing.one(:PA, 'select jsonb_array_length(public.my_notifications())
 select is(position('interval ''30 days''' in pg_get_functiondef('public.daily_upkeep(text, text)'::regprocedure)) > 0, true, 'the clean-up keeps the outbox 30 days');
 select is(position('delete from private.push_outbox where at < now() - interval ''7 days''' in pg_get_functiondef('public.daily_upkeep(text, text)'::regprocedure)), 0, 'not 7 any more');
 
+-- queued notifications are sent at once: the database tells the worker (where pg_net is not there, as here, nothing happens)
+select is((select count(*)::int from pg_trigger where tgname = 'push_kick' and not tgisinternal), 1, 'a queued notification kicks the sender');
+select is((select value from private.settings where key = 'push_kick_url'), 'https://train-poker-tables.apins-subdomain.workers.dev/push/drain', 'at the worker''s drain');
+select lives_ok($$insert into private.push_outbox (account_id, kind, title, body, url, tag, dedupe) select id, 'crew', 't', 'b', '/', 'x', 'kick-test' from public.accounts limit 1$$, 'and queueing never fails because of it');
+
 select * from finish();
 rollback;
