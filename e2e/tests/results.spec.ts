@@ -369,8 +369,8 @@ for (const how of ['reduced motion', 'motion off'] as const) {
     await expect(page.locator('.tpw-wrap, .tp-wcard')).toHaveCount(0);
     await expect(seat(page, 'Riya').locator('.shown .cd')).toHaveCount(2);
     await expect(page.locator('.tp.live .wpill b')).toHaveText(/^Riya wins \d+$/);
-    // nothing moves: every card is at its end state
-    const moving = await page.evaluate(() => document.getAnimations().filter((a) => a.playState === 'running' && !(a as CSSAnimation).animationName?.startsWith('turnPulse')).map((a) => (a as CSSAnimation).animationName ?? a.id));
+    // nothing moves: every card is at its end state (the menu behind the table may still be drawing its tab underline, cwnavin)
+    const moving = await page.evaluate(() => document.getAnimations().filter((a) => a.playState === 'running' && !/^(turnPulse|cwnavin)/.test((a as CSSAnimation).animationName ?? '')).map((a) => (a as CSSAnimation).animationName ?? a.id));
     expect(moving).toEqual([]);
     await reached(page, 'all');
     await expect(seat(page, 'Meera').locator('.shown .cd')).toHaveCount(2);
