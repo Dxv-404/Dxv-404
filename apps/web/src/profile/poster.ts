@@ -3,7 +3,7 @@
 // theme's spotlight. Plain strings, so it is unit tested.
 
 /** The characters drawn so far: the ones players have picked. */
-export const POSTERS: readonly string[] = ['ink-sensei', 'classic-gambler', 'pixel-knight', 'velvet-peacock-plume'];
+export const POSTERS: readonly string[] = ['ink-sensei', 'classic-gambler', 'pixel-knight', 'velvet-peacock-plume', 'ink-ink-tiger', 'velvet-high-roller'];
 export const hasPoster = (id: string | null | undefined): boolean => !!id && POSTERS.includes(id);
 /** The poster's page at a motion level (full: every move; calm: a soft entrance and a highlight; off: still). */
 export const posterUrl = (id: string, level: 'full' | 'calm' | 'off'): string => `/tp/posters/${id}.html${level === 'calm' ? '#calm' : level === 'off' ? '#still' : ''}`;

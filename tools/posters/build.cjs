@@ -6,7 +6,7 @@
 const fs = require('fs'); const path = require('path');
 const { parts } = require('./src/common.cjs');
 const OUT = path.join(__dirname, '../../apps/web/public/tp/posters');
-const IDS = { sensei: 'ink-sensei', gambler: 'classic-gambler', knight: 'pixel-knight', peacock: 'velvet-peacock-plume' };
+const IDS = { sensei: 'ink-sensei', gambler: 'classic-gambler', knight: 'pixel-knight', peacock: 'velvet-peacock-plume', tiger: 'ink-ink-tiger', roller: 'velvet-high-roller' };
 fs.mkdirSync(OUT, { recursive: true });
 for (const [file, id] of Object.entries(IDS)) {
   const c = require('./src/' + file + '.cjs');
