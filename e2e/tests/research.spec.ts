@@ -33,7 +33,8 @@ async function device(browser: Browser, baseURL: string, name: string, model: Ph
   if (!o.guestOnly) await p.ctx.addInitScript(() => { try { localStorage.removeItem('tp-guest-only'); } catch { /* blocked */ } });
   await p.page.evaluate(([port, local]) => {
     localStorage.setItem('tp-server-override', `ws://127.0.0.1:${port}`);
-    localStorage.setItem('tp-intro-done', '1'); localStorage.setItem('tp-theme', 'classic');
+    localStorage.setItem('tp-intro-done', '1'); localStorage.setItem('tp-bell-asked', '1'); // (the bell's one-time offer after a game is not part of these flows)
+     localStorage.setItem('tp-theme', 'classic');
     for (const [k, v] of Object.entries(JSON.parse(local!) as Record<string, string>)) localStorage.setItem(k, v);
   }, [String(PORT), JSON.stringify(o.local ?? {})] as const);
   await p.page.reload();
