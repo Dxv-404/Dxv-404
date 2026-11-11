@@ -155,6 +155,7 @@ const FR = {
   up2: { sword: 'raised', cape: 3, plume: 3, eyes: 'L' },
   slam: { dy: 1, cape: 3, plume: 2, dust: 2, eyes: 'L' },
   settle: { dy: 1, cape: 2, plume: 1, dust: 1 },
+  slamsil: { dy: 1, cape: 3, plume: 2, sil: true },
 };
 let frames = '';
 for (const [k, o] of Object.entries(FR)) frames += `<g class="kn-f${k === 'i0' ? ' kn-on' : ''}" data-f="${k}">${paths(figure(o))}</g>`;
@@ -172,16 +173,104 @@ for (let i = 0; i < 16; i++) {                               // runs tip -> guar
 }
 const spark = `<path class="kn-o kn-spark" data-i="0" fill="#ffffff" d="M9 0h2v3h-2zM7 1h6v1h-6z"/><path class="kn-o kn-spark" data-i="1" fill="#ffffff" d="M9 0h2v4h-2zM6 1h8v1h-8zM8 0h1v1h-1zM11 2h1v1h-1z"/><path class="kn-o kn-spark" data-i="2" fill="#fff6c0" d="M10 1h1v1h-1zM7 1h1v1h-1zM12 1h1v1h-1z"/>`;
 
+// ---------------- the big effects: pixel overlays shown by name, behind (XB) or in front (XF) of the knight ----------------
+const XB = {}, XF = {};
+let seed = 5; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+// charge: light is drawn in to the raised blade from all around
+const PARTS = Array.from({ length: 18 }, (_, i) => ({ a: i / 18 * 6.283 + rnd() * .3, r: 24 + rnd() * 18 }));
+for (let k = 0; k < 6; k++) {
+  const L = blank();
+  PARTS.forEach((p, i) => {
+    const f2 = 1 - k / 6.5, a2 = p.a + (k - 1) * .35; put(L, Math.round(10 + Math.cos(a2) * p.r * f2), Math.round(8 + Math.sin(a2) * p.r * f2), i % 2 ? 'w' : 'Y');
+    const f = 1 - (k + 1) / 6.5, a = p.a + k * .35; put(L, Math.round(10 + Math.cos(a) * p.r * f), Math.round(8 + Math.sin(a) * p.r * f), 'W');
+  });
+  XF['g' + k] = L;
+}
+// the blade white-hot, crackling (three variants)
+for (let v = 0; v < 3; v++) {
+  const L = blank(); rect(L, 9, 0, 2, 15, 'W');
+  for (let y = 0; y < 15; y++) { if (rnd() < .6) put(L, 8, y, rnd() < .5 ? 'Y' : 'w'); if (rnd() < .6) put(L, 11, y, rnd() < .5 ? 'Y' : 'w'); if (rnd() < .22) put(L, 7, y, 'w'); if (rnd() < .22) put(L, 12, y, 'w'); if (rnd() < .08) put(L, 6 + (v % 2) * 7, y, 'Y'); }
+  rect(L, 4, 15, 12, 1, 'W'); put(L, 3, 15, 'Y'); put(L, 16, 15, 'Y');
+  XF['a' + v] = L;
+}
+// the flare at the tip, growing
+for (let n = 1; n <= 5; n++) {
+  const L = blank(); rect(L, 10 - 3 * n, 1, 6 * n, 1, 'W'); rect(L, 9, 0, 2, 2 + n * 2, 'W'); rect(L, 10 - 2 * n, 0, 4 * n, 1, 'Y'); rect(L, 10 - 2 * n, 2, 4 * n, 1, 'Y');
+  for (let d = 1; d <= n + 1; d++) { put(L, 9 - d, 1 + d, 'w'); put(L, 10 + d, 1 + d, 'w'); }
+  XF['f' + n] = L;
+}
+// the moon answers: a halo, then a wide one with rays
+const ring = (L, r0, r1, c, skip) => { const R = Math.ceil(r1); for (let y = -R; y <= R; y++) for (let x = -R; x <= R; x++) { const d = Math.hypot(x, y); if (d >= r0 && d <= r1 && !(skip && (x + y) % 2)) put(L, 10 + x, 11 + y, c); } };
+{ const L = blank(); ring(L, 10.2, 11.2, '#6a5aa0'); XB.halo = L; }
+{ const L = blank(); ring(L, 10.2, 12, '#8d7fc8'); ring(L, 13.5, 15, '#6a5aa0', true); [[1, 0], [0, 1], [.7, .7], [.7, -.7], [-.7, .7]].forEach(([dx, dy]) => { for (let d = 17; d < 23; d += 2) put(L, Math.round(10 + dx * d), Math.round(11 + dy * d), '#cfc3e6'); }); XB.halo2 = L; }
+// lightning leaps from the charged blade to the towers and the ground (three variants)
+const bolt = (L, x0, y0, x1, y1, j) => {
+  const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)); let ox = 0;
+  for (let i = 0; i <= n; i++) {
+    const t = i / n; if (i % 3 === 0) ox += Math.round((rnd() - .5) * j);
+    ox = Math.round(ox * (1 - t * t)); const x = Math.round(x0 + (x1 - x0) * t) + ox, y = Math.round(y0 + (y1 - y0) * t);
+    put(L, x, y, 'W'); put(L, x + 1, y, 'W'); if (i % 2) put(L, x - 1, y, 'w'); else put(L, x + 2, y, 'w');
+    if (i > 4 && i < n - 4 && rnd() < .07) { const dx = rnd() < .5 ? -1 : 1; for (let q = 1; q < 6; q++) put(L, x + dx * q, y + q, q < 3 ? 'W' : 'w'); }
+  }
+};
+[[[43, 27], [2, 57]], [[3, 28], [46, 44]], [[43, 27], [3, 28], [45, 57]]].forEach((ends, v) => { const L = blank(); ends.forEach(([x, y]) => bolt(L, 11, 3, x, y, 5)); XF['z' + v] = L; });
+// the strike: rays of light burst from where the blade lands, and a pillar stands behind him, narrowing
+[28, 24, 18, 12, 6, 2].forEach((w, k) => {
+  const L = blank();
+  const reach = [90, 80, 64, 44, 26, 0][k], half = [.075, .065, .05, .035, .02, 0][k];
+  if (reach) for (let y = 0; y < 58; y++) for (let x = 0; x < W; x++) {
+    const dx = x - 24, dy = 56 - y, d = Math.hypot(dx, dy); if (d > reach || d < 6) continue;
+    const a = Math.atan2(dy, dx), u = ((a / Math.PI * 9) % 1 + 1) % 1, off = Math.min(u, 1 - u) * Math.PI / 9;
+    if (off < half) put(L, x, y, off < half * .45 ? 'W' : (x + y) % 2 ? 'Y' : 'w');
+  }
+  for (let y = 0; y < 58; y++) for (let x = 24 - w / 2; x < 24 + w / 2; x++) {
+    const e = Math.min(x - (24 - w / 2), 24 + w / 2 - 1 - x);
+    const c = e < 1 ? ((x + y) % 2 ? null : 'w') : e < 3 ? 'w' : e < 5 && w > 12 ? 'Y' : 'W';
+    if (c) put(L, x, y, c);
+  }
+  XB['b' + k] = L;
+});
+// ... and the ground: a ring running out, walls of dust, glowing cracks, rubble thrown up
+const RUB = Array.from({ length: 20 }, (_, i) => ({ x: 24 + (rnd() - .5) * 14, vx: (i % 2 ? 1 : -1) * (.5 + rnd() * 2.4), vy: 2.6 + rnd() * 4.2, s: rnd() < .35 ? 2 : 1, c: ['d', 'e', 'M', 'L'][i % 4] }));
+for (let k = 0; k < 9; k++) {
+  const L = blank();
+  const rx = 5 + k * 4.6, ry = 1.5 + k * .9, col = k < 3 ? 'W' : k < 6 ? 'w' : 'd';
+  for (let i = 0; i < 240; i++) { const a = i / 240 * 6.283, x = Math.round(24 + Math.cos(a) * rx), y = Math.round(57 + Math.sin(a) * ry); if (k > 5 && (x + y) % 2) continue; if (y <= 58) put(L, x, y, col); }
+  [-1, 1].forEach(sd => {
+    const x0 = 24 + sd * (5 + k * 4.6), h = Math.max(1, 12 - k * 1.3);
+    for (let j = 0; j < h; j++) { const wv = Math.round(Math.sin(j * .9 + k) * 1.2); for (let q = 0; q < 3; q++) if (rnd() < .82) put(L, Math.round(x0 + sd * q + wv), 57 - j, j > h - 2 ? 'L' : q === 0 ? 'd' : 'e'); }
+  });
+  [-1, 1].forEach(sd => { let y = 60; for (let d = 1; d <= Math.min(22, 3 + k * 4); d++) { if (d % 4 === 0) y += (d % 8 ? 1 : -1); put(L, 24 + sd * d, Math.max(59, Math.min(62, y)), k < 2 ? 'W' : k < 4 ? 'Y' : k < 6 ? 'G' : 'g'); if (d % 5 === 2) put(L, 24 + sd * d, Math.max(59, Math.min(62, y + 1)), k < 4 ? 'G' : 'g'); } });
+  RUB.forEach(p => { const t = k + 1, x = Math.round(p.x + p.vx * t), y = Math.round(57 - (p.vy * t - .42 * t * t)); if (y < 58 && y >= 0) rect(L, x, y, p.s, p.s, p.c); });
+  XF['s' + k] = L;
+}
+{ const L = blank(); rect(L, 23, 41, 2, 17, 'W'); rect(L, 18, 39, 12, 2, 'Y'); for (let y = 42; y < 58; y += 2) { put(L, 22, y, 'w'); put(L, 25, y + 1, 'w'); } XF.hotp = L; }
+// embers after it
+const EMB = Array.from({ length: 12 }, () => ({ x: 6 + rnd() * 36, v: 1 + rnd() * 1.6, ph: rnd() * 6, life: 5 + Math.floor(rnd() * 6) }));
+for (let k = 0; k < 10; k++) { const L = blank(); EMB.forEach((p, i) => { if (k > p.life) return; put(L, Math.round(p.x + Math.sin(k * .8 + p.ph) * 1.5), Math.round(56 - k * p.v), (k + i) % 3 ? 'Y' : 'G'); }); XF['e' + k] = L; }
+// idle: a shooting star now and then; light running down the planted blade
+for (let k = 0; k < 5; k++) { const L = blank(), x = 44 - k * 5, y = 2 + k * 2; put(L, x, y, 'W'); put(L, x + 1, y, 'W'); put(L, x + 2, y - 1, 'w'); put(L, x + 3, y - 1, 'w'); put(L, x + 5, y - 2, '#8d7fb8'); XB['ss' + k] = L; }
+for (let k = 0; k < 8; k++) { const L = blank(), y = 42 + k * 2; rect(L, 23, y, 2, 2, 'W'); put(L, 22, y, 'w'); put(L, 25, y + 1, 'w'); XF['pg' + k] = L; }
+const ov = X => Object.entries(X).map(([k, L]) => `<g class="kn-o kn-x" data-x="${k}">${paths(L)}</g>`).join('');
+const motes = Array.from({ length: 6 }, () => `<rect class="kn-mote" width="1" height="1" fill="#ffe08a"/>`).join('');
+
 const markup = `<svg class="kn-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400" preserveAspectRatio="xMidYMid meet" shape-rendering="crispEdges" aria-hidden="true">
 <defs><clipPath id="kn-clip"><rect x="0" y="0" width="${W}" height="${H}"/></clipPath></defs>
 <rect width="300" height="400" fill="#0d0a18"/>
 <g transform="translate(6 8) scale(${S})" clip-path="url(#kn-clip)">
+<g class="kn-scene">
 <!-- background: sky, moon, castles, ground (static) -->
 <g class="kn-bg">${paths(bg)}</g>
 <g class="kn-stars">${stars}</g>
+<rect class="kn-o kn-x" data-x="hot" width="${W}" height="58" fill="#9a7fe0" opacity=".3"/>
 <rect class="kn-o kn-flash" width="${W}" height="${H}" fill="#f4ecdc"/>
+<!-- effects behind the knight -->
+${ov(XB)}
 <!-- sprite frames: exactly one is shown at a time (class kn-on) -->
 <g class="kn-sprite">${frames}${visor}${glint}${spark}</g>
+<!-- effects in front of him -->
+${ov(XF)}${motes}
+</g>
 <rect class="kn-o kn-dark" width="${W}" height="${H}" fill="#0d0a18"/>
 </g>
 <rect x="3" y="5" width="294" height="390" fill="none" stroke="#e0a83a" stroke-width="3"/>
@@ -192,11 +281,11 @@ const css = `
 /* ---- kn: Pixel Knight (stepped frames; the JS stepper only toggles classes/attributes) ---- */
 .kn-root{background:#0d0a18}
 .kn-svg{image-rendering:pixelated}
-.kn-f,.kn-o,.kn-star2{display:none}
-.kn-f.kn-on,.kn-o.kn-on,.kn-star.kn-on .kn-star2{display:inline}
+.kn-f,.kn-o,.kn-star2,.kn-mote{display:none}
+.kn-f.kn-on,.kn-o.kn-on,.kn-mote.kn-on,.kn-star.kn-on .kn-star2{display:inline}
 `;
 
 module.exports = {
-  prefix: 'kn', name: 'Pixel Knight', player: 'Joel K', auto: 1250,
+  prefix: 'kn', name: 'Pixel Knight', player: 'Joel K', auto: 1500,
   markup, css, hooks: fs.readFileSync(__dirname + '/knight.hooks.cjs', 'utf8'),
 };
