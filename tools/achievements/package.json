@@ -1,0 +1,19 @@
+{
+  "name": "@tp/achievements-tools",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Owner-run: what every player of a crew has already earned, from the stored hands. Reads an exported file; writes nothing to the database.",
+  "scripts": {
+    "build": "../../apps/server/node_modules/.bin/esbuild src/history.ts --bundle --platform=node --target=node22 --format=esm --outdir=dist --out-extension:.js=.mjs",
+    "history": "node dist/history.mjs",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@tp/achievements": "workspace:*",
+    "@tp/engine": "workspace:*"
+  },
+  "devDependencies": {
+    "@tp/bots": "workspace:*"
+  }
+}
