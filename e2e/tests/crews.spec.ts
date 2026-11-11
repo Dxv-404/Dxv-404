@@ -347,7 +347,7 @@ for (const [w, h] of [[390, 844], [1440, 900]] as const) {
       await expect(page.locator('.hint[role=status]')).toHaveCount(0);
       const headTxt = await page.getByTestId('league-head').first().innerText();
       expect(headTxt.replace(/\s+/g, ' ').toLowerCase()).toContain('pts/night nights won (bb)');
-      await expect(page.getByTestId('unranked-divider')).toHaveText(/Fewer than 3 nights/i);
+      await expect(page.getByTestId('unranked-divider')).toHaveText(/Fewer than 4 nights/i);
       await expect(page.getByTestId('league-row').filter({ hasText: 'Sam' }).locator('.n')).toHaveText('–');
       await expect(page.getByTestId('how-points').first()).toContainText('Points per night');
       await layoutOk(page, `${theme} ${w} league points`); await targetsOk(page, `${theme} ${w} league points`);
