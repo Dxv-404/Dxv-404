@@ -95,16 +95,17 @@ select is((select count(*)::int from crew_members where account_id = :'del'), 0,
 select is((select count(*)::int from rescue_requests where target_account = :'del' and status in ('pending', 'approved')), 0, 'and no open rescue');
 
 -- ---------------------------------------------------------------- league: corrections and late games
+-- (a third seat at each table: a crew game counts for the league from three players)
 select testing.one(:VICTIM, $$select public.join_crew('$$ || :'inv3' || $$')$$);
 \set G1 '22222222-2222-4222-8222-000000000001'
 \set G2 '22222222-2222-4222-8222-000000000002'
 select format('{"id":"%s","crew":"%s","table":"DR01","server":"test","casual":false,"startStack":1000,"bigBlind":10,"startedAt":"2026-09-20T14:00:00Z"}', :'G1', :'crew') as game1 \gset
-select is(pg_temp.rec('record_game_end', format('{"game":%s,"endedAt":"2026-09-20T18:00:00Z","players":[{"key":"%s","account":"%s","name":"Owner","buyins":1000,"final":1500},{"key":"%s","account":"%s","name":"Victim","buyins":1000,"final":500}]}', :'game1', :'owner', :'owner', :'victim', :'victim')), 'ok', 'a game in the July–September season');
+select is(pg_temp.rec('record_game_end', format('{"game":%s,"endedAt":"2026-09-20T18:00:00Z","players":[{"key":"%s","account":"%s","name":"Owner","buyins":1000,"final":1500},{"key":"%s","account":"%s","name":"Victim","buyins":1000,"final":500},{"key":"third","name":"Third","buyins":1000,"final":1000}]}', :'game1', :'owner', :'owner', :'victim', :'victim')), 'ok', 'a game in the July–September season');
 select is(pg_temp.rec('close_due_seasons', '{"close":1}'), '1', 'the season closes');
 select is((select account_id::text from trophies where kind = 'season_winner' and crew_id = :'crew'), :'owner', 'owner wins it');
 -- a server that was offline catches up: a bigger game from the same season arrives late
 select format('{"id":"%s","crew":"%s","table":"DR02","server":"test","casual":false,"startStack":1000,"bigBlind":10,"startedAt":"2026-09-30T14:00:00Z"}', :'G2', :'crew') as game2 \gset
-select is(pg_temp.rec('record_game_end', format('{"game":%s,"endedAt":"2026-09-30T18:29:00Z","players":[{"key":"%s","account":"%s","name":"Owner","buyins":1000,"final":0},{"key":"%s","account":"%s","name":"Victim","buyins":1000,"final":2000}]}', :'game2', :'owner', :'owner', :'victim', :'victim')), 'ok', 'a late game (23:59 India time on 30 September)');
+select is(pg_temp.rec('record_game_end', format('{"game":%s,"endedAt":"2026-09-30T18:29:00Z","players":[{"key":"%s","account":"%s","name":"Owner","buyins":1000,"final":0},{"key":"%s","account":"%s","name":"Victim","buyins":1000,"final":2000},{"key":"third","name":"Third","buyins":1000,"final":1000}]}', :'game2', :'owner', :'owner', :'victim', :'victim')), 'ok', 'a late game (23:59 India time on 30 September)');
 select is((select account_id::text from trophies where kind = 'season_winner' and crew_id = :'crew'), :'victim', 'the closed season''s trophy is worked out again');
 select testing.one(:OWNER, $$select public.void_game('$$ || :'G2' || $$', 'played twice')$$);
 select is((select account_id::text from trophies where kind = 'season_winner' and crew_id = :'crew'), :'owner', 'voiding it gives the trophy back');

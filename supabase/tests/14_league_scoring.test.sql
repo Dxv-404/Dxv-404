@@ -1,4 +1,4 @@
--- League scoring (points per night with penalties; 'bb' and 'average'), unranked under 3 nights, ties, the
+-- League scoring (the game score: place points + chip score − rebuys; 'bb' and 'average'), unranked under 4 games, ties, the
 -- player card's numbers, and season control: 2 weeks to 6 months or off, the anchor date, "start a new season
 -- now", season names, no overlaps (20261103000017_league_scoring_seasons.sql).
 begin;
@@ -52,30 +52,44 @@ select is(private.night_points(4, 4, -900, 0), -4, 'and at most −5');
 select is(private.night_points(4, 1, 0, 2), 2, '−1 per rebuy');
 select is(private.night_points(4, 1, 0, -1), 4, 'rebuys never count below 0');
 select is(private.night_points(3, 7, 0, 0), 1, 'a place past the table size gets no finish points (never negative)');
+-- the game score (20261111000021): place points + chip score − rebuys, no point for playing
+select is(private.game_score(7, 1, 0, 1000, 0), 6.0, '1st of 7: 6 place points');
+select is(private.game_score(7, 7, 0, 1000, 0), 0.0, 'last of 7: none');
+select is(private.game_score(4, 2, 500, 1000, 0), 4.5, 'half a starting stack won is +2.5');
+select is(private.game_score(4, 2, 1000, 1000, 0), 7.0, 'doubling the starting stack is +5');
+select is(private.game_score(4, 2, 9000, 1000, 0), 7.0, 'and that is the most');
+select is(private.game_score(4, 4, -1000, 1000, 0), -5.0, 'losing all of it is −5');
+select is(private.game_score(4, 4, -3000, 1000, 2), -7.0, 'never more than −5, and −1 per rebuy');
+select is(private.game_score(4, 2, 390, 1000, 0), 4.0, 'one decimal (1.95 is 2.0)');
+select is(private.game_score(4, 1, 0, 1000, -1), 3.0, 'rebuys never count below 0');
+select is(private.game_score(3, 7, 0, 1000, 0), 0.0, 'a place past the table size gets no place points');
+select is(private.game_score(4, 1, 100, 0, 0), 3.0, 'no starting stack on record: no chip score');
 
 -- ---------------------------------------------------------------- a season of nights
--- N1: Anil 1st +50 (6) · Bina 2nd +10 (3) · Chirag 3rd −20 with a rebuy (0) · Divya 4th −40, bust (−1)
+-- N0 (3 players, nobody won or lost chips): Chirag 1st (2) · Anil 2nd (1) · Bina 3rd, last (0)
+select pg_temp.night(:'crew', now() - interval '4 hours', array[:'c' || '|0|1000|1000|1', :'a' || '|0|1000|1000|2', :'b' || '|0|1000|1000|3']) as n0 \gset
+-- N1: Anil 1st +50 (3 + 2.5) · Bina 2nd +10 (2 + 0.5) · Chirag 3rd −20 with a rebuy (1 − 1 − 1) · Divya 4th −40, bust (0 − 2)
 select pg_temp.night(:'crew', now() - interval '3 hours', array[
   :'a' || '|50|1000|1500|1|50|4|3', :'b' || '|10|1000|1100|2|50', :'c' || '|-20|2000|1800|3|50', :'d' || '|-40|1000|0|4|50']) as n1 \gset
--- N2: Bina 1st +250 (9, capped) · Anil 2nd 0 (3) · Divya 3rd −10 (2) · Chirag 4th −240, bust (−4)
+-- N2: Bina 1st +250 (3 + 5, capped) · Anil 2nd 0 (2) · Divya 3rd −10 (1 − 0.5) · Chirag 4th −240, bust (0 − 5)
 select pg_temp.night(:'crew', now() - interval '2 hours', array[
   :'b' || '|250|1000|3500|1|40', :'a' || '|0|1000|1000|2|50|4|2', :'d' || '|-10|1000|900|3|40', :'c' || '|-240|1000|0|4|40']) as n2 \gset
--- N3 (3 players, no places recorded: ranked by net): Anil +39 (4) · Chirag 0 (2) · Bina −39, last (0)
+-- N3 (3 players, no places recorded: ranked by net): Anil +39 (2 + 2) · Chirag 0 (1) · Bina −39, last (0 − 2)
 select pg_temp.night(:'crew', now() - interval '1 hour', array[
   :'a' || '|39|1000|1390||50|2|1', :'c' || '|0|1000|1000||50', :'b' || '|-39|1000|610||50']) as n3 \gset
 select season_id as s1 from games where id = :'n1' \gset
 
-select is((select string_agg(pts::text, ',' order by ended_at) from private.nights(:'crew', :'s1', false) where account_id = :'a'), '6,3,4', 'Anil''s nights: 6, 3, 4');
-select is((select string_agg(pts::text, ',' order by ended_at) from private.nights(:'crew', :'s1', false) where account_id = :'c'), '0,-4,2', 'Chirag''s: the rebuy costs a point, the −240 bb costs 5');
+select is((select string_agg(pts::text, ',' order by ended_at) from private.nights(:'crew', :'s1', false) where account_id = :'a'), '1.0,5.5,2.0,4.0', 'Anil''s games: 1, 5.5, 2, 4');
+select is((select string_agg(pts::text, ',' order by ended_at) from private.nights(:'crew', :'s1', false) where account_id = :'c'), '2.0,-1.0,-5.0,1.0', 'Chirag''s: the rebuy costs a point, losing the whole stack costs 5');
 select is((select rebuys from private.nights(:'crew', :'s1', false) where account_id = :'c' and game_id = :'n1'), 1, 'rebuys come from the chips bought in (2000 at a 1000 start = 1)');
 select is((select place from private.nights(:'crew', :'s1', false) where account_id = :'b' and game_id = :'n3'), 3, 'no place recorded: ranked by net');
-select is((select string_agg(busted::text, ',' order by ended_at) from private.nights(:'crew', :'s1', false) where account_id = :'b'), 'false,false,true', 'last place is a bust');
+select is((select string_agg(busted::text, ',' order by ended_at) from private.nights(:'crew', :'s1', false) where account_id = :'b'), 'true,false,false,true', 'last place is a bust');
 
 select is((select string_agg(coalesce(rank::text, '-') || ':' || name || ':' || points || ':' || avg || ':' || ranked, ' ') from private.league_standings(:'crew', :'s1', false)),
-  '1:Anil:13:4.33:true 2:Bina:12:4.00:true 3:Chirag:-2:-0.67:true -:Divya:1:0.50:false',
-  'points: ranked by points per night; 2 nights is unranked and comes after, with its numbers');
-select is((select wins || '/' || top3 || '/' || busts || '/' || rebuys from private.league_standings(:'crew', :'s1', false) where account_id = :'a'), '2/3/0/0', 'Anil: 2 wins, 3 top-3, no busts or rebuys');
-select is((select wins || '/' || top3 || '/' || busts || '/' || rebuys from private.league_standings(:'crew', :'s1', false) where account_id = :'c'), '0/2/1/1', 'Chirag: 2 top-3, 1 bust, 1 rebuy');
+  '1:Anil:12.5:3.13:true 2:Bina:8.5:2.13:true 3:Chirag:-3.0:-0.75:true -:Divya:-1.5:-0.75:false',
+  'points: ranked by the average game score; under 4 games is unranked and comes after, with its numbers');
+select is((select wins || '/' || top3 || '/' || busts || '/' || rebuys from private.league_standings(:'crew', :'s1', false) where account_id = :'a'), '2/4/0/0', 'Anil: 2 wins, 4 top-3, no busts or rebuys');
+select is((select wins || '/' || top3 || '/' || busts || '/' || rebuys from private.league_standings(:'crew', :'s1', false) where account_id = :'c'), '1/3/1/1', 'Chirag: 1 win, 3 top-3, 1 bust, 1 rebuy');
 select is((select busts from private.league_standings(:'crew', :'s1', false) where account_id = :'d'), 1, 'chips at 0 is a bust');
 select is((select scoring from crews where id = :'crew'), 'points', 'every crew scores in points unless the leader changes it');
 
@@ -84,37 +98,39 @@ select is((select string_agg(coalesce(rank::text, '-') || ':' || name || ':' || 
   '1:Bina:221.00 2:Anil:89.00 3:Divya:-50.00 4:Chirag:-260.00', 'bb: total big blinds won, everyone ranked (as before)');
 update crews set scoring = 'average' where id = :'crew';
 select is((select string_agg(coalesce(rank::text, '-') || ':' || name || ':' || avg, ' ') from private.league_standings(:'crew', :'s1', false)),
-  '1:Bina:73.67 2:Anil:29.67 3:Chirag:-86.67 -:Divya:-25.00', 'average: big blinds per night, 3 nights to be ranked');
+  '1:Bina:55.25 2:Anil:22.25 3:Chirag:-65.00 -:Divya:-25.00', 'average: big blinds per night, 3 nights to be ranked');
 select is(testing.one(:PB, format($$select public.crew_league(%L) ->> 'scoring'$$, :'crew')), 'average', 'the league says how it is scored');
 update crews set scoring = 'points' where id = :'crew';
 
--- ties: equal points per night → more bb won; equal bb too → same rank, by name
-select pg_temp.night(:'crew2', now() - interval '3 hours', array[:'e' || '|10|1000|1100|1', :'f' || '|5|1000|1050|2', :'g' || '|0|1000|1000|3']);
-select pg_temp.night(:'crew2', now() - interval '2 hours', array[:'e' || '|10|1000|1100|2', :'f' || '|0|1000|1000|3', :'g' || '|19|1000|1190|1']);
-select pg_temp.night(:'crew2', now() - interval '1 hour', array[:'e' || '|0|1000|1000|3', :'f' || '|19|1000|1190|1', :'g' || '|1|1000|1010|2']);
+-- ties: the same average score → more bb won; equal bb too → the same rank, by name
+-- (three games where each wins once with no chips moved; in the fourth Farid wins 20 bb but rebought twice)
+select pg_temp.night(:'crew2', now() - interval '4 hours', array[:'e' || '|0|1000|1000|1', :'f' || '|0|1000|1000|2', :'g' || '|0|1000|1000|3']);
+select pg_temp.night(:'crew2', now() - interval '3 hours', array[:'g' || '|0|1000|1000|1', :'e' || '|0|1000|1000|2', :'f' || '|0|1000|1000|3']);
+select pg_temp.night(:'crew2', now() - interval '2 hours', array[:'f' || '|0|1000|1000|1', :'g' || '|0|1000|1000|2', :'e' || '|0|1000|1000|3']);
+select pg_temp.night(:'crew2', now() - interval '1 hour', array[:'f' || '|20|3000|3200|1', :'e' || '|0|1000|1000|2', :'g' || '|0|1000|1000|2']);
 select is((select string_agg(rank || ':' || name || ':' || avg || ':' || bb, ' ') from private.league_standings(:'crew2', public.current_season(:'crew2'), false)),
-  '1:Farid:2.00:24.00 2:Esha:2.00:20.00 2:Gita:2.00:20.00', 'ties: bb won, then the name (equal both: the same rank)');
+  '1:Farid:1.00:20.00 2:Esha:1.00:0.00 2:Gita:1.00:0.00', 'ties: bb won, then the name (equal both: the same rank)');
 
 -- ---------------------------------------------------------------- what the screens get
 select testing.as_phone(:PB, format('select public.crew_league(%L) as l', :'crew')) -> 0 -> 'l' as lg \gset
 select is((select string_agg(r ->> 'name', ',' order by o) from jsonb_array_elements(:'lg'::jsonb -> 'rows') with ordinality x(r, o)), 'Anil,Bina,Chirag,Divya', 'the league: ranked rows, then unranked');
 select is((select r ->> 'rank' from jsonb_array_elements(:'lg'::jsonb -> 'rows') r where r ->> 'name' = 'Divya'), null, 'unranked rows have no rank');
 select is((select r ->> 'ranked' from jsonb_array_elements(:'lg'::jsonb -> 'rows') r where r ->> 'name' = 'Divya'), 'false', 'and say so');
-select is((select (r ->> 'avg') || '/' || (r ->> 'points') || '/' || (r ->> 'games') from jsonb_array_elements(:'lg'::jsonb -> 'rows') r where r ->> 'name' = 'Anil'), '4.33/13/3', 'rows carry points per night, points and nights');
-select is(:'lg'::jsonb ->> 'min_nights', '3', 'and how many nights it takes to be ranked');
+select is((select (r ->> 'avg') || '/' || (r ->> 'points') || '/' || (r ->> 'games') from jsonb_array_elements(:'lg'::jsonb -> 'rows') r where r ->> 'name' = 'Anil'), '3.13/12.5/4', 'rows carry the average score, the points and the games');
+select is(:'lg'::jsonb ->> 'min_nights', '4', 'and how many games it takes to be ranked');
 select is(testing.one(:PB, format($$select public.crew_page(%L) -> 'podium' -> 0 ->> 'name'$$, :'crew')), 'Anil', 'the podium follows the crew''s scoring');
-select is(testing.one(:PD, format($$select (public.crew_page(%L) -> 'me' ->> 'ranked') || '/' || (public.crew_page(%L) -> 'me' ->> 'avg')$$, :'crew', :'crew')), 'false/0.50', 'my season: unranked, with my points per night');
+select is(testing.one(:PD, format($$select (public.crew_page(%L) -> 'me' ->> 'ranked') || '/' || (public.crew_page(%L) -> 'me' ->> 'avg')$$, :'crew', :'crew')), 'false/-0.75', 'my season: unranked, with my average score (below zero)');
 select is(testing.one(:PB, format($$select public.crew_page(%L) -> 'crew' ->> 'scoring'$$, :'crew')), 'points', 'the crew page carries the scoring');
 
 select testing.as_phone(:PB, format('select public.crew_player(%L, %L) as p', :'crew', :'a')) -> 0 -> 'p' as pc \gset
-select is(:'pc'::jsonb ->> 'nights', '3', 'player card: nights');
-select is(:'pc'::jsonb ->> 'avg_points', '4.33', 'points per night');
-select is((:'pc'::jsonb ->> 'wins') || '/' || (:'pc'::jsonb ->> 'top3') || '/' || (:'pc'::jsonb ->> 'rebuys') || '/' || (:'pc'::jsonb ->> 'busts'), '2/3/0/0', 'wins, top 3, rebuys, busts');
-select is(:'pc'::jsonb ->> 'bb_night', '29.7', 'bb per night');
+select is(:'pc'::jsonb ->> 'nights', '4', 'player card: nights');
+select is(:'pc'::jsonb ->> 'avg_points', '3.13', 'points per night');
+select is((:'pc'::jsonb ->> 'wins') || '/' || (:'pc'::jsonb ->> 'top3') || '/' || (:'pc'::jsonb ->> 'rebuys') || '/' || (:'pc'::jsonb ->> 'busts'), '2/4/0/0', 'wins, top 3, rebuys, busts');
+select is(:'pc'::jsonb ->> 'bb_night', '22.3', 'bb per night');
 select is(:'pc'::jsonb ->> 'bb100', '59.3', 'bb per 100 hands (89 bb in 150 hands)');
 select is(:'pc'::jsonb ->> 'sd_won', '60', 'showdowns won (6 of 10)');
 select is((:'pc'::jsonb ->> 'best_night') || '/' || (:'pc'::jsonb ->> 'worst_night'), '50.00/0.00', 'biggest and worst night in bb');
-select is(:'pc'::jsonb -> 'form_points', '[6, 3, 4]'::jsonb, 'the form line of points');
+select is(:'pc'::jsonb -> 'form_points', '[1.0, 5.5, 2.0, 4.0]'::jsonb, 'the form line of points');
 select is(:'pc'::jsonb ->> 'rank', '1', 'and the rank');
 select is(testing.one(:PB, format($$select (public.crew_player(%L, %L) ->> 'rebuys') || '/' || (public.crew_player(%L, %L) ->> 'busts')$$, :'crew', :'c', :'crew', :'c')), '1/1', 'Chirag''s rebuy and bust');
 

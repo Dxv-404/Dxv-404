@@ -113,7 +113,7 @@ update crews set scoring = 'bb' where id = :'crew';
 update seasons set ends_at = now() - interval '1 minute' where id = (select season_id from games where id = :'G1');
 select is(pg_temp.rec('close_due_seasons', '{"at":"now"}'), '1', 'the due season closes');
 select is(pg_temp.rec('close_due_seasons', '{"at":"again"}'), '0', 'and only once');
-select is((select string_agg(t.kind || ':' || a.name, ' ' order by t.kind, a.name) from trophies t join accounts a on a.id = t.account_id where t.season_id = (select season_id from games where id = :'G1')), 'iron_chair:Owner iron_chair:Riya season_winner:Arjun season_winner:Owner season_winner:Riya', 'winner and iron chair; a three-way tie on 0 shares the title');
+select is((select string_agg(t.kind || ':' || a.name, ' ' order by t.kind, a.name) from trophies t join accounts a on a.id = t.account_id where t.season_id = (select season_id from games where id = :'G1')), 'iron_chair:Owner iron_chair:Riya season_winner:Riya', 'winner and iron chair; the two-player games do not count for the league, so the four-player game decides it');
 
 select * from finish();
 rollback;
