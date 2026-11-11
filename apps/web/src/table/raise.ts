@@ -93,7 +93,7 @@ export class RaiseSheet {
     this.el.style.setProperty('--k', String(f.k));
     const top = lay === 'land' ? `pot ${fmt(s.pot)}` : `Pot ${fmt(s.pot)} · you have ${fmt(s.maxTo)}`;
     const ps = M.presets(s).filter((p) => lay !== 'land' || p.key !== 'min');
-    const keys = lay === 'lap' ? '<div class="keys" aria-hidden="true"><span><kbd class="kbd">←</kbd><kbd class="kbd">→</kbd> 1 big blind</span><span><kbd class="kbd">⇧</kbd>+<kbd class="kbd">←</kbd><kbd class="kbd">→</kbd> 5 big blinds</span>'
+    const keys = lay === 'lap' ? '<div class="keys" aria-hidden="true"><span><kbd class="kbd">←</kbd><kbd class="kbd">→</kbd> 1 step</span><span><kbd class="kbd">⇧</kbd>+<kbd class="kbd">←</kbd><kbd class="kbd">→</kbd> 5 steps</span>'
       + '<span><kbd class="kbd">↑</kbd><kbd class="kbd">↓</kbd> next amount</span><span><kbd class="kbd">Home</kbd> min · <kbd class="kbd">End</kbd> all-in</span><span>Type digits to set it</span></div>' : '';
     const bb = fmt(s.bb);
     this.el.innerHTML = (lay === 'phone' ? '<div class="rdim" data-x="cancel"></div>' : '')
@@ -160,7 +160,7 @@ export class RaiseSheet {
     const note = q('.rnote');
     const say = typing && this.pad && this.layout !== 'land'
       ? (t!.below && this.digits ? `At least ${fmt(s.minTo)}.` : `Up to ${fmt(s.maxTo)}. Typing more than you have makes it all-in.`)
-      : this.holding && this.layout !== 'land' ? `Each tap is one big blind (${fmt(s.bb)}). Hold to keep going; it speeds up.` : '';
+      : this.holding && this.layout !== 'land' ? `Each tap is one step (${fmt(M.niceStep(to, Math.max(1, s.bb)))} here; steps grow with the bet). Hold to keep going; it speeds up.` : '';
     note.hidden = !say; note.textContent = say;
     if (this.layout === 'lap') this.labelDock();
   }

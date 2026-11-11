@@ -588,7 +588,9 @@ for (const [label, W, H, dev] of SIZES) {
       const r = await avatarsDrawn(page, '#lab .tp', 21.5);
       expect(r.bad, `${label} table ${n}`).toEqual([]);
       const seats = PICKS.slice(1, n).filter(Boolean).length;
-      expect(r.ids.length, `${label} table ${n} seats with a pick`).toBe(seats + 1); // + my own line under my cards
+      // + my own line under my cards; on a laptop the players list at the side draws everyone's again (me included)
+      const side = await page.locator('#lab .tp .side .plist').count();
+      expect(r.ids.length, `${label} table ${n} seats with a pick`).toBe((seats + 1) * (side ? 2 : 1));
       if (n === 6) await shot(page, `size-${W}x${H}-table6`);
       await page.evaluate(() => document.getElementById('lab')!.remove());
     }
