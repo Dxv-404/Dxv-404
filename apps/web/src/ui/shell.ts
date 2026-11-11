@@ -124,6 +124,8 @@ export interface MenuActions {
   joinOnline(code: string): void; joinOffline(): void; host(): void;
   profile(): void; settings(): void; crew(id: string): void; rejoin(code: string): void; resumeHost?: { sub: string; go: () => void };
   crews(): void; replays(): void; theme(): void; play?: () => void;
+  /** the notifications bell (a button with its unread badge) */
+  bell?: () => HTMLElement;
 }
 type Tab = 'play' | 'crews' | 'replays' | 'theme';
 
@@ -171,7 +173,7 @@ export function menuScreen(root: HTMLElement, a: MenuActions & { onPlay?: never 
   gear.addEventListener('click', a.settings);
   const meRow = el('div', 'me-row'); meRow.style.cssText = 'display:flex;align-items:center;gap:12px';
   meBtn.style.flex = '1';
-  meRow.append(meBtn, gear);
+  meRow.append(meBtn, ...(a.bell ? [a.bell()] : []), gear);
 
   // Join a table: four code boxes typed through one hidden field (letters and numbers, no 0/O or 1/I mix-ups)
   const join = el('div', 'card2', '<h2>Join a table</h2>');

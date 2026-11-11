@@ -89,6 +89,8 @@ self.addEventListener('push', (e) => {
   e.waitUntil(Promise.all([
     self.registration.showNotification(m.title, notificationFor(m)),
     research('push.arrive', { kind: m.kind || null, tag: m.tag || null, url: m.url || null, title: String(m.title).slice(0, 60) }).catch(() => null),
+    // the bell's "Send me a test": tell the open app it arrived
+    m.tag === 'test' ? self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((l) => l.forEach((c) => c.postMessage({ t: 'push-test' }))).catch(() => null) : null,
   ]));
 });
 /**

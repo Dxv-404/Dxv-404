@@ -33,6 +33,8 @@ export type RecoverResult = { ok: true; profile: Profile } | { ok: false; reason
 export interface KeyStore { getItem(k: string): string | null; setItem(k: string, v: string): void; removeItem(k: string): void }
 
 export interface PushPrefs { turn?: boolean; crewTable?: boolean; crew?: boolean; trophies?: boolean }
+/** One row of the notifications inbox (the bell): what the app told you, or would have, in the last 30 days. */
+export interface Notice { id: number; kind: 'crew' | 'trophies' | 'crewTable' | 'devices' | string; title: string; body: string; url: string; at: string }
 
 export class AccountError extends Error {
   constructor(message: string, public code?: string) { super(message); }
@@ -334,6 +336,10 @@ export class Account {
   savePush(endpoint: string, p256dh: string, auth: string, prefs: PushPrefs): Promise<void> { return this.rpc('save_push', { p_endpoint: endpoint, p_p256dh: p256dh, p_auth: auth, p_prefs: prefs }); }
   removePush(endpoint: string): Promise<void> { return this.rpc('remove_push', { p_endpoint: endpoint }); }
   myPush(endpoint: string): Promise<PushPrefs | null> { return this.rpc('my_push', { p_endpoint: endpoint }); }
+  /** My notifications of the last 30 days, newest first (kept whether or not this phone has notifications on). */
+  notifications(): Promise<Notice[]> { return this.rpc<Notice[]>('my_notifications'); }
+  /** One test notification to my own phones, through the same queue as the real ones. */
+  sendTestPush(): Promise<{ phones: number }> { return this.rpc<{ phones: number }>('send_test_push'); }
   /** A warning for crew owners and admins (the free database filling up), or null. */
   serviceNotice(): Promise<string | null> { return this.rpc('service_notice'); }
 

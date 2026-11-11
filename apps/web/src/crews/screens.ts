@@ -4,6 +4,7 @@
 // hosting. One layout per screen size: phones (one column, the bottom bar pinned), sideways phones (an icon rail),
 // tablets (two panes over the bar), laptops (a rail with the logo, the crews column, the crew) and desktops (and
 // a members column).
+import { bellButton } from '../bell';
 import screensJson from '../ui/screens.json';
 import type { Account, Badge, CrewCard, CrewGame, CrewLeague, CrewMemberV3, CrewPage, CrewPreview, Invitation, JoinRequest, LeagueRowV3, PendingRequest, PlayerCard, Scoring, SeasonLength, TableRules, WhoHosts } from '@tp/account';
 import { cleanCrewCode, crewLink, formatCrewCode, isCrewCode, parseCrewLink, restSeconds, seasonLabel, seasonLengthArgs, seasonLengthOf } from '@tp/account/crews';
@@ -202,6 +203,9 @@ export function crewsUi(deps: CrewsDeps) {
         + (tab === 'mine' ? `<div class="clist-cards">${cards}${inv}</div>` : `<div class="clist-cards">${inv + req || '<p class="hint">No invitations. When a friend sends you a crew link, it waits here.</p>'}</div>`)
         + buttons;
     }
+    // the notifications bell, next to the + (the same panel as on the home screen)
+    const plus = col.querySelector('button.ib[data-x=create]');
+    plus?.parentElement?.insertBefore(bellButton({ theme: () => currentTheme(), account: () => existing(), openSheet: deps.openSheet }), plus);
     col.onclick = (e) => {
       const t = e.target as HTMLElement;
       const b = t.closest('[data-x]') as HTMLElement | null;
@@ -727,7 +731,7 @@ export function crewsUi(deps: CrewsDeps) {
     const chip = `<span class="chipt">${m.games} ${sc === 'bb' ? 'game' : 'night'}${m.games === 1 ? '' : 's'}</span>`;
     const span = p.crew.season_months === 0 ? 'league' : 'season';
     const unranked = sc !== 'bb' && m.games > 0 && m.ranked === false;
-    const rk = `<div class="rk"><b>${m.rank ? ordinal(m.rank) : '–'}</b><small>${unranked ? `${m.games} of 3 nights` : `of ${m.of}`}</small></div>`;
+    const rk = `<div class="rk"><b>${m.rank ? ordinal(m.rank) : '–'}</b><small>${unranked ? `${m.games} of ${minNights(sc)} nights` : `of ${m.of}`}</small></div>`;
     const main = sc === 'points'
       ? `<div class="nb"><b data-testid="my-avg">${m.avg == null ? '–' : ptsText(m.avg)}</b><small>points per night</small></div>`
       : sc === 'average'
@@ -741,7 +745,7 @@ export function crewsUi(deps: CrewsDeps) {
   const podiumFig = (r: { bb: number; avg?: number | null }, sc: Scoring): string => (sc === 'points' ? `${ptsText(r.avg ?? 0)} pts` : sc === 'average' ? `${bbText(r.avg ?? 0)}/night` : bbText(r.bb));
   function podiumHtml(all: { account_id: string; name: string; avatar?: string | null; bb: number; avg?: number | null; ranked?: boolean }[], big: boolean, sc: Scoring): string {
     const rows = all.filter((r) => r.ranked !== false);
-    if (!rows.length) return `<p class="hint" style="text-align:center">${all.length ? 'The podium fills once players have 3 nights.' : 'The podium fills after the first game.'}</p>`;
+    if (!rows.length) return `<p class="hint" style="text-align:center">${all.length ? `The podium fills once players have ${minNights(sc)} nights.` : 'The podium fills after the first game.'}</p>`;
     const order = [rows[1], rows[0], rows[2]];
     const cls = ['p2', 'p1', 'p3'];
     return `<div class="podium${big ? ' big' : ''}">${order.map((r, i) => (r ? `<button class="pd ${cls[i]}" data-x="player" data-id="${r.account_id}">${av({ id: r.account_id, name: r.name, avatar: r.avatar ?? null }, big ? (i === 1 ? 52 : 42) : i === 1 ? 44 : 36)}<b>${esc(r.name)}</b><small>${podiumFig(r, sc)}</small><i>${i === 1 ? 1 : i === 0 ? 2 : 3}</i></button>` : '<span></span>')).join('')}</div>`;
@@ -817,13 +821,13 @@ export function crewsUi(deps: CrewsDeps) {
       const lead = sc === 'points' ? `<span class="v pt">${ptsText(r.avg ?? 0)}</span>` : sc === 'average' ? `<span class="v pt ${upDown(r.avg)}">${bbText(r.avg ?? 0, false)}</span>` : '';
       return `<button class="lrow${r.me ? ' me' : ''}${r.ranked === false ? ' ur' : ''}" data-x="player" data-id="${r.account_id}" data-testid="league-row"><span class="n">${r.rank ?? '–'}</span>${av({ id: r.account_id, name: r.name, avatar: r.avatar ?? null }, 30)}<b>${esc(r.name)}${r.me ? ' (you)' : ''}</b>${tr}${lead}<span class="g">${r.games}</span><span class="v ${upDown(r.bb)}">${bbText(r.bb, false)}</span></button>`;
     };
-    return ranked.map(row).join('') + (unranked.length ? `<div class="ldiv" data-testid="unranked-divider"><span>Fewer than 3 nights</span></div>${unranked.map(row).join('')}` : '');
+    return ranked.map(row).join('') + (unranked.length ? `<div class="ldiv" data-testid="unranked-divider"><span>Fewer than ${minNights(sc)} nights</span></div>${unranked.map(row).join('')}` : '');
   }
   const lhead = (sc: Scoring): string => '<div class="lhead" aria-hidden="true" data-testid="league-head"><span>#</span><span style="flex:1;padding-left:40px">Player</span>'
     + (sc === 'points' ? '<span class="hpt">Pts/night</span><span class="hg">Nights</span>' : sc === 'average' ? '<span class="hpt">Avg bb</span><span class="hg">Nights</span>' : '<span>Games</span>')
     + '<span style="width:58px;text-align:right">Won (bb)</span></div>';
   const HOW_LINE: Record<Scoring, string> = {
-    points: 'Points per night: finish, big blinds won, −1 a rebuy.',
+    points: 'Points per night: players beaten, chips won, −1 a rebuy.',
     average: 'Big blinds won per night; 3 nights to be ranked.',
     bb: 'Ranked by big blinds won, so different blinds count fairly.',
   };
@@ -832,8 +836,8 @@ export function crewsUi(deps: CrewsDeps) {
     const box = sheetBox();
     const li = (t: string): string => `<li>${t}</li>`;
     const body = sc === 'points'
-      ? `<ul class="howl">${li('<b>+1</b> for playing the night.')}${li('<b>Finish:</b> one point for every player you finish above. 1st of 9 gets 8, last gets 0.')}${li('<b>Big blinds:</b> +1 for every 20 bb you win, −1 for every 20 you lose, at most 5 either way.')}${li('<b>Rebuys:</b> −1 for each.')}</ul>`
-        + '<p class="hint flat">The season ranks by average points per night, and every night counts. Fewer than 3 nights: not ranked yet. A tie goes to whoever won more big blinds.</p>'
+      ? `<ul class="howl">${li('<b>Finish:</b> one point for every player you finish above. 1st of 7 gets 6, last gets 0.')}${li('<b>Chips:</b> what you won or lost, against the starting stack. Doubling it is +5, losing all of it is −5, half of it is 2.5. Never more than 5 either way.')}${li('<b>Rebuys:</b> −1 for each.')}</ul>`
+        + '<p class="hint flat">The season ranks by average points per night, and every night counts, so an average can be below zero. Nights with fewer than 3 players do not count. Fewer than 4 nights: not ranked yet. A tie goes to whoever won more big blinds.</p>'
       : sc === 'average'
         ? '<p class="hint flat">Big blinds won, divided by the nights played. Every night counts; fewer than 3 nights is not ranked yet. A tie goes to whoever won more big blinds.</p>'
         : '<p class="hint flat">Total big blinds won this season. Big blinds, not chips, so a 5/10 night and a 10/20 night count the same.</p>';
@@ -1286,6 +1290,8 @@ function failHtml(e: unknown): string {
 
 /** the crew's scoring (older answers have none: big blinds won) */
 const scoringOf = (p: CrewPage): Scoring => p.crew.scoring ?? 'bb';
+/** nights it takes to be ranked: 4 on points, 3 on big blinds per night (none on big blinds won) */
+const minNights = (sc: Scoring): number => (sc === 'points' ? 4 : 3);
 /** points per night: 4.33 → "4.3", 4 → "4.0" */
 const ptsText = (n: number | string): string => { const v = Number(n); return `${v < 0 ? '−' : ''}${Math.abs(v).toFixed(1)}`; };
 const x0 = (b: HTMLElement): string | undefined => b.dataset.x;

@@ -119,6 +119,7 @@ export class TableScreen {
   /** rebuys: the bust-out sheets, the chips pouring in after a rebuy (rebuys.ts) */
   private rb: RebuyUi;
   // the players list: its order (by chips, settled between hands), the phone's pull-down
+  private played = false;
   private panel = new Panel();
   private panelGen = 0;
   private pullGen = 0;
@@ -215,6 +216,7 @@ export class TableScreen {
     this.view = v;
     // an app update waits for the end of the hand (src/legacy/app.js): a reload mid-hand is never forced
     if (v.phase === 'hand') document.body.dataset.inHand = '1'; else delete document.body.dataset.inHand;
+    if (v.phase === 'hand' && !this.played) { this.played = true; try { sessionStorage.setItem('tp-played', '1'); } catch { /* blocked */ } } // (home offers notifications once after a game)
     // the table's micro-animations: whatever is still moving jumps to its end, and what is about to
     // disappear (bets, folded cards) is noted so it can move away after the redraw
     const snap = events.length ? this.motion.before(events) : null;

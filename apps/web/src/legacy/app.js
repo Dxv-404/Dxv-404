@@ -15,6 +15,8 @@ import { settingsScreen, installErrorReporting, noteScreen } from '../more-scree
 import { rebuyBlock, withRebuyDefaults, setupHead, setupFoot, blindsSeg, rulesContent, rebuysUsedText } from '../rebuys-setup.ts';
 import { crewsUi } from '../crews/screens.ts';
 import { noteScreenView, noteSheet } from '../research/app.ts';
+import { bellButton, bellReminder } from '../bell.ts';
+import { existing as existingAccount } from '../crews/data.ts';
 import { newCode, pickServer, playOnline as openOnline, hostOnline as openTableScreen } from '../online-screens.ts';
 import { joinCode as offlineJoin } from '../offline-screens.ts';
 
@@ -58,6 +60,8 @@ function openSheet(content, { label = 'Panel', onClose, tall = false } = {}) {
 }
 
 const ui = { screen, openSheet, home: () => home(), qrJoin: () => join() };
+// the notifications bell (home and crew screens)
+const bellCtx = { theme: () => currentTheme(), account: () => existingAccount(), openSheet };
 // the Crews tab and the crew page (v3)
 const crews = crewsUi({
   screen, openSheet, nav: () => menuActions(), play: () => home(),
@@ -107,12 +111,17 @@ function menuActions() {
     play: () => home(),
     replays: () => accounts.history(),
     theme: () => themePicker(),
+    bell: () => bellButton(bellCtx),
   };
 }
 
 function home() {
+  let fromGame = false;
+  try { fromGame = sessionStorage.getItem('tp-played') === '1'; sessionStorage.removeItem('tp-played'); } catch { /* blocked */ }
   delete document.body.dataset.playing;
   screen((el) => menuScreen(el, menuActions()));
+  // back from a game with notifications still off: offer them once
+  if (fromGame) setTimeout(() => { void bellReminder(bellCtx).catch(() => undefined); }, 700);
   void accounts.notices(); // a sign-in on another device: "Not me? Log it out"
 }
 

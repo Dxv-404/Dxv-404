@@ -32,9 +32,9 @@ async function myAccount(): Promise<Account | null> {
 // ---------------------------------------------------------------- push notifications
 export const pushSupported = (): boolean => typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 const keyBytes = (s: string) => { const t = atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)); return Uint8Array.from(t, (c) => c.charCodeAt(0)); };
-const DEFAULT_PREFS: Required<PushPrefs> = { turn: true, crewTable: true, crew: true, trophies: true };
+export const DEFAULT_PREFS: Required<PushPrefs> = { turn: true, crewTable: true, crew: true, trophies: true };
 
-async function currentSub(): Promise<PushSubscription | null> {
+export async function currentSub(): Promise<PushSubscription | null> {
   if (!pushSupported()) return null;
   const reg = await navigator.serviceWorker.getRegistration();
   return (await reg?.pushManager.getSubscription()) ?? null;
@@ -55,7 +55,7 @@ export async function enablePush(a: Account, prefs: PushPrefs = DEFAULT_PREFS): 
   store.set('tp-push-asked', 1);
   return true;
 }
-async function disablePush(a: Account): Promise<void> {
+export async function disablePush(a: Account): Promise<void> {
   const sub = await currentSub();
   if (!sub) return;
   await a.removePush(sub.endpoint).catch(() => undefined);
