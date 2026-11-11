@@ -100,6 +100,7 @@ export async function openBell(ctx: BellCtx, changed: () => void = () => undefin
   const sw = box.querySelector('.bsw') as HTMLElement, listEl = box.querySelector('.blist') as HTMLElement, readAll = box.querySelector('[data-b=readall]') as HTMLElement;
   let list = cached();
   let account: Account | null = null;
+  let inbox = false;
   const openedUnread = bellUnread();
   const drawList = (): void => {
     listEl.innerHTML = inboxHtml(list, seen(), Date.now());
@@ -137,7 +138,7 @@ export async function openBell(ctx: BellCtx, changed: () => void = () => undefin
       const prefs: PushPrefs = { ...DEFAULT_PREFS, ...((sub && account ? await account.myPush(sub.endpoint).catch(() => null) : null) ?? {}) };
       sw.innerHTML = `${head(true, 'This phone is told about:')}`
         + `<div class="bprefs">${PREF_LABEL.map(([k, l]) => `<label class="bpref"><span>${l}</span><input type="checkbox" role="switch" data-pref="${k}"${prefs[k] !== false ? ' checked' : ''}></label>`).join('')}</div>`
-        + '<div class="btest"><button class="bb g" data-b="test" data-testid="bell-test">Send me a test</button><button class="blnk" data-b="off" data-testid="bell-off">Turn off</button></div><p class="hint btest-st" role="status"></p>';
+        + `<div class="btest">${inbox ? '<button class="bb g" data-b="test" data-testid="bell-test">Send me a test</button>' : ''}<button class="blnk" data-b="off" data-testid="bell-off">Turn off</button></div><p class="hint btest-st" role="status"></p>`;
     }
   };
 
@@ -186,8 +187,9 @@ export async function openBell(ctx: BellCtx, changed: () => void = () => undefin
 
   try {
     account = await ctx.account();
+    // (the inbox first: where the database does not have it yet, the test button is left out too)
+    if (account) { try { list = await refresh(account); inbox = true; if (box.isConnected) { drawList(); changed(); } } catch { inbox = false; } }
     await drawSwitch();
-    if (account) { list = await refresh(account); if (box.isConnected) { drawList(); changed(); } }
   } catch { if (sw.querySelector('.hint')?.textContent === 'Loading…') await drawSwitch().catch(() => undefined); }
 }
 

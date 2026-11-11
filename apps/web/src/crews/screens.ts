@@ -627,7 +627,9 @@ export function crewsUi(deps: CrewsDeps) {
     const a = await existing();
     if (!a) throw new Error('Make your profile first');
     if (!fresh && pages.has(id)) return pages.get(id)!;
-    const p = await a.crewPage(id);
+    // (the league comes along to learn which scoring is in use, before any words about it are drawn)
+    const [p, lg0] = await Promise.all([a.crewPage(id), a.crewLeague(id, 'season').catch(() => null)]);
+    learnScoring(lg0);
     pages.set(id, p);
     return p;
   }
@@ -772,6 +774,7 @@ export function crewsUi(deps: CrewsDeps) {
     const scope = leagueScope.get(p.crew.id) ?? (p.crew.season_months === 0 ? 'alltime' : 'season');
     try {
       const lg = await a.crewLeague(p.crew.id, scope);
+      learnScoring(lg);
       if (!live(my)) return;
       body.innerHTML = homeHtml(p, true) + leagueBlock(p, lg, scope, 6);
       wireLeagueSeg(body, p, my, 6);
@@ -827,7 +830,7 @@ export function crewsUi(deps: CrewsDeps) {
     + (sc === 'points' ? '<span class="hpt">Pts/night</span><span class="hg">Nights</span>' : sc === 'average' ? '<span class="hpt">Avg bb</span><span class="hg">Nights</span>' : '<span>Games</span>')
     + '<span style="width:58px;text-align:right">Won (bb)</span></div>';
   const HOW_LINE: Record<Scoring, string> = {
-    points: 'Points per night: players beaten, chips won, −1 a rebuy.',
+    get points() { return scoreV === 2 ? 'Points per night: players beaten, chips won, −1 a rebuy.' : 'Points per night: finish, big blinds won, −1 a rebuy.'; },
     average: 'Big blinds won per night; 3 nights to be ranked.',
     bb: 'Ranked by big blinds won, so different blinds count fairly.',
   };
@@ -835,9 +838,13 @@ export function crewsUi(deps: CrewsDeps) {
   function howSheet(sc: Scoring): void {
     const box = sheetBox();
     const li = (t: string): string => `<li>${t}</li>`;
+    // (the words follow the scoring the database is using: the game score, or the points before it)
     const body = sc === 'points'
-      ? `<ul class="howl">${li('<b>Finish:</b> one point for every player you finish above. 1st of 7 gets 6, last gets 0.')}${li('<b>Chips:</b> what you won or lost, against the starting stack. Doubling it is +5, losing all of it is −5, half of it is 2.5. Never more than 5 either way.')}${li('<b>Rebuys:</b> −1 for each.')}</ul>`
-        + '<p class="hint flat">The season ranks by average points per night, and every night counts, so an average can be below zero. Nights with fewer than 3 players do not count. Fewer than 4 nights: not ranked yet. A tie goes to whoever won more big blinds.</p>'
+      ? (scoreV === 2
+        ? `<ul class="howl">${li('<b>Finish:</b> one point for every player you finish above. 1st of 7 gets 6, last gets 0.')}${li('<b>Chips:</b> what you won or lost, against the starting stack. Doubling it is +5, losing all of it is −5, half of it is 2.5. Never more than 5 either way.')}${li('<b>Rebuys:</b> −1 for each.')}</ul>`
+          + '<p class="hint flat">The season ranks by average points per night, and every night counts, so an average can be below zero. Nights with fewer than 3 players do not count. Fewer than 4 nights: not ranked yet. A tie goes to whoever won more big blinds.</p>'
+        : `<ul class="howl">${li('<b>+1</b> for playing the night.')}${li('<b>Finish:</b> one point for every player you finish above. 1st of 9 gets 8, last gets 0.')}${li('<b>Big blinds:</b> +1 for every 20 bb you win, −1 for every 20 you lose, at most 5 either way.')}${li('<b>Rebuys:</b> −1 for each.')}</ul>`
+          + '<p class="hint flat">The season ranks by average points per night, and every night counts. Fewer than 3 nights: not ranked yet. A tie goes to whoever won more big blinds.</p>')
       : sc === 'average'
         ? '<p class="hint flat">Big blinds won, divided by the nights played. Every night counts; fewer than 3 nights is not ranked yet. A tie goes to whoever won more big blinds.</p>'
         : '<p class="hint flat">Total big blinds won this season. Big blinds, not chips, so a 5/10 night and a 10/20 night count the same.</p>';
@@ -870,6 +877,7 @@ export function crewsUi(deps: CrewsDeps) {
     const a = await existing(); if (!a) return;
     let lg: CrewLeague;
     try { lg = await a.crewLeague(p.crew.id, scope); } catch (e) { if (live(my)) body.innerHTML = failHtml(e); return; }
+    learnScoring(lg);
     if (!live(my)) return;
     const sc = lg.scoring ?? scoringOf(p);
     const ends = p.season?.ends_at ? `${seasonLabel(p.season)} ${endsIn(p.season.ends_at)}; the winner gets the season trophy.` : '';
@@ -1291,7 +1299,18 @@ function failHtml(e: unknown): string {
 /** the crew's scoring (older answers have none: big blinds won) */
 const scoringOf = (p: CrewPage): Scoring => p.crew.scoring ?? 'bb';
 /** nights it takes to be ranked: 4 on points, 3 on big blinds per night (none on big blinds won) */
-const minNights = (sc: Scoring): number => (sc === 'points' ? 4 : 3);
+const minNights = (sc: Scoring): number => (sc === 'points' && scoreV === 2 ? 4 : 3);
+/**
+ * Which points scoring the database is using: 2 is the game score (players beaten + chip score − rebuys, four
+ * nights to be ranked), 1 the points before it. A points crew's league says so (min_nights); this phone
+ * remembers the answer, so the words never describe a scoring the numbers were not made with.
+ */
+let scoreV: 1 | 2 = ((): 1 | 2 => { try { return localStorage.getItem('tp-score-v') === '2' ? 2 : 1; } catch { return 1; } })();
+function learnScoring(lg: { scoring?: Scoring; min_nights?: number } | null): void {
+  if (!lg || (lg.scoring ?? 'points') !== 'points' || lg.min_nights == null) return;
+  scoreV = lg.min_nights >= 4 ? 2 : 1;
+  try { localStorage.setItem('tp-score-v', String(scoreV)); } catch { /* blocked */ }
+}
 /** points per night: 4.33 → "4.3", 4 → "4.0" */
 const ptsText = (n: number | string): string => { const v = Number(n); return `${v < 0 ? '−' : ''}${Math.abs(v).toFixed(1)}`; };
 const x0 = (b: HTMLElement): string | undefined => b.dataset.x;
