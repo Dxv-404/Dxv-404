@@ -124,7 +124,7 @@ test.describe('raise sheet on a phone (390 x 844)', () => {
     await expect(amount(page)).toHaveText('2,000');
     expect(await page.locator('.tp-raise .go').evaluate((e) => e.getAnimations().some((a) => (a as CSSAnimation).animationName === 'rz-glow' && a.effect!.getTiming().iterations === Infinity))).toBe(true);
     await press(page, pm(page, 'minus'));
-    await expect(amount(page)).toHaveText('1,980');
+    await expect(amount(page)).toHaveText('1,900'); // steps grow with the bet: 100 at 2,000
     await expect(sheet(page)).not.toHaveClass(/allin/);
     await preset(page, 'half').click();
     await page.locator('.tp-raise .go').click();
@@ -157,7 +157,7 @@ test.describe('raise sheet on a phone (390 x 844)', () => {
     await page.mouse.down();
     await page.waitForTimeout(700);
     await expect(pm(page, 'plus')).toHaveClass(/press/); // the ring pulses while held
-    await expect(page.locator('.tp-raise .rnote')).toHaveText('Each tap is one big blind (20). Hold to keep going; it speeds up.');
+    await expect(page.locator('.tp-raise .rnote')).toHaveText(/^Each tap is one step \(20 here; steps grow with the bet\)\. Hold to keep going; it speeds up\.$/);
     const at700 = Number((await amount(page).textContent())!.replace(/,/g, ''));
     // one step on the press, then it keeps going (the exact pace is measured below, in the page)
     expect(at700).toBeGreaterThanOrEqual(40 + 20 * 3);
@@ -219,7 +219,7 @@ test.describe('raise sheet on a phone (390 x 844)', () => {
     await expect(goBtn(page)).toHaveText('Raise to 125');
     // + leaves typing and steps from the typed amount
     await press(page, pm(page, 'plus'));
-    await expect(amount(page)).toHaveText('145');
+    await expect(amount(page)).toHaveText('140'); // up to the next multiple of the step
     await expect(page.locator('.tp-raise .rpad')).toBeHidden();
     await page.locator('.tp-raise .amt').click();
     await key('3'); await key('3'); await key('0');
@@ -243,11 +243,12 @@ test.describe('raise sheet on a phone (390 x 844)', () => {
     await page.mouse.move(trk.x + trk.width * 0.5, trk.y + 4, { steps: 2 });
     await page.mouse.up();
     const mid = Number(await amount(page).textContent());
-    expect(mid % 20).toBe(0);
-    expect(Math.abs(mid - 170)).toBeLessThanOrEqual(20);
+    // the slider is curved: halfway along is a quarter of the way through the amounts (40 + 260 / 4 = 105), in round steps
+    expect(mid % 10).toBe(0);
+    expect(Math.abs(mid - 105)).toBeLessThanOrEqual(10);
     // the thumb sits where the amount is
     const thumb = (await page.locator('.tp-raise .trk u').boundingBox())!;
-    expect(Math.abs(thumb.x + thumb.width / 2 - (trk.x + trk.width * ((mid - 40) / 260)))).toBeLessThan(2);
+    expect(Math.abs(thumb.x + thumb.width / 2 - (trk.x + trk.width * Math.sqrt((mid - 40) / 260)))).toBeLessThan(2);
   });
 
   test('bet, not raise, when nobody has bet yet', async ({ page }) => {
@@ -286,7 +287,7 @@ test.describe('keys on a laptop (1440 x 900)', () => {
     await expect(sheet(page)).toHaveClass(/r-lap/);
     await expect(page.locator('.tp.live .act kbd').first()).toBeVisible();
     await expect(page.locator('.tp-raise .keys')).toBeVisible();
-    await expect(page.locator('.tp-raise .keys')).toContainText('1 big blind');
+    await expect(page.locator('.tp-raise .keys')).toContainText('1 step');
     await page.keyboard.press('ArrowRight');
     await expect(amount(page)).toHaveText('60');
     await page.keyboard.press('Shift+ArrowRight');

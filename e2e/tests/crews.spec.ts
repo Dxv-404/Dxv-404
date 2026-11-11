@@ -32,6 +32,8 @@ async function seedWorld(): Promise<void> {
   fnt = await crewWith(db, meera, 'Friday Night Table', [aditya, riya, dev, kabir, zoya, tara, sneha], { badge: 'shield', color: '#c0392b' });
   await call(db, meera, 'set_role', { p_crew: fnt.id, p_account: aditya.id, p_role: 'admin' });
   await call(db, meera, 'crew_settings_v2', { p_crew: fnt.id, p_house_rules: { startStack: 1000, sb: 10, bb: 20, blindUpEvery: 20, rebuys: true, maxRebuys: 2 } });
+  // (four games for Meera, Dev and Riya: the league ranks from four)
+  await game(db, fnt.id, 'B4TN', 340, [[meera, 300], [dev, 100], [riya, -150], [aditya, -250]]);
   await game(db, fnt.id, 'P8WD', 300, [[kabir, 420], [dev, 60], [meera, -100], [aditya, -180], [riya, -200]]);
   await game(db, fnt.id, 'J2RM', 170, [[aditya, 300], [meera, 200], [dev, -200], [riya, -100], [zoya, -200]]);
   await game(db, fnt.id, 'QK7P', 26, [[meera, 900], [riya, 100], [dev, 40], [tara, -400], [sneha, -640]]);
@@ -240,10 +242,10 @@ test('a member: home, league (season, last season, all-time), games, player card
   await layoutOk(page, 'league');
   await shot(page, 'league');
   await page.getByTestId('crew-tab-games').click();
-  await expect(page.getByTestId('game-row')).toHaveCount(3);
+  await expect(page.getByTestId('game-row')).toHaveCount(4);
   await expect(page.locator('.gh').first()).toBeVisible();
   await page.getByRole('radio', { name: 'I played' }).click();
-  await expect(page.getByTestId('game-row')).toHaveCount(3);
+  await expect(page.getByTestId('game-row')).toHaveCount(4);
   await layoutOk(page, 'games');
   await shot(page, 'games');
   // a game opens the game page (results and replays), and Back returns to the crew
@@ -323,7 +325,8 @@ test('the leader’s settings: name, badge and colour, who can host, season leng
 async function seedMonsoon(name: string): Promise<{ crew: { id: string; code: string }; lead: Person }> {
   const [lead, omar, pia, sam] = await Promise.all(['Leela', 'Omar', 'Pia', 'Sam'].map((n) => person(db, n))) as [Person, Person, Person, Person];
   const crew = await crewWith(db, lead, name, [omar, pia, sam], { badge: 'round', color: '#1f8a5b' });
-  // three nights for Leela, Omar and Pia; one for Sam (unranked: fewer than 3 nights)
+  // four nights for Leela, Omar and Pia; one for Sam (unranked: fewer than 4 nights)
+  await game(db, crew.id, 'MC00', 40, [[lead, 200], [omar, -50], [pia, -150]]);
   await game(db, crew.id, 'MC01', 30, [[lead, 600], [omar, 100], [pia, -300], [sam, -400]]);
   await game(db, crew.id, 'MC02', 20, [[omar, 500], [lead, 100], [pia, -600]]);
   await game(db, crew.id, 'MC03', 10, [[pia, 900], [lead, -400], [omar, -500]]);
@@ -354,7 +357,7 @@ for (const [w, h] of [[390, 844], [1440, 900]] as const) {
       await shot(page, `scoring-${w}-${theme}-league`);
       await page.getByTestId('how-info').first().click();
       await expect(page.locator('.sheet.open .cw-sheet')).toContainText('How points work');
-      await expect(page.locator('.sheet.open .cw-sheet')).toContainText('1st of 9 gets 8');
+      await expect(page.locator('.sheet.open .cw-sheet')).toContainText('1st of 7 gets 6');
       await targetsOk(page, `${theme} ${w} how sheet`);
       await shot(page, `scoring-${w}-${theme}-how`);
       await page.locator('.sheet.open .sheet-close').click();

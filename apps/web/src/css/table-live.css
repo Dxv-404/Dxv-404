@@ -314,3 +314,7 @@ html .th-edo{--b-raise:#bf3b27}
 .th-pixel.tp-plpull .plp-in{border-radius:0}
 @media (orientation:landscape) and (max-height:520px){.tp-plpull .plp-in{right:auto;width:min(440px,72%);max-height:100%;border-radius:0 0 18px 0}}
 @media (prefers-reduced-motion:reduce){.plist .prow .dl,.plist .prow.lead .rk{animation:none}}
+/* the top bar has one more button on phones (the players list): the title gives way before the table grows wider than the screen */
+.top{min-width:0}
+.top .hm{overflow:hidden;flex:0 1 auto}
+.top .hm b,.top .hm small{overflow:hidden;text-overflow:ellipsis}
