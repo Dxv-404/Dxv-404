@@ -3,7 +3,8 @@
 import type { Action, GameEvent } from '@tp/engine';
 import type { ScreenView } from '../net-table';
 import { fitPill } from './pill';
-import { renderTable, sprite, fmt, winnerCardHtml, THEME_KEYS, THEMES, type ThemeKey, type Frame } from './render';
+import { renderTable, sprite, fmt, winnerCardHtml, playersList, panelLive, heldStack, THEME_KEYS, THEMES, type ThemeKey, type Frame } from './render';
+import { Panel, TAG_MS } from './panel';
 import { sfx, buzz, settings } from '../legacy/fx.js';
 import { ask } from '../legacy/ui.js';
 import { FEEL, Motion, type MotionLevel } from './motion';
@@ -14,7 +15,7 @@ import { playTier, winValues, bustValues, tierFor, categoryOf, type Playing } fr
 import { RaiseSheet } from './raise';
 import { RebuyUi } from './rebuys';
 import { raiseTrace, tablePeek, tableVia } from '../research/table';
-import { noteSetting } from '../research/app';
+import { noteSetting, noteSheet } from '../research/app';
 
 export interface TableLike {
   view: ScreenView | null;
@@ -48,6 +49,49 @@ const SAY: Record<string, string> = { fold: 'folds', check: 'checks', call: 'cal
 const reduceMotion = (): boolean => settings.motion === 'off' || matchMedia('(prefers-reduced-motion: reduce)').matches;
 const motionLevel = (): MotionLevel => (reduceMotion() ? 'off' : settings.motion === 'calm' ? 'calm' : 'full');
 
+/** Where each row of the players list sits now (before it is redrawn in its new order). */
+function rowTops(el: Element): Map<string, number> {
+  const m = new Map<string, number>();
+  el.querySelectorAll<HTMLElement>('.prow[data-id]').forEach((r) => m.set(r.dataset.id!, r.offsetTop));
+  return m;
+}
+/**
+ * After a hand: each chip count runs to its new value (500 ms), then the rows slide to their new places
+ * together (400 ms), the ones moving up passing in front. Calm: a short cross-fade. Off: nothing moves.
+ */
+function animatePanel(el: HTMLElement, was: Map<string, number>): void {
+  const level = motionLevel();
+  if (level === 'off') return;
+  const rows = [...el.querySelectorAll<HTMLElement>('.prow[data-id]')];
+  if (level === 'calm') { for (const r of rows) r.animate([{ opacity: 0.35 }, { opacity: 1 }], { duration: 260, easing: 'ease-out' }); return; }
+  const pixel = currentTheme() === 'pixel';
+  for (const r of rows) {
+    const num = r.querySelector<HTMLElement>('i[data-n]');
+    const to = Number(num?.dataset.n ?? 0), d = Number(num?.dataset.d ?? 0);
+    if (num && d) countTo(num, to - d, to, 500, pixel);
+    r.querySelector('.dl')?.animate([{ opacity: 0, transform: 'translateY(5px)' }, { opacity: 1, transform: 'none' }], { duration: 240, easing: pixel ? 'steps(3, end)' : 'ease-out' });
+    const old = was.get(r.dataset.id!);
+    const dy = old === undefined ? 0 : old - r.offsetTop;
+    if (!dy) continue;
+    r.style.zIndex = dy > 0 ? '2' : '1';
+    const a = r.animate([{ transform: `translateY(${dy}px)` }, { transform: `translateY(${dy}px)`, offset: 0.56, easing: pixel ? 'steps(4, end)' : 'cubic-bezier(.3,.1,.2,1)' }, { transform: 'none' }], { duration: 900 });
+    a.onfinish = a.oncancel = () => { r.style.zIndex = ''; };
+  }
+}
+function countTo(el: HTMLElement, from: number, to: number, ms: number, stepped: boolean): void {
+  const t0 = performance.now();
+  const tick = (now: number): void => {
+    if (!el.isConnected) return;
+    let f = Math.min(1, (now - t0) / ms);
+    if (stepped) f = Math.round(f * 6) / 6;
+    const e = 1 - Math.pow(1 - f, 3);
+    el.textContent = fmt(from + (to - from) * e);
+    if (f < 1) requestAnimationFrame(tick);
+  };
+  el.textContent = fmt(from);
+  requestAnimationFrame(tick);
+}
+
 export class TableScreen {
   private root: HTMLElement;
   private view: ScreenView | null = null;
@@ -74,6 +118,12 @@ export class TableScreen {
 
   /** rebuys: the bust-out sheets, the chips pouring in after a rebuy (rebuys.ts) */
   private rb: RebuyUi;
+  // the players list: its order (by chips, settled between hands), the phone's pull-down
+  private panel = new Panel();
+  private panelGen = 0;
+  private pullGen = 0;
+  private panelTimer: ReturnType<typeof setTimeout> | null = null;
+  private pull: { el: HTMLElement; at: number; html: string } | null = null;
   /** the bust the sheet was shown for (rebuys used at the time), one waiting for the bust-out scene, and where I went out */
   private bustKey: string | null = null;
   private bustWaiting: string | null = null;
@@ -104,7 +154,7 @@ export class TableScreen {
       if (e.pointerType === 'touch') root.classList.remove('kb');
       // tap anywhere after a hand: on to the next step (the scene and the winner card handle their own taps)
       const t = e.target as HTMLElement;
-      if (this.res?.skip && !t.closest('[data-act], .tpw-wrap, .tp-wcard, .tp-raise, .tp-intro, .pz-toast')) { this.skipStep(); return; }
+      if (this.res?.skip && !t.closest('[data-act], .tpw-wrap, .tp-wcard, .tp-raise, .tp-intro, .pz-toast, .tp-plpull')) { this.skipStep(); return; }
       const el = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null;
       if (el?.dataset.act === 'peek') { this.peek = true; tablePeek(true, e.pointerType); this.draw(); e.preventDefault(); }
     };
@@ -120,6 +170,7 @@ export class TableScreen {
       if ((e.target as HTMLElement).closest('input, select, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
       root.classList.add('kb'); // a keyboard is in use: show the key hints
       if (this.raise?.key(e)) return;
+      if (e.key === 'Escape' && this.pull) { this.closePull(); e.preventDefault(); return; }
       if (e.code === 'Space' && this.res?.skip) { this.skipStep(); e.preventDefault(); return; }
       if (e.code === 'Space') { if (!this.peek) { this.peek = true; tablePeek(true, 'key'); this.draw(); } e.preventDefault(); return; }
       const k = e.key.toLowerCase();
@@ -233,7 +284,14 @@ export class TableScreen {
     if (!v) { this.stage.innerHTML = '<div class="tp-wait" role="status">Connecting…</div>'; return; }
     this.stage.dataset.res = v.hand?.results ? (this.res?.step ?? 'end') : ''; // the step after a hand (for the checks)
     const W = this.root.clientWidth || window.innerWidth, H = this.root.clientHeight || window.innerHeight;
-    const frame = renderTable(v, currentTheme(), W, H, { peek: this.peek || !settings.holdToPeek, bubble: this.bubble, code: this.o.code, net: this.net, res: v.hand?.results ? this.res : null, elsewhere: this.elsewhere });
+    // the players list settles its order (by chips) once a hand is over; the +/− tags go after a moment
+    const step = v.hand?.results ? (this.res?.step ?? (v.hand.results.showdown ? 'hold' : 'fold')) : null;
+    if (this.panel.sync(v, panelLive(v, step), performance.now())) {
+      if (this.panelTimer) clearTimeout(this.panelTimer);
+      this.panelTimer = setTimeout(() => { this.panelTimer = null; this.draw(); }, TAG_MS + 40);
+    }
+    const frame = renderTable(v, currentTheme(), W, H, { peek: this.peek || !settings.holdToPeek, bubble: this.bubble, code: this.o.code, net: this.net, res: v.hand?.results ? this.res : null, elsewhere: this.elsewhere, panel: this.panel });
+    this.drawPull(v, step);
     if (frame.html === this.frame?.html) return; // nothing changed on screen
     try { this.drawParts(frame); } finally { this.drainBar(); }
     // the result pill clear of the seats and their cards (again once the theme's fonts are in: its size changes)
@@ -273,12 +331,16 @@ export class TableScreen {
         // board cards already on the table must not play their deal-in again when the felt is redrawn
         // (the best five's lift after a hand does play)
         const shown = k === 'felt' ? el.querySelectorAll('.board .cd').length : 0;
+        const was = k === 'side' && this.panel.gen !== this.panelGen ? rowTops(el) : null;
         el.innerHTML = html;
+        if (was) animatePanel(el as HTMLElement, was);
         if (shown) el.querySelectorAll('.board .cd').forEach((c, i) => { if (i < shown) for (const a of c.getAnimations()) if ((a as CSSAnimation).animationName === 'dealIn') a.finish(); });
       }
       this.motion.reattach(); // moves on swapped elements carry on, on the new ones
+      this.panelGen = this.panel.gen;
       return;
     }
+    this.panelGen = this.panel.gen;
     this.motion.reset();
     this.stage.innerHTML = frame.html;
     const tp = this.stage.firstElementChild as HTMLElement;
@@ -302,6 +364,8 @@ export class TableScreen {
     switch (act) {
       case 'menu': return this.o.menu();
       case 'info': return this.o.info();
+      case 'players': return this.togglePull();
+      case 'players-close': return this.closePull();
       case 'fold': this.closeRaise(); if (L && v?.hand?.toAct === v.me) { if (L.canCheck) { void ask('You can check for free. Fold anyway?', { yes: 'Fold', no: 'Keep my cards', danger: true }).then((ok) => { if (ok) this.t.act({ type: 'fold' }); }); return; } this.t.act({ type: 'fold' }); } return;
       case 'check': if (L?.canCheck) { this.closeRaise(); this.t.act({ type: 'check' }); } return;
       case 'call': if (L?.canCall) { this.closeRaise(); this.t.act({ type: 'call' }); } return;
@@ -337,6 +401,52 @@ export class TableScreen {
     if (!this.raise) return;
     const r = this.raise; this.raise = null; r.destroy();
     if (this.root.classList.contains('kb')) (this.stage.querySelector('.tp.live .act.raise') as HTMLElement | null)?.focus({ preventScroll: true });
+  }
+
+  // ---------------- the players list (phones and tablets: a pull-down from the top bar) ----------------
+  private togglePull(): void {
+    if (this.pull) { this.closePull(); return; }
+    const v = this.view;
+    if (!v) return;
+    const el = document.createElement('div');
+    el.className = `tp-plpull th-${currentTheme()}`;
+    el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Players and chips');
+    el.innerHTML = '<div class="plp-scrim" data-act="players-close"></div><div class="plp-in"><div class="plp-body"></div><button class="plp-x" data-act="players-close" aria-label="Close the players list"><i></i></button></div>';
+    this.overlay.append(el);
+    this.pull = { el, at: performance.now(), html: '' };
+    this.pullGen = this.panel.gen;
+    const inHand = v.phase === 'hand' && !v.hand?.results;
+    noteSheet(`players:${inHand ? 'hand' : 'between'}`, true);
+    this.drawPull(v, v.hand?.results ? (this.res?.step ?? null) : null);
+    if (!reduceMotion()) {
+      const calm = settings.motion === 'calm';
+      (el.querySelector('.plp-in') as HTMLElement).animate(calm ? [{ opacity: 0 }, { opacity: 1 }] : [{ transform: 'translateY(-100%)' }, { transform: 'none' }], { duration: calm ? 160 : 240, easing: currentTheme() === 'pixel' ? 'steps(4, end)' : 'cubic-bezier(.2,.8,.2,1)' });
+      (el.querySelector('.plp-scrim') as HTMLElement).animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200 });
+    }
+    (el.querySelector('.plp-x') as HTMLElement).focus({ preventScroll: true });
+  }
+  private closePull(): void {
+    const p = this.pull;
+    if (!p) return;
+    this.pull = null;
+    const v = this.view;
+    noteSheet(`players:${v && v.phase === 'hand' && !v.hand?.results ? 'hand' : 'between'}`, false, Math.round(performance.now() - p.at));
+    p.el.remove();
+    (this.stage.querySelector('.top .plb') as HTMLElement | null)?.focus({ preventScroll: true });
+  }
+  /** Keep the open pull-down up to date (the same rows as the laptop's side panel). */
+  private drawPull(v: ScreenView, step: string | null): void {
+    const p = this.pull;
+    if (!p) return;
+    // on a laptop the list is always in the side panel
+    if (this.frame?.mode === 'lap') { this.closePull(); return; }
+    const html = `<span class="sh">At the table · ${v.players.length}</span>${playersList(v, THEMES[currentTheme()] ?? THEMES.classic!, this.panel, panelLive(v, step), heldStack(v, step))}`;
+    if (html === p.html) return;
+    const body = p.el.querySelector('.plp-body') as HTMLElement;
+    const was = p.html && this.panel.gen !== this.pullGen ? rowTops(body) : null;
+    p.html = html; body.innerHTML = html;
+    this.pullGen = this.panel.gen;
+    if (was) animatePanel(body, was);
   }
 
   // ---------------- wins ----------------
@@ -567,6 +677,8 @@ export class TableScreen {
 
   destroy(): void {
     delete document.body.dataset.inHand;
+    if (this.panelTimer) clearTimeout(this.panelTimer);
+    this.closePull();
     this.closeRaise();
     this.fxGen++; this.playing?.stop(); this.endResults();
     this.rb.destroy();

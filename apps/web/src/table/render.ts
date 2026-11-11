@@ -3,6 +3,7 @@
 import themesJson from './themes.json';
 import { arenaSize, dealerSpot, fitCard, isCompact, makeGeo, modeFor, place, type Mode } from './layout';
 import type { ScreenView } from '../net-table';
+import { Panel, listHtml } from './panel';
 import { describePartial, parseCard } from '@tp/engine';
 import { FEEL } from './motion';
 import { TIER_LABEL, bestOnBoard, chancesLine, handShort, handWords, nextLabel, runoutTitle, summarize, type ResStage, type Summary } from './results';
@@ -82,7 +83,7 @@ export interface Frame { html: string; mode: Mode; u: number; lw: number; lh: nu
  * The whole table as HTML for a W x H screen. `peek`: the player is holding their cards up. `bubble`: what
  * the dealer last said. `code`: the table's code (shown in the top bar).
  */
-export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: number, o: { peek: boolean; bubble: string | null; code: string; net: 'good' | 'weak' | 'lost'; title?: string; res?: ResStage | null; elsewhere?: { pid: string; where: string } | null; /** false: leave the dealer out (layout checks) */ dealer?: boolean }): Frame {
+export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: number, o: { peek: boolean; bubble: string | null; code: string; net: 'good' | 'weak' | 'lost'; title?: string; res?: ResStage | null; elsewhere?: { pid: string; where: string } | null; /** false: leave the dealer out (layout checks) */ dealer?: boolean; /** the players list's order and tags (kept by the screen); none: a fresh one */ panel?: Panel }): Frame {
   const th = THEMES[themeKey] ?? THEMES.classic!;
   const me = v.me;
   const players = v.players;
@@ -227,7 +228,9 @@ export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: num
   const top = `<header class="top"><button class="ib" data-act="menu" aria-label="Table menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>`
     + `<div class="hm"><b>${esc(title)}</b><small>${sub}</small></div><span class="sp"></span>`
     + `<span class="net${netCls}" role="img" aria-label="Connection ${o.net}"><i></i><i></i><i></i></span>`
-    + (o.code ? `<span class="pill code">${esc(o.code)}</span>` : '') + `<button class="ib info" data-act="info" aria-label="Hand rankings">i</button></header>`;
+    + (o.code ? `<span class="pill code">${esc(o.code)}</span>` : '')
+    + (mode === 'lap' ? '' : `<button class="ib plb" data-act="players" aria-label="Players and chips, ${n} at the table" aria-haspopup="dialog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/></svg></button>`)
+    + `<button class="ib info" data-act="info" aria-label="Hand rankings">i</button></header>`;
 
   // me
   const mine = players.find((p) => p.id === me);
@@ -261,7 +264,7 @@ export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: num
 
   let body: string;
   let style = `width:${lw}px;height:${lh}px`;
-  const parts: Record<string, string> = { top, arena: arenaDyn, felt: feltDyn, hero, actions, ...(mode === 'lap' ? { side: sidePanel(v, step === 'all' || step === 'hold' ? R : null) } : {}) };
+  const parts: Record<string, string> = { top, arena: arenaDyn, felt: feltDyn, hero, actions, ...(mode === 'lap' ? { side: sidePanel(v, th, panelFor(v, o.panel), panelLive(v, step), stackOf, step === 'all' || step === 'hold' ? R : null) } : {}) };
   const T = dyn('top', top), He = dyn('hero', hero), A = dyn('actions', actions);
   if (mode === 'phone') body = `<div class="fx" aria-hidden="true">${art.fx}</div>${T}${arena}${He}<nav class="actions" aria-label="Your actions">${A}</nav>`;
   else if (mode === 'land') {
@@ -364,12 +367,25 @@ function actionsHtml(v: ScreenView, mode: Mode, rs: ResStage | null): string {
   return out.join('');
 }
 
-function sidePanel(v: ScreenView, R: import('@tp/engine').HandResults | null): string {
-  const rows = v.players.map((p) => `<div class="prow${p.id === v.me ? ' me' : ''}"><b>${esc(p.name)}</b><i>${fmt(p.stack)}</i><small>${p.id === v.me ? 'You' : !p.connected ? 'Connection lost' : p.sittingOut ? 'Sitting out' : 'Playing'}</small></div>`).join('');
+/** The chips to show for a player: before the winner is shown (the runout, the scene) the pot is not yet in their stack. */
+export function heldStack(v: ScreenView, step: string | null): (p: { id: string; stack: number }) => number {
+  const R = v.hand?.results;
+  if (!R || !(step === 'runout' || step === 'scene')) return (p) => p.stack;
+  const sum = summarize(R, (pid) => v.players.find((p) => p.id === pid)?.name ?? 'Someone');
+  return (p) => p.stack - (sum.winners.find((w) => w.pid === p.id)?.amount ?? 0);
+}
+/** A hand is being played, or its result is still being revealed: the players list keeps its order and shows no tags. */
+export const panelLive = (v: ScreenView, step: string | null): boolean => (v.phase === 'hand' && !v.hand?.results) || (!!v.hand?.results && (step === 'runout' || step === 'scene' || step === 'winner'));
+const panelFor = (v: ScreenView, p: Panel | undefined): Panel => { if (p) return p; const fresh = new Panel(); fresh.sync(v, false, 0); return fresh; };
+/** The players list (side panel and pull-down): rank, avatar, name, chips, status, sorted by chips. */
+export function playersList(v: ScreenView, th: Theme, panel: Panel, live: boolean, stackOf: (p: { id: string; stack: number }) => number = (p) => p.stack): string {
+  return listHtml(panel.rows(v, live, stackOf), (r) => avatar(th, r.id, r.name, r.avatar));
+}
+function sidePanel(v: ScreenView, th: Theme, panel: Panel, live: boolean, stackOf: (p: { id: string; stack: number }) => number, R: import('@tp/engine').HandResults | null): string {
   // after a showdown the log writes out each hand that was shown
   const shown = R ? Object.entries(R.evals).map(([pid, ev]) => `${v.players.find((p) => p.id === pid)?.name ?? 'Someone'} showed ${(v.hand?.ps[pid]?.cards ?? []).map(cardName).join(', ')}: ${handWords(ev).toLowerCase()}`) : [];
   const log = [...v.log.slice(-12).map((l) => (typeof l === 'string' ? l : (l as { text: string }).text)), ...shown].slice(-14).map((l) => `<span>${esc(l)}</span>`).join('');
-  return `<span class="sh">At the table · ${v.players.length}</span><div class="plist">${rows}</div><span class="sh">Table log</span><div class="log">${log}</div>`;
+  return `<span class="sh">At the table · ${v.players.length}</span>${playersList(v, th, panel, live, stackOf)}<span class="sh">Table log</span><div class="log">${log}</div>`;
 }
 
 /** The theme's SVG sprite (cards, chips, dealer art) for the page. */

@@ -263,3 +263,54 @@ html .th-edo{--b-raise:#bf3b27}
 @keyframes rz-pop{from{transform:translateY(10px) scale(.97);opacity:0}}
 .tp-raise.m-off *,.tp-raise.m-off *::before,.tp-raise.m-off *::after{animation:none!important;transition:none!important}
 @media (prefers-reduced-motion:reduce){.tp-raise *,.tp-raise *::before,.tp-raise *::after{animation:none!important;transition:none!important}}
+
+/* ---- the players list: sorted by chips (panel.ts); the laptop's side panel and the phone's pull-down ---- */
+.plist{position:relative;gap:2px}
+.side .plist{overflow:auto;min-height:0;scrollbar-width:none}
+.plist .prow{position:relative;gap:8px;background:var(--sidebg,var(--bg))}
+.plist .prow .rk{font:700 12px var(--num);width:21px;height:21px;flex:none;display:grid;place-items:center;border-radius:6px;color:var(--mut);box-shadow:inset 0 0 0 1px var(--line)}
+.plist .prow:first-child:not(.bust) .rk{color:var(--acctx);background:var(--acc);box-shadow:none}
+.plist .prow .av{flex:none}
+.plist .prow .pc{display:flex;flex-direction:row-reverse;align-items:center;gap:6px;flex:none}
+.plist .prow .dl{font:700 10.5px var(--num);text-decoration:none;white-space:nowrap;padding:2px 5px;border-radius:6px;animation:dlout .4s 2.1s both}
+.plist .prow .dl.up{color:var(--up,#1f9d55);background:color-mix(in srgb,var(--up,#1f9d55) 16%,transparent)}
+.plist .prow .dl.dn{color:var(--dn,#d6453d);background:color-mix(in srgb,var(--dn,#d6453d) 16%,transparent)}
+.plist .prow small{width:auto;min-width:54px;flex:none}
+.plist .prow.me{background:var(--chipbg);box-shadow:inset 3px 0 0 var(--acc)}
+.plist .prow.bust{opacity:.5}
+.plist .prow.fold b,.plist .prow.fold i{opacity:.55}
+.plist .prow.allin small{color:var(--hot,var(--acc));font-weight:700}
+.plist .prow.lead .rk{animation:rkshine 1.1s ease-out .95s 1}
+@keyframes dlout{to{opacity:0}}
+@keyframes rkshine{0%{transform:none;filter:none}35%{transform:scale(1.3);filter:brightness(1.6) drop-shadow(0 0 6px var(--acc))}100%{transform:none;filter:none}}
+.tp.calm .plist .prow.lead .rk{animation:none}
+/* each theme's rank plate */
+.th-classic .plist .prow .rk{border-radius:50%;background:linear-gradient(#e7c873,#a8842c);color:#3a2a08;box-shadow:inset 0 0 0 1px #6f5518,0 1px 0 rgba(0,0,0,.3)}
+.th-noir .plist .prow .rk{border-radius:50%;box-shadow:inset 0 0 0 1px var(--mut)}
+.th-ivory .plist .prow .rk{border-radius:0;box-shadow:inset 0 -1.5px 0 var(--line);font-family:var(--dsp)}
+.th-velvet .plist .prow .rk{border-radius:50%;color:var(--acc);box-shadow:inset 0 0 0 1.5px var(--acc)}
+.th-cyber .plist .prow .rk{border-radius:4px;color:var(--acc);box-shadow:inset 0 0 0 1px var(--acc),0 0 8px color-mix(in srgb,var(--acc) 55%,transparent)}
+.th-cyber .plist .prow{--up:#39ff9c;--dn:#ff4d6d}
+.th-ink .plist .prow .rk{font:400 16px var(--dsp);box-shadow:none}
+.th-ink .plist .prow:first-child:not(.bust) .rk{background:none;color:var(--acc)}
+.th-ink .plist .prow{--up:#127a45;--dn:#e8202a}
+.th-pixel .plist .prow,.th-pixel .plist .prow .rk,.th-pixel .plist .prow .dl{border-radius:0}
+.th-pixel .plist .prow .rk{box-shadow:0 0 0 2px var(--line)}
+.th-train .plist .prow .rk{border-radius:3px;background:#141414;color:#f5c542;box-shadow:inset 0 -10px 0 rgba(255,255,255,.07),inset 0 0 0 1px #3a3a3a}
+.th-train .plist .prow.lead .rk{animation:rkflip .5s steps(5,end) .95s 1}
+@keyframes rkflip{0%{transform:perspective(60px) rotateX(-90deg)}100%{transform:none}}
+.th-edo .plist .prow .rk{border-radius:2px;background:var(--acc);color:var(--acctx);box-shadow:2px 2px 0 var(--line)}
+/* phones and tablets: the list pulls down from the top bar */
+.top .ib.plb svg{width:20px;height:20px}
+.tp-over>.tp-plpull{position:absolute;inset:0;z-index:70;font-family:var(--ui);color:var(--tx);background:none;box-shadow:none} /* the theme's root rule paints the page; the list floats over the table */
+.tp-plpull .plp-scrim{position:absolute;inset:0;background:rgba(0,0,0,.5)}
+.tp-plpull .plp-in{position:absolute;left:0;right:0;top:0;max-height:80%;display:flex;flex-direction:column;background:var(--sidebg,var(--bg));box-shadow:0 14px 34px rgba(0,0,0,.5),inset 0 -1px 0 var(--line);border-radius:0 0 18px 18px;padding:calc(env(safe-area-inset-top,0px) + 14px) 14px 2px}
+.tp-plpull .plp-body{overflow:auto;display:flex;flex-direction:column;gap:10px;min-height:0}
+.tp-plpull .plp-x{height:30px;flex:none;background:none;border:0;display:grid;place-items:center;cursor:pointer}
+.tp-plpull .plp-x i{width:44px;height:5px;border-radius:3px;background:var(--mut);opacity:.55}
+.tp-plpull .prow{font-size:15px;padding:8px 8px}
+.tp-plpull .av{position:relative;width:var(--av);height:var(--av);display:block;--av:32px}
+.tp-plpull .av>:first-child{width:100%;height:100%;display:block}
+.th-pixel.tp-plpull .plp-in{border-radius:0}
+@media (orientation:landscape) and (max-height:520px){.tp-plpull .plp-in{right:auto;width:min(440px,72%);max-height:100%;border-radius:0 0 18px 0}}
+@media (prefers-reduced-motion:reduce){.plist .prow .dl,.plist .prow.lead .rk{animation:none}}
