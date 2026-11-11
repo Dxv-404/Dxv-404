@@ -134,6 +134,16 @@ importers:
         specifier: 2.78.0
         version: 2.78.0
 
+  packages/achievements:
+    dependencies:
+      '@tp/engine':
+        specifier: workspace:*
+        version: link:../engine
+    devDependencies:
+      '@tp/bots':
+        specifier: workspace:*
+        version: link:../../tools/bots
+
   packages/engine: {}
 
   packages/protocol:
@@ -172,6 +182,19 @@ importers:
       pg:
         specifier: 8.16.3
         version: 8.16.3
+
+  tools/achievements:
+    dependencies:
+      '@tp/achievements':
+        specifier: workspace:*
+        version: link:../../packages/achievements
+      '@tp/engine':
+        specifier: workspace:*
+        version: link:../../packages/engine
+    devDependencies:
+      '@tp/bots':
+        specifier: workspace:*
+        version: link:../bots
 
   tools/bots:
     dependencies:
