@@ -277,7 +277,7 @@ language sql stable security definer set search_path = '' as $$
       where m.pk = k and m.prev is not null and m.before > m.prev), '[]'::jsonb),
     'best', (select jsonb_build_object('hand', hp.hand_no, 'chips', hp.net) from public.hand_players hp where hp.game_id = g and hp.player_key = k and hp.net > 0 order by hp.net desc, hp.hand_no limit 1),
     'worst', (select jsonb_build_object('hand', hp.hand_no, 'chips', hp.net) from public.hand_players hp where hp.game_id = g and hp.player_key = k and hp.net < 0 order by hp.net, hp.hand_no limit 1),
-    'table', coalesce((select jsonb_agg(jsonb_build_object('name', case when gp.account_id is not null and (select deleted_at from public.accounts where id = gp.account_id) is null
+    'lines', coalesce((select jsonb_agg(jsonb_build_object('name', case when gp.account_id is not null and (select deleted_at from public.accounts where id = gp.account_id) is null
           then (select name from public.accounts where id = gp.account_id) else gp.name end,
         'hands', (select jsonb_agg(m.hand_no order by m.hand_no) from m where m.pk = gp.player_key),
         'stacks', (select jsonb_agg(m.after order by m.hand_no) from m where m.pk = gp.player_key)) order by gp.net desc nulls last)

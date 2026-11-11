@@ -117,7 +117,8 @@ select is(:'n1'::jsonb -> 'rebuys', '[{"chips": 1000, "before": 3}]'::jsonb, 'th
 select is((:'n1'::jsonb -> 'best')::text || (:'n1'::jsonb -> 'worst')::text, '{"hand": 3, "chips": 900}{"hand": 2, "chips": -1300}', 'the biggest pot won and lost, with their hands');
 select is((:'n1'::jsonb ->> 'place') || ' of ' || (:'n1'::jsonb ->> 'players') || ' score ' || (:'n1'::jsonb ->> 'score') || ' buyins ' || (:'n1'::jsonb ->> 'buyins') || ' start ' || (:'n1'::jsonb ->> 'start_stack'),
   '3 of 3 score -1.5 buyins 2000 start 1000', 'place, game score and what was bought in (the buy-in line)');
-select is(:'n1'::jsonb -> 'table' -> 0, '{"name": "Chitra", "hands": [1, 2, 3], "stacks": [850, 1500, 1150]}'::jsonb, 'everyone else''s lines, for "show table"');
+select is(:'n1'::jsonb -> 'lines' -> 0, '{"name": "Chitra", "hands": [1, 2, 3], "stacks": [850, 1500, 1150]}'::jsonb, 'everyone else''s lines, for "show table"');
+select is(:'n1'::jsonb ->> 'table', 'PR01', 'and the table''s code');
 select is(:'n1'::jsonb -> 'achievements', '[{"id": "quads", "hand": 1, "tier": 0}]'::jsonb, 'and what I earned that night, on the line');
 select is(:'mine'::jsonb -> 'nights' -> 0 ->> 'league', 'false', 'a game outside a crew is in my career but not the league');
 -- the calendar, by India day
