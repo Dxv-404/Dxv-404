@@ -283,3 +283,9 @@
 .pf-wrow small{font-size:12px;color:var(--cw-mut,var(--mut));text-transform:capitalize}
 .pf-welcome[data-motion=full] .pf-wrow{animation:pfwrow calc(.35s * var(--cw-k,1)) var(--cw-ease,ease) both;animation-delay:calc(var(--i) * 55ms)}
 @keyframes pfwrow{from{opacity:0;transform:translateY(8px)}}
+/* sideways phones: the card is narrow, so its figures are smaller and never run into each other */
+.tp.app .pf-lay.s-side .pf-c-stats b{font-size:12.5px}
+.tp.app .pf-lay.s-side .pf-c-stats small{font-size:8px}
+.tp.app .pf-lay.s-side .pf-c-stats span{padding-left:5px;overflow:hidden}
+.tp.app .pf-lay.s-side .pf-c-name b{font-size:18px}
+.tp.app .pf-lay.s-side .pf-card{padding:10px 10px 8px;gap:6px}
