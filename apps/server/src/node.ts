@@ -58,6 +58,13 @@ void recorderKey().then(async (key) => {
   if (!key) { console.log('league recorder: no key, games are not sent to the league'); return; }
   signBody = tokenSigner(key);
   recorder = new Recorder(outboxStore, signBody, supabaseSend(process.env.SUPABASE_URL ?? SUPABASE_URL, SUPABASE_KEY), Date.now, (m) => console.log(m));
+  // a crew's night is stored: check the crew's achievements (never in the way of the game)
+  const rpc = supabaseRpc(process.env.SUPABASE_URL ?? SUPABASE_URL, SUPABASE_KEY);
+  const sign = signBody;
+  recorder.onStored = (it) => {
+    const end = it.fn === 'record_game_end' ? crewOfEnd(it.body) : null;
+    if (end) void achievementsAfterNight(end.crew, end.game, { sign, rpc, log: (m) => console.log(m) }).catch((e: unknown) => console.log(`achievements: ${String(e)}`));
+  };
   await recorder.start();
   console.log(`league recorder ready (${recorder.pending} waiting in the outbox)`);
   void recorder.flush();

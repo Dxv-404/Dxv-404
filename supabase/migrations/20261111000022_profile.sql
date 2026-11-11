@@ -103,7 +103,8 @@ begin
       raise exception 'incomplete';
     end if;
     if exists (select 1 from jsonb_array_elements(coalesce(b -> 'counts', '[]'::jsonb)) x
-        where (x ->> 'account')::uuid is null or coalesce(x ->> 'key', '') !~ '^[a-z][a-z_]{1,23}$' or coalesce((x ->> 'add')::int, 0) not between 1 and 100000) then
+        where (x ->> 'account')::uuid is null or coalesce(x ->> 'key', '') !~ '^[a-z][a-z_]{1,23}$'
+          or coalesce((x ->> 'add')::int, (x ->> 'set')::int, 0) not between 1 and 100000 or ((x ? 'add') and (x ? 'set'))) then
       raise exception 'incomplete';
     end if;
   exception when others then
@@ -122,12 +123,47 @@ begin
   end loop;
   for e in select * from jsonb_array_elements(coalesce(b -> 'counts', '[]'::jsonb)) loop
     acc := (e ->> 'account')::uuid;
+    -- "add": so many more; "set": the total after a run over the whole history (never lowers a count)
     insert into public.achievement_counters (account_id, key, n)
-      select acc, e ->> 'key', (e ->> 'add')::int where exists (select 1 from public.accounts a where a.id = acc and a.deleted_at is null)
-      on conflict (account_id, key) do update set n = public.achievement_counters.n + excluded.n;
+      select acc, e ->> 'key', coalesce((e ->> 'add')::int, (e ->> 'set')::int) where exists (select 1 from public.accounts a where a.id = acc and a.deleted_at is null)
+      on conflict (account_id, key) do update set n = case when e ? 'set' then greatest(public.achievement_counters.n, excluded.n) else public.achievement_counters.n + excluded.n end;
   end loop;
   return 'ok';
 end $$;
+
+-- ---------------------------------------------------------------- what a table server reads to check a crew's achievements
+-- After a crew's night ends its table server asks for everything the checker needs (every hand record of the
+-- crew, with all hole cards: only a signed table server may ask), runs the checker over the whole history
+-- and sends the result to record_achievements. {"crew":"<uuid>"}
+create function public.achievements_feed(p_body text, p_sig text) returns jsonb
+language plpgsql stable security definer set search_path = '' as $$
+declare c uuid;
+begin
+  if not private.recorder_ok(p_body, p_sig) then raise exception 'Not a table server' using errcode = '42501'; end if;
+  begin c := (p_body::jsonb ->> 'crew')::uuid; exception when others then c := null; end;
+  if c is null then raise exception 'Which crew?' using errcode = '22023'; end if;
+  return (
+select jsonb_build_object(
+  'v', 1,
+  'crew', (select jsonb_build_object('id', c.id, 'name', c.name) from public.crews c where c.id = c),
+  'members', (select coalesce(jsonb_agg(jsonb_build_object('account', m.account_id, 'name', a.name, 'joined', m.joined_at)), '[]'::jsonb)
+    from public.crew_members m join public.accounts a on a.id = m.account_id where m.crew_id = c and m.status = 'active'),
+  'seasons', (select coalesce(jsonb_agg(jsonb_build_object('id', s.id, 'name', coalesce(s.title, s.name), 'ends', s.ends_at, 'closed', s.closed_at,
+      'ranks', (select coalesce(jsonb_agg(jsonb_build_object('account', l.account_id, 'rank', l.rank)), '[]'::jsonb) from private.league_standings(c, s.id, false) l)) order by s.starts_at), '[]'::jsonb)
+    from public.seasons s where s.crew_id = c),
+  'games', (select coalesce(jsonb_agg(jsonb_build_object('id', g.id, 'table', g.table_code, 'started', g.started_at, 'ended', g.ended_at,
+      'start_stack', g.start_stack, 'big_blind', g.big_blind, 'casual', g.casual, 'season', g.season_id,
+      'host', (select t.opened_by from public.crew_tables t where t.crew_id = g.crew_id and t.table_code = g.table_code and t.opened_at <= g.started_at order by t.opened_at desc limit 1),
+      'players', (select jsonb_agg(jsonb_build_object('key', p.player_key, 'account', p.account_id, 'name', p.name, 'place', p.place, 'net', p.net, 'buyins', p.buyins, 'hands', p.hands))
+        from public.game_players p where p.game_id = g.id)) order by g.started_at), '[]'::jsonb)
+    from public.games g where g.crew_id = c and g.status = 'ended'),
+  'hands', (select coalesce(jsonb_agg(jsonb_build_object('game', r.game_id, 'no', r.hand_no, 'record', r.record) order by g.started_at, r.hand_no), '[]'::jsonb)
+    from private.hand_records r join public.games g on g.id = r.game_id where g.crew_id = c and g.status = 'ended')
+)
+  );
+end $$;
+revoke all on function public.achievements_feed(text, text) from public, anon, authenticated;
+grant execute on function public.achievements_feed(text, text) to anon;
 
 -- ---------------------------------------------------------------- what a phone may change: its own card, what it has seen, what it shows
 -- {"frame":"four-corners","backdrop":null,"pose":"smirk","finish":"matte","title":"the-closer","stats":["wins","best_night","hands"],

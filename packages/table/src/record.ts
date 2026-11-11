@@ -156,6 +156,9 @@ export class Recorder {
   refused: OutboxItem[] = [];
   constructor(private store: OutboxStore, private sign: Signer, private send: Send, private now: () => number = Date.now, private log: (m: string) => void = () => {}) {}
 
+  /** Runs once the database has taken a record (a night's end starts the achievements run). Never throws into the recorder. */
+  onStored: ((it: OutboxItem) => void) | null = null;
+
   private nextOrder = 0;
 
   async start(): Promise<void> {
@@ -207,6 +210,7 @@ export class Recorder {
         continue;
       }
       if (res === 'refused') { this.refused.push(it); this.log(`recorder: ${it.id} refused by the database`); }
+      else if (res === 'ok') { try { this.onStored?.(it); } catch (e) { this.log(`recorder: after ${it.id}: ${String(e)}`); } }
       this.items.delete(it.id);
       await this.store.remove(it.id);
     }

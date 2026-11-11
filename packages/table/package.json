@@ -12,6 +12,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@tp/achievements": "workspace:*",
     "@tp/engine": "workspace:*",
     "@tp/protocol": "workspace:*",
     "@tp/research": "workspace:*"
