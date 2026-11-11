@@ -24,10 +24,12 @@ export function modeFor(W: number, H: number): { mode: Mode; u: number; lw: numb
 /** short or narrow phones with a crowded table: slimmer hero and buttons (the dealer shows only where it fits: dealerSpot) */
 export const isCompact = (mode: Mode, lw: number, lh: number, n: number): boolean => mode === 'phone' && (lh < 760 || (lw < 380 && n > 6));
 
-export function arenaSize(mode: Mode, lw: number, lh: number, dock: number, compact: boolean): [number, number] {
+/** The laptop's right drawer (players, table log); 0 wide when it is folded away. */
+export const SIDE_W = 340;
+export function arenaSize(mode: Mode, lw: number, lh: number, dock: number, compact: boolean, side = SIDE_W): [number, number] {
   if (mode === 'phone') return [lw, lh - (compact ? 52 + 86 + 66 : 56 + 98 + 80)];
   if (mode === 'land') return [lw - dock, lh - 46];
-  return [lw - 340, lh - 64 - 168];
+  return [lw - side, lh - 64 - 168];
 }
 
 export function makeGeo(mode: Mode, aw: number, ah: number, n: number, compact = false): Geo {

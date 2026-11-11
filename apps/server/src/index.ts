@@ -2,6 +2,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { PROTOCOL_VERSION, VAPID_PUBLIC_KEY, PUSH_SUBJECT } from '@tp/protocol';
 import { TableRoom, Recorder, tokenSigner, supabaseSend, supabaseRpc, crewOfEnd, achievementsAfterNight, deliver, drainOutbox, verifySigned, checkOfflineUpload, offlineEvents, MAX_UPLOAD_BYTES, type Conn, type ConnInfo, type Persisted, type OutboxItem, type PushDeps, type PushRequest } from '@tp/table';
+import type { LogLine } from '@tp/engine';
 import { INGEST_HEADERS, RateLimiter, ResearchShipper, archiveDb, databaseWriter, ingest, runArchive, type Envelope } from '@tp/research';
 import { cachedTicketChecker, checkTicket, SUPABASE_KEY, SUPABASE_URL } from '@tp/account/ticket';
 
@@ -142,7 +143,12 @@ export class Table extends DurableObject<Env> {
       }
       this.roomAt = (await ctx.storage.get<number>('roomAt')) ?? null;
       const code = await ctx.storage.get<string>('code');
-      if (code) this.init(code, (await ctx.storage.get<Persisted>('table')) ?? null);
+      if (code) {
+        // the night's log, saved a hand at a time under log:<hand number>
+        const history: Record<number, unknown[]> = {};
+        for (const [k, v] of await ctx.storage.list<unknown[]>({ prefix: 'log:' })) history[Number(k.slice(4))] = v;
+        this.init(code, (await ctx.storage.get<Persisted>('table')) ?? null, history);
+      }
     });
   }
 
@@ -151,7 +157,7 @@ export class Table extends DurableObject<Env> {
     void (at.length ? this.ctx.storage.setAlarm(Math.max(Date.now(), Math.min(...at))) : this.ctx.storage.deleteAlarm());
   }
 
-  private init(code: string, saved: Persisted | null): TableRoom {
+  private init(code: string, saved: Persisted | null, history: Record<number, unknown[]> | null = null): TableRoom {
     const storage = this.ctx.storage;
     const room = new TableRoom(code, {
       now: () => Date.now(),
@@ -159,12 +165,14 @@ export class Table extends DurableObject<Env> {
     }, {
       save: (p) => { void storage.put('table', p); },
       appendHand: (h) => { void storage.put(`hand:${String(h.handNo).padStart(6, '0')}`, h); },
+      saveLog: (h, lines) => { const k = `log:${String(h).padStart(6, '0')}`; void (lines ? storage.put(k, lines) : storage.delete(k)); },
+      resetLog: () => { void storage.list({ prefix: 'log:' }).then((m) => (m.size ? storage.delete([...m.keys()]) : 0)); },
       league: (kind, id, payload) => {
         if (!this.recorder) return;
         this.ctx.waitUntil(this.recorder.add(kind === 'hand' ? 'record_hand' : 'record_game_end', id, payload).finally(() => this.setAlarm()));
       },
     }, saved, {
-      identify, server: 'cloudflare',
+      identify, server: 'cloudflare', history: history as Record<number, LogLine[]> | null,
       ...(this.research ? { research: { emit: (e: Envelope) => this.research!.emit(e) } } : {}),
       push: (p) => { const d = pushDeps(this.env); if (d) this.ctx.waitUntil(deliver(p, d).catch((e: unknown) => console.error('push failed', e))); },
     });

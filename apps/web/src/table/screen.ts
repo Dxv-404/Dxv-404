@@ -3,7 +3,9 @@
 import type { Action, GameEvent } from '@tp/engine';
 import type { ScreenView } from '../net-table';
 import { fitPill } from './pill';
-import { renderTable, sprite, fmt, winnerCardHtml, playersList, panelLive, heldStack, THEME_KEYS, THEMES, type ThemeKey, type Frame } from './render';
+import { renderTable, sprite, fmt, winnerCardHtml, playersList, panelLive, heldStack, avatar, card, THEME_KEYS, THEMES, type ThemeKey, type Frame, type SideState } from './render';
+import { LogBook, type LogCtx, type LogPageMsg } from './log-core';
+import { LogView } from './log-view';
 import { Panel, TAG_MS } from './panel';
 import { sfx, buzz, settings } from '../legacy/fx.js';
 import { ask } from '../legacy/ui.js';
@@ -21,6 +23,9 @@ export interface TableLike {
   view: ScreenView | null;
   subscribe(fn: (events: GameEvent[], v: ScreenView) => void): () => void;
   act(a: Action): void; show(): void; rebuy(): void; sitOut(out: boolean): void; dealNow(): void; vote(yes: boolean): void;
+  /** The table log's history: ask for the hands before hand `before` (left out: the latest), and hear the answer. Tables without it show the recent lines only. */
+  askLog?(before?: number): void;
+  onLog?(fn: (p: LogPageMsg) => void): () => void;
 }
 
 const store = {
@@ -124,7 +129,13 @@ export class TableScreen {
   private panelGen = 0;
   private pullGen = 0;
   private panelTimer: ReturnType<typeof setTimeout> | null = null;
-  private pull: { el: HTMLElement; at: number; html: string } | null = null;
+  private pull: { el: HTMLElement; at: number; html: string; tab: 'players' | 'log' } | null = null;
+  // the table log: the night's lines, its view in the laptop's drawer and in the phone's pull-down, and the drawer's state
+  private logBook = new LogBook();
+  private logGame = '';
+  private logSide: LogView;
+  private logPull: LogView | null = null;
+  private side: SideState = { shut: store.get('tp-side') === 'shut', pl: store.get('tp-side-pl') === 'shut', lg: store.get('tp-side-lg') === 'shut', only: null };
   /** the bust the sheet was shown for (rebuys used at the time), one waiting for the bust-out scene, and where I went out */
   private bustKey: string | null = null;
   private bustWaiting: string | null = null;
@@ -142,6 +153,8 @@ export class TableScreen {
     root.append(this.stage, this.overlay);
     this.motion = new Motion(this.stage);
     this.rb = new RebuyUi({ over: this.overlay, stage: this.stage, theme: currentTheme, level: motionLevel, rebuy: () => this.t.rebuy(), leave: o.leave ?? null, offline: !!o.offline });
+    this.logSide = new LogView({ ask: (before) => this.t.askLog?.(before) });
+    if (t.onLog) this.off.push(t.onLog((p) => { this.logBook.add(p); this.drawLog(); }));
     this.off.push(t.subscribe((ev, v) => this.update(ev, v)));
     if (t.view) this.update([], t.view);
     const onResize = () => { this.draw(); if (this.raise && this.frame) this.raise.place(this.frame); };
@@ -162,7 +175,10 @@ export class TableScreen {
     const up = () => { if (this.peek) { this.peek = false; tablePeek(false, ''); this.draw(); } };
     const click = (e: Event) => {
       const el = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null;
-      if (el && el.dataset.act !== 'peek') { tableVia(`button:${(e as MouseEvent).detail === 0 ? 'keyboard' : 'pointer'}`); this.press(el.dataset.act!); }
+      if (el && el.dataset.act !== 'peek') { tableVia(`button:${(e as MouseEvent).detail === 0 ? 'keyboard' : 'pointer'}`); this.press(el.dataset.act!); return; }
+      // a player in the list: the log shows only their lines (again: everyone's)
+      const row = (e.target as HTMLElement).closest('.plist .prow') as HTMLElement | null;
+      if (row?.dataset.id) this.logOnly(this.side.only === row.dataset.id ? null : row.dataset.id);
     };
     root.addEventListener('pointerdown', down);
     window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
@@ -172,6 +188,7 @@ export class TableScreen {
       root.classList.add('kb'); // a keyboard is in use: show the key hints
       if (this.raise?.key(e)) return;
       if (e.key === 'Escape' && this.pull) { this.closePull(); e.preventDefault(); return; }
+      if (e.key === ']' && this.frame?.mode === 'lap') { this.press('side'); e.preventDefault(); return; }
       if (e.code === 'Space' && this.res?.skip) { this.skipStep(); e.preventDefault(); return; }
       if (e.code === 'Space') { if (!this.peek) { this.peek = true; tablePeek(true, 'key'); this.draw(); } e.preventDefault(); return; }
       const k = e.key.toLowerCase();
@@ -214,6 +231,9 @@ export class TableScreen {
   update(events: GameEvent[], v: ScreenView): void {
     const prev = this.view;
     this.view = v;
+    // the log: a new game at this table starts a new one
+    if (v.gameId !== this.logGame) { this.logGame = v.gameId; this.logBook.reset(); }
+    this.logBook.take(v.log);
     // an app update waits for the end of the hand (src/legacy/app.js): a reload mid-hand is never forced
     if (v.phase === 'hand') document.body.dataset.inHand = '1'; else delete document.body.dataset.inHand;
     if (v.phase === 'hand' && !this.played) { this.played = true; try { sessionStorage.setItem('tp-played', '1'); } catch { /* blocked */ } } // (home offers notifications once after a game)
@@ -292,10 +312,11 @@ export class TableScreen {
       if (this.panelTimer) clearTimeout(this.panelTimer);
       this.panelTimer = setTimeout(() => { this.panelTimer = null; this.draw(); }, TAG_MS + 40);
     }
-    const frame = renderTable(v, currentTheme(), W, H, { peek: this.peek || !settings.holdToPeek, bubble: this.bubble, code: this.o.code, net: this.net, res: v.hand?.results ? this.res : null, elsewhere: this.elsewhere, panel: this.panel });
+    const frame = renderTable(v, currentTheme(), W, H, { peek: this.peek || !settings.holdToPeek, bubble: this.bubble, code: this.o.code, net: this.net, res: v.hand?.results ? this.res : null, elsewhere: this.elsewhere, panel: this.panel, side: this.side });
     this.drawPull(v, step);
-    if (frame.html === this.frame?.html) return; // nothing changed on screen
+    if (frame.html === this.frame?.html) { this.drawLog(); return; } // nothing changed on screen
     try { this.drawParts(frame); } finally { this.drainBar(); }
+    this.drawLog();
     // the result pill clear of the seats and their cards (again once the theme's fonts are in: its size changes)
     const tp = this.stage.firstElementChild as HTMLElement | null;
     fitPill(tp);
@@ -368,6 +389,12 @@ export class TableScreen {
       case 'info': return this.o.info();
       case 'players': return this.togglePull();
       case 'players-close': return this.closePull();
+      case 'side': this.side.shut = !this.side.shut; store.set('tp-side', this.side.shut ? 'shut' : 'open'); noteSheet('side', !this.side.shut); this.draw(); return;
+      case 'fold-pl': this.side.pl = !this.side.pl; store.set('tp-side-pl', this.side.pl ? 'shut' : 'open'); this.draw(); return;
+      case 'fold-lg': this.side.lg = !this.side.lg; store.set('tp-side-lg', this.side.lg ? 'shut' : 'open'); this.draw(); return;
+      case 'log-latest': (this.pull?.tab === 'log' ? this.logPull : this.logSide)?.toLatest(); return;
+      case 'log-all': return this.logOnly(null);
+      case 'pull-players': case 'pull-log': if (this.pull && v) { this.pull.tab = act === 'pull-log' ? 'log' : 'players'; this.pull.html = ''; noteSheet('log', this.pull.tab === 'log'); this.drawPull(v, v.hand?.results ? (this.res?.step ?? null) : null); } return;
       case 'fold': this.closeRaise(); if (L && v?.hand?.toAct === v.me) { if (L.canCheck) { void ask('You can check for free. Fold anyway?', { yes: 'Fold', no: 'Keep my cards', danger: true }).then((ok) => { if (ok) this.t.act({ type: 'fold' }); }); return; } this.t.act({ type: 'fold' }); } return;
       case 'check': if (L?.canCheck) { this.closeRaise(); this.t.act({ type: 'check' }); } return;
       case 'call': if (L?.canCall) { this.closeRaise(); this.t.act({ type: 'call' }); } return;
@@ -413,9 +440,10 @@ export class TableScreen {
     const el = document.createElement('div');
     el.className = `tp-plpull th-${currentTheme()}`;
     el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Players and chips');
-    el.innerHTML = '<div class="plp-scrim" data-act="players-close"></div><div class="plp-in"><div class="plp-body"></div><button class="plp-x" data-act="players-close" aria-label="Close the players list"><i></i></button></div>';
+    el.innerHTML = '<div class="plp-scrim" data-act="players-close"></div><div class="plp-in"><div class="plp-tabs" role="tablist"><button role="tab" data-act="pull-players">Players</button><button role="tab" data-act="pull-log">Table log</button></div><div class="plp-body"></div><div class="plp-log" hidden></div><button class="plp-x" data-act="players-close" aria-label="Close the players list"><i></i></button></div>';
     this.overlay.append(el);
-    this.pull = { el, at: performance.now(), html: '' };
+    this.pull = { el, at: performance.now(), html: '', tab: 'players' };
+    this.logPull = new LogView({ ask: (before) => this.t.askLog?.(before) });
     this.pullGen = this.panel.gen;
     const inHand = v.phase === 'hand' && !v.hand?.results;
     noteSheet(`players:${inHand ? 'hand' : 'between'}`, true);
@@ -434,6 +462,7 @@ export class TableScreen {
     const v = this.view;
     noteSheet(`players:${v && v.phase === 'hand' && !v.hand?.results ? 'hand' : 'between'}`, false, Math.round(performance.now() - p.at));
     p.el.remove();
+    this.logPull = null;
     (this.stage.querySelector('.top .plb') as HTMLElement | null)?.focus({ preventScroll: true });
   }
   /** Keep the open pull-down up to date (the same rows as the laptop's side panel). */
@@ -442,13 +471,46 @@ export class TableScreen {
     if (!p) return;
     // on a laptop the list is always in the side panel
     if (this.frame?.mode === 'lap') { this.closePull(); return; }
-    const html = `<span class="sh">At the table · ${v.players.length}</span>${playersList(v, THEMES[currentTheme()] ?? THEMES.classic!, this.panel, panelLive(v, step), heldStack(v, step))}`;
+    const body = p.el.querySelector('.plp-body') as HTMLElement, logEl = p.el.querySelector('.plp-log') as HTMLElement;
+    p.el.querySelectorAll('.plp-tabs button').forEach((b) => { const on = (b as HTMLElement).dataset.act === `pull-${p.tab}`; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); });
+    body.hidden = p.tab !== 'players'; logEl.hidden = p.tab !== 'log';
+    if (p.tab === 'log') { if (this.logPull) { this.logPull.attach(logEl); this.drawLog(); } return; }
+    const html = `<span class="sh">At the table · ${v.players.length}</span>${playersList(v, THEMES[currentTheme()] ?? THEMES.classic!, this.panel, panelLive(v, step), heldStack(v, step), this.side.only)}`;
     if (html === p.html) return;
-    const body = p.el.querySelector('.plp-body') as HTMLElement;
     const was = p.html && this.panel.gen !== this.pullGen ? rowTops(body) : null;
     p.html = html; body.innerHTML = html;
     this.pullGen = this.panel.gen;
     if (was) animatePanel(body, was);
+  }
+
+  // ---------------- the table log ----------------
+  /** Show only one player's lines in the log (null: everyone's). On a phone the pull-down turns to the log. */
+  private logOnly(pid: string | null): void {
+    this.side.only = pid;
+    const v = this.view;
+    if (this.pull && pid && v) { this.pull.tab = 'log'; this.pull.html = ''; }
+    this.draw();
+  }
+  /** Draw the log where it is showing: the laptop's drawer, the phone's pull-down. */
+  private drawLog(): void {
+    const v = this.view;
+    if (!v) return;
+    const slot = this.frame?.mode === 'lap' && !this.side.shut ? this.stage.querySelector('.tlog-host') : null;
+    slot?.classList.toggle('shut', this.side.lg); // (the slot is not one of the parts that are swapped)
+    const host = this.side.lg ? null : slot;
+    const views: LogView[] = [];
+    if (host) { this.logSide.attach(host); views.push(this.logSide); }
+    if (this.pull?.tab === 'log' && this.logPull) views.push(this.logPull);
+    if (!views.length) return;
+    const th = THEMES[currentTheme()] ?? THEMES.classic!;
+    const picks = new Map(v.players.map((p) => [p.id, (p as { avatar?: string | null }).avatar ?? null] as const));
+    const ctx: LogCtx = {
+      me: v.me, only: this.side.only, bigHand: this.logBook.big?.h ?? null, fmt,
+      av: (pid, name) => avatar(th, pid, name, picks.get(pid)),
+      card: (code) => card(code, 26),
+    };
+    const onlyName = this.side.only ? (v.players.find((p) => p.id === this.side.only)?.name ?? null) : null;
+    for (const lv of views) lv.draw(this.logBook, ctx, onlyName);
   }
 
   // ---------------- wins ----------------

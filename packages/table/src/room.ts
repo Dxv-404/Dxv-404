@@ -8,7 +8,8 @@
 // - each phone gets its own view (only its own hole cards), so nothing secret is ever broadcast;
 // - the table is saved after every change as "the table at the start of the hand + the inputs since",
 //   which is also exactly the hand's replay log.
-import { Engine, TABLE_DEFAULTS, clampRebuyAmount, isSeed, randomSeed, seedCommit, sha256hex, toHex, type GameEvent, type GameState, type HandRecord, type Input, type PlayerId } from '@tp/engine';
+import { Engine, TABLE_DEFAULTS, clampRebuyAmount, isSeed, randomSeed, seedCommit, sha256hex, toHex, type GameEvent, type GameState, type HandRecord, type Input, type LogLine, type PlayerId } from '@tp/engine';
+import { LogHistory } from './log-history';
 import { PROTOCOL_VERSION, encode, isAvatarId, parseClient, versionOk, type ClientMessage, type DeviceInfo, type ServerMessage, type TableSettings } from '@tp/protocol';
 import { handPlayers, publicReplay, slimRecord, type EndPlayerRow, type GameInfo } from './record';
 import { FOLD_PAUSE_MS, resultsPauseMs, runoutStreets } from './pause';
@@ -28,6 +29,10 @@ export interface RoomClock {
 export interface RoomStore {
   save(p: Persisted): void;
   appendHand(r: HandRecord): void;
+  /** The night's table log, kept hand by hand: one hand's lines (null: none any more). Left out, the log lives in memory only. */
+  saveLog?(handNo: number, lines: LogLine[] | null): void;
+  /** A new game at this table: the old game's log goes. */
+  resetLog?(): void;
   /** League and history: a finished hand or the end of the game, ready to record (see record.ts). */
   league?(kind: 'hand' | 'end', id: string, payload: unknown): void;
 }
@@ -69,6 +74,8 @@ export interface Persisted {
 export interface PushRequest { kind: 'turn' | 'crewTable'; accounts?: string[]; crew?: string; except?: string[]; title: string; body: string; url: string; tag: string }
 
 export interface RoomOptions {
+  /** The night's log as last saved with store.saveLog (hand number -> lines), for a table coming back after a restart. */
+  history?: Record<number, LogLine[]> | null;
   /** Send push notifications (online servers only; a backup for phones whose app is in the background). */
   push?: (p: PushRequest) => void;
   /** How long a player's turn waits before their phone is pushed (if the app is not on screen). */
@@ -183,7 +190,9 @@ export class TableRoom {
   /** Inside one incoming message or wake-up, saves are collected into one at the end. */
   private batchDepth = 0;
   private needSave = false;
-  private readonly opt: Required<Omit<RoomOptions, 'push' | 'handPauseMs' | 'research'>> & Pick<RoomOptions, 'push' | 'handPauseMs' | 'research'>;
+  private readonly opt: Required<Omit<RoomOptions, 'push' | 'handPauseMs' | 'research' | 'history'>> & Pick<RoomOptions, 'push' | 'handPauseMs' | 'research'>;
+  /** Every log line of the night (the engine keeps only the latest). */
+  private history: LogHistory;
   /** Research recording (null when the server does not record). */
   private tap: RoomTap | null = null;
 
@@ -192,7 +201,8 @@ export class TableRoom {
     this.opt = { rateLimit: 40, rateWindowMs: 2000, keepUpdates: 200, offlineAfterMs: 3000, seed: randomSeed, identify: async () => null, server: 'test', turnPushMs: 3000, autoEndAfterMs: 20 * 60_000, hostHandoverMs: 60_000, maxConnections: 60, silentCloseMs: 30_000, helloWithinMs: 15_000, offline: false, sharedShuffle: !!opt.offline, shuffleWaitMs: 1500, ...opt };
     if (this.opt.offline) this.opt.maxConnections = Math.min(this.opt.maxConnections, OFFLINE_MAX_PLAYERS + 4);
     this.createdAt = clock.now();
-    if (saved) this.restore(saved);
+    this.history = new LogHistory(opt.history);
+    if (saved) { this.restore(saved); this.history.sync(this.engine!.s.log); }
     if (opt.research) {
       try {
         this.tap = new RoomTap(opt.research, {
@@ -257,6 +267,7 @@ export class TableRoom {
     if (m.t === 'bg') { st.hidden = m.hidden; this.R((t) => t.emit('conn.bg', { c: t.conn(conn), pid: st.pid, hidden: m.hidden }, st.pid, { d: st.rs?.d ?? st.device ?? null })); return; }
     if (m.t === 'seed') return this.onSeed(st, m.handNo, m.seed);
     if (m.t === 'moveSeat') return this.moveSeat(conn, st);
+    if (m.t === 'log') return this.send(conn, { t: 'log', ...this.history.page(m.before, st.pid), ...(m.before !== undefined ? { before: m.before } : {}) } as ServerMessage);
     if (!st.pid || !this.engine) { this.tapMsg(conn, st, m, now, 'Spectators cannot play', false); return this.ack(conn, null, m.actionId, 'Spectators cannot play'); }
     const pid = st.pid;
     const done = this.acks.get(pid)?.get(m.actionId);
@@ -448,7 +459,7 @@ export class TableRoom {
     this.reschedule();
   }
 
-  private handle(pid: PlayerId, m: Exclude<ClientMessage, { t: 'hello' | 'ping' | 'react' | 'seed' | 'bg' | 'moveSeat' }>, now: number): string | null {
+  private handle(pid: PlayerId, m: Exclude<ClientMessage, { t: 'hello' | 'ping' | 'react' | 'seed' | 'bg' | 'moveSeat' | 'log' }>, now: number): string | null {
     const e = this.engine!;
     const handNo = 'handNo' in m ? m.handNo : null;
     if (handNo !== null && (e.s.phase !== 'hand' || e.s.handNo !== handNo) && m.t !== 'show') return 'That hand is over';
@@ -526,6 +537,8 @@ export class TableRoom {
     this.game = { id: newGameId(), startedAt: new Date(now).toISOString(), casual: !!settings?.casual, bigBlind: c.bb, startStack: c.startStack, ended: false };
     this.base = this.engine.snapshot();
     this.inputs = [];
+    this.history.reset();
+    this.store.resetLog?.();
   }
 
   /** Apply one input; on success bump seq, tell everyone and save. Returns an error text or null. */
@@ -544,6 +557,7 @@ export class TableRoom {
     if (!HAND_INPUTS.has(input.t)) this.R((t) => t.emit('game.input', gameInput(e, input, events), 'pid' in input ? input.pid : input.t === 'join' ? input.id : null, { at: input.now }));
     if (e.s.phase === 'hand') this.inputs.push(input);
     else { this.base = e.snapshot(); this.inputs = []; }
+    this.history.sync(e.s.log);
     this.seq++;
     this.recent.push({ seq: this.seq, events });
     if (this.recent.length > this.opt.keepUpdates) this.recent.shift();
@@ -901,6 +915,8 @@ export class TableRoom {
     if (this.batchDepth) { this.needSave = true; return; }
     const p = this.persisted();
     if (p) this.store.save(p);
+    // the log is saved a hand at a time, at the hand boundaries (inside a hand the saved inputs rebuild its lines)
+    if (p && p.inputs.length === 0 && this.store.saveLog) this.history.flush((h, lines) => this.store.saveLog!(h, lines));
   }
 
   private batch(fn: () => void): void {

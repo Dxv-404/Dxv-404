@@ -317,7 +317,13 @@ for (const [W, H, theme] of [[360, 740, 'velvet'], [360, 740, 'pixel'], [844, 39
     await open(page, theme);
     await showdown(page, W);
     // the laptop's side panel writes out each hand that was shown
-    if (W >= 1200) await expect(page.locator('.tp.live .side .log')).toContainText('Meera showed Queen of hearts, Queen of diamonds: two pair, kings and queens');
+    if (W >= 1200) {
+      // the table log writes out each hand that was shown: who, the two cards, what they made
+      const row = page.locator('.tp.live .side .tlog .lgl.lg-show', { hasText: 'Meera' });
+      await expect(row).toContainText(/two pair, kings and queens/i);
+      await expect(row.locator('.cd')).toHaveCount(2);
+      await expect(row.locator('.cd').first()).toHaveAttribute('aria-label', 'Queen of hearts');
+    }
   });
 }
 

@@ -53,6 +53,8 @@ export interface ClientOptions {
   onAck?(actionId: string, ok: boolean, error?: string): void;
   onStatus?(s: Status): void;
   onError?(code: string, message: string): void;
+  /** A page of the table log (asked for with log()). */
+  onLog?(page: { hands: { h: number; lines: LogLine[] }[]; more: boolean; before?: number | undefined; big?: { h: number; pot: number } | undefined }): void;
   /** Offline: who this phone says it is (see OfflineClaim). */
   claim?: OfflineClaim;
   /** Offline: the fingerprint of the checkpoint this phone holds, sent with every hello. */
@@ -143,6 +145,11 @@ export class TableClient {
   }
 
   /** "Move seat here": take this player's seat from their other device (see onSeatElsewhere). */
+  /** Ask for the table log: the hands before hand `before` (left out: the latest). Only tables that number their log lines answer. */
+  log(before?: number): void {
+    if (this.status === 'live') this.raw(before === undefined ? { t: 'log' } : { t: 'log', before });
+  }
+
   moveSeat(): void {
     if (this.status === 'live') this.raw({ t: 'moveSeat' });
   }
@@ -266,6 +273,9 @@ export class TableClient {
         return;
       case 'notice':
         this.o.onNotice?.(m.text);
+        return;
+      case 'log':
+        this.o.onLog?.({ hands: m.hands as unknown as { h: number; lines: LogLine[] }[], more: m.more, before: m.before, big: m.big });
         return;
       case 'seatElsewhere':
         this.o.onSeatElsewhere?.(m.device);

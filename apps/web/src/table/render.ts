@@ -1,7 +1,7 @@
 // Draws a live table in the signed-off design: the same markup the design pages used (base2.css and the
 // theme's CSS style it), filled from the engine's view of this seat, laid out by layout.ts.
 import themesJson from './themes.json';
-import { arenaSize, dealerSpot, fitCard, isCompact, makeGeo, modeFor, place, type Mode } from './layout';
+import { SIDE_W, arenaSize, dealerSpot, fitCard, isCompact, makeGeo, modeFor, place, type Mode } from './layout';
 import type { ScreenView } from '../net-table';
 import { Panel, listHtml } from './panel';
 import { describePartial, parseCard } from '@tp/engine';
@@ -83,14 +83,16 @@ export interface Frame { html: string; mode: Mode; u: number; lw: number; lh: nu
  * The whole table as HTML for a W x H screen. `peek`: the player is holding their cards up. `bubble`: what
  * the dealer last said. `code`: the table's code (shown in the top bar).
  */
-export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: number, o: { peek: boolean; bubble: string | null; code: string; net: 'good' | 'weak' | 'lost'; title?: string; res?: ResStage | null; elsewhere?: { pid: string; where: string } | null; /** false: leave the dealer out (layout checks) */ dealer?: boolean; /** the players list's order and tags (kept by the screen); none: a fresh one */ panel?: Panel }): Frame {
+export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: number, o: { peek: boolean; bubble: string | null; code: string; net: 'good' | 'weak' | 'lost'; title?: string; res?: ResStage | null; elsewhere?: { pid: string; where: string } | null; /** false: leave the dealer out (layout checks) */ dealer?: boolean; /** the players list's order and tags (kept by the screen); none: a fresh one */ panel?: Panel; /** the laptop's right drawer: folded away, and which of its two sections are folded */ side?: SideState }): Frame {
   const th = THEMES[themeKey] ?? THEMES.classic!;
   const me = v.me;
   const players = v.players;
   const n = players.length;
   const { mode, u, lw, lh, dock } = modeFor(W, H);
   const compact = isCompact(mode, lw, lh, n);
-  const [aw, ah] = arenaSize(mode, lw, lh, dock, compact);
+  const sd: SideState = o.side ?? { shut: false, pl: false, lg: false, only: null };
+  const sideW = mode === 'lap' && sd.shut ? 0 : SIDE_W;
+  const [aw, ah] = arenaSize(mode, lw, lh, dock, compact, sideW);
   const g = makeGeo(mode, aw, ah, Math.max(n, 2), compact);
   const art = mode === 'lap' ? th.lap : th.phone;
   const hand = v.hand;
@@ -264,14 +266,18 @@ export function renderTable(v: ScreenView, themeKey: ThemeKey, W: number, H: num
 
   let body: string;
   let style = `width:${lw}px;height:${lh}px`;
-  const parts: Record<string, string> = { top, arena: arenaDyn, felt: feltDyn, hero, actions, ...(mode === 'lap' ? { side: sidePanel(v, th, panelFor(v, o.panel), panelLive(v, step), stackOf, step === 'all' || step === 'hold' ? R : null) } : {}) };
+  const parts: Record<string, string> = { top, arena: arenaDyn, felt: feltDyn, hero, actions, ...(mode === 'lap' ? { side: sidePanel(v, th, panelFor(v, o.panel), panelLive(v, step), stackOf, sd) } : {}) };
   const T = dyn('top', top), He = dyn('hero', hero), A = dyn('actions', actions);
   if (mode === 'phone') body = `<div class="fx" aria-hidden="true">${art.fx}</div>${T}${arena}${He}<nav class="actions" aria-label="Your actions">${A}</nav>`;
   else if (mode === 'land') {
     body = `<div class="fx" aria-hidden="true">${art.fx}</div>${T}${arena}<aside class="dock">${He}<nav class="actions" aria-label="Your actions">${A}</nav></aside>`;
     style += `;grid-template-columns:minmax(0,1fr) ${dock}px`;
   } else {
-    body = `<div class="fx" aria-hidden="true">${art.fx}</div>${T}${arena}<div class="dock">${He}<div class="actions">${A}</div></div><aside class="side">${dyn('side', parts.side!)}</aside>`;
+    // the drawer: the players list (a part that is swapped as it changes) and the table log (an element of its own,
+    // kept by the screen, so it keeps its place when you have scrolled back). A tab on its edge folds it away.
+    const tab = `<button class="sidetab${sd.shut ? ' shut' : ''}" data-act="side" aria-expanded="${!sd.shut}" aria-label="${sd.shut ? 'Show the players and the table log' : 'Hide the players and the table log'}" title="${sd.shut ? 'Show' : 'Hide'} the side panel ( ] )"><i></i></button>`;
+    body = `<div class="fx" aria-hidden="true">${art.fx}</div>${T}${arena}<div class="dock">${He}<div class="actions">${A}</div></div><aside class="side${sd.shut ? ' shut' : ''}" aria-label="Players and table log"${sd.shut ? ' hidden' : ''}>${dyn('side', parts.side!)}<div class="tlog-host${sd.lg ? ' shut' : ''}"></div></aside>${tab}`;
+    if (sd.shut) style += ';grid-template-columns:minmax(0,1fr) 0px';
   }
   if (u !== 1) style += `;zoom:${u.toFixed(4)}`;
   const feel = FEEL[themeKey] ?? FEEL.classic!;
@@ -378,14 +384,16 @@ export function heldStack(v: ScreenView, step: string | null): (p: { id: string;
 export const panelLive = (v: ScreenView, step: string | null): boolean => (v.phase === 'hand' && !v.hand?.results) || (!!v.hand?.results && (step === 'runout' || step === 'scene' || step === 'winner'));
 const panelFor = (v: ScreenView, p: Panel | undefined): Panel => { if (p) return p; const fresh = new Panel(); fresh.sync(v, false, 0); return fresh; };
 /** The players list (side panel and pull-down): rank, avatar, name, chips, status, sorted by chips. */
-export function playersList(v: ScreenView, th: Theme, panel: Panel, live: boolean, stackOf: (p: { id: string; stack: number }) => number = (p) => p.stack): string {
-  return listHtml(panel.rows(v, live, stackOf), (r) => avatar(th, r.id, r.name, r.avatar));
+export function playersList(v: ScreenView, th: Theme, panel: Panel, live: boolean, stackOf: (p: { id: string; stack: number }) => number = (p) => p.stack, only: string | null = null): string {
+  return listHtml(panel.rows(v, live, stackOf), (r) => avatar(th, r.id, r.name, r.avatar), only);
 }
-function sidePanel(v: ScreenView, th: Theme, panel: Panel, live: boolean, stackOf: (p: { id: string; stack: number }) => number, R: import('@tp/engine').HandResults | null): string {
-  // after a showdown the log writes out each hand that was shown
-  const shown = R ? Object.entries(R.evals).map(([pid, ev]) => `${v.players.find((p) => p.id === pid)?.name ?? 'Someone'} showed ${(v.hand?.ps[pid]?.cards ?? []).map(cardName).join(', ')}: ${handWords(ev).toLowerCase()}`) : [];
-  const log = [...v.log.slice(-12).map((l) => (typeof l === 'string' ? l : (l as { text: string }).text)), ...shown].slice(-14).map((l) => `<span>${esc(l)}</span>`).join('');
-  return `<span class="sh">At the table · ${v.players.length}</span>${playersList(v, th, panel, live, stackOf)}<span class="sh">Table log</span><div class="log">${log}</div>`;
+/** The laptop drawer's state (kept by the screen, remembered on the device). `only`: the log shows one player's lines. */
+export interface SideState { shut: boolean; pl: boolean; lg: boolean; only: string | null }
+/** A section heading that folds its section. */
+export const foldHead = (act: string, text: string, shut: boolean): string => `<button class="sh shb${shut ? ' shut' : ''}" data-act="${act}" aria-expanded="${!shut}">${esc(text)}<i aria-hidden="true"></i></button>`;
+function sidePanel(v: ScreenView, th: Theme, panel: Panel, live: boolean, stackOf: (p: { id: string; stack: number }) => number, sd: SideState): string {
+  const list = sd.pl ? '' : playersList(v, th, panel, live, stackOf, sd.only);
+  return `${foldHead('fold-pl', `At the table · ${v.players.length}`, sd.pl)}${list}${foldHead('fold-lg', 'Table log', sd.lg)}`;
 }
 
 /** The theme's SVG sprite (cards, chips, dealer art) for the page. */

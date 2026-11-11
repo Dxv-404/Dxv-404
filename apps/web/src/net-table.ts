@@ -6,6 +6,7 @@ import type { Action, GameEvent, View } from '@tp/engine';
 import type { TableClient, ClientOptions, Status } from '@tp/table';
 import { R } from './research/capture';
 import { TableCapture } from './research/table';
+import type { LogPageMsg } from './table/log-core';
 
 export type ScreenView = View & {
   isHost: boolean; hostId: string | null;
@@ -17,7 +18,7 @@ export type ScreenView = View & {
   nextDealAt?: number | null;
   standings?: { id: string; name: string; stack: number; buyins: number; net: number; won: number; biggest: number }[];
 };
-type Callbacks = Pick<ClientOptions, 'onView' | 'onStatus' | 'onError' | 'onReact' | 'onNotice' | 'onAck' | 'onSeatElsewhere' | 'onSeatMoved' | 'onTrace' | 'research'>;
+type Callbacks = Pick<ClientOptions, 'onView' | 'onStatus' | 'onError' | 'onReact' | 'onNotice' | 'onAck' | 'onSeatElsewhere' | 'onSeatMoved' | 'onTrace' | 'research' | 'onLog'>;
 /** Which of the player's devices has the seat (see onSeat). */
 export interface SeatDevice { kind: 'phone' | 'tablet' | 'laptop'; name: string | null }
 
@@ -31,6 +32,7 @@ export class NetTable {
   private errors = new Set<(code: string, message: string) => void>();
   private notices = new Set<(text: string) => void>();
   private reacts = new Set<(from: string, reaction: string) => void>();
+  private logs = new Set<(p: LogPageMsg) => void>();
   private seats = new Set<(what: 'elsewhere' | 'moved', device: SeatDevice) => void>();
 
   /** Research capture for this table (null before the client exists, or if research is off). */
@@ -49,6 +51,7 @@ export class NetTable {
       ...(R.enabled ? { research: { d: R.device, s: R.maker.session } } : {}),
       onError: (code, m) => { for (const fn of this.errors) fn(code, m); },
       onNotice: (t) => { for (const fn of this.notices) fn(t); },
+      onLog: (p) => { for (const fn of this.logs) fn(p); },
       onReact: (f, r) => { for (const fn of this.reacts) fn(f, r); },
       onAck: (id, ok, error) => { this.rc?.ack(id, ok, error); if (!ok && error) for (const fn of this.errors) fn('refused', error); },
       onSeatElsewhere: (d) => { R.emit('id.event', { kind: 'seatElsewhere', device: d }); for (const fn of this.seats) fn('elsewhere', d); },
@@ -92,6 +95,9 @@ export class NetTable {
   onReact(fn: (from: string, reaction: string) => void): () => void { this.reacts.add(fn); return () => this.reacts.delete(fn); }
   /** One seat per player: 'elsewhere' = this device watches because another of the player's devices has the seat; 'moved' = the seat just moved away. */
   onSeat(fn: (what: 'elsewhere' | 'moved', device: SeatDevice) => void): () => void { this.seats.add(fn); return () => this.seats.delete(fn); }
+  /** The table log's history: ask for the hands before `before` (left out: the latest); the answer comes to onLog. */
+  askLog(before?: number): void { this.client.log(before); }
+  onLog(fn: (p: LogPageMsg) => void): () => void { this.logs.add(fn); return () => this.logs.delete(fn); }
   /** Is this device playing the seat (not watching)? */
   get seated(): boolean { return this.client.you === this.me; }
   /** "Move seat here". */

@@ -11,8 +11,9 @@ import { evalBest, cardStr } from './cards';
 import { combineSeeds, deckCommit, deckFromSeed, isSeed, randomSeed, seedCommit } from './fair';
 import type {
   Action, ActResult, Award, GameConfig, GameEvent, GameState, Hand, HandEval, HandPlayer, HandPlayerView,
-  HandRecord, Input, Legal, Player, PlayerId, PotResult, RebuyView, Standing, View,
+  HandRecord, Input, Legal, LogData, Player, PlayerId, PotResult, RebuyView, Standing, View,
 } from './types';
+import { logFor } from './types';
 
 /** Bumped whenever a rule changes how a hand plays out. Stored with every hand so old hands replay correctly. */
 export const ENGINE_VERSION = 2;
@@ -283,7 +284,7 @@ export class Engine {
       case 'pause':
         if (s.paused) return { error: 'Already paused' };
         s.paused = true;
-        this.logLine('Host paused the table');
+        this.logLine('Host paused the table', { k: 'pause' });
         return ok([{ t: 'paused', paused: true }]);
       case 'resume':
         if (!s.paused) return { error: 'Not paused' };
@@ -291,7 +292,7 @@ export class Engine {
         // time spent paused never counts against the player to act
         if (s.hand?.toAct) s.hand.turnStartedAt = i.now;
         if (s.hand?.vote) s.hand.vote.deadline = i.now + s.cfg.dealItTwiceVote * 1000;
-        this.logLine('Host resumed the table');
+        this.logLine('Host resumed the table', { k: 'resume' });
         return ok([{ t: 'paused', paused: false }]);
       case 'undo': {
         if (!this.canUndo()) return { error: 'Nothing to undo' };
@@ -317,7 +318,7 @@ export class Engine {
         const ante = i.ante ?? 0;
         if (!(Number.isInteger(i.sb) && Number.isInteger(i.bb) && Number.isInteger(ante) && i.sb >= 1 && i.bb >= i.sb && ante >= 0 && ante <= i.bb)) return { error: 'Blinds must be whole numbers with the big blind at least the small' };
         s.pendingLevel = { sb: i.sb, bb: i.bb, ante };
-        this.logLine(`Blinds change to ${i.sb}/${i.bb}${ante ? ` (ante ${ante})` : ''} from the next hand`);
+        this.logLine(`Blinds change to ${i.sb}/${i.bb}${ante ? ` (ante ${ante})` : ''} from the next hand`, { k: 'blinds', sb: i.sb, bb: i.bb, ...(ante ? { ante } : {}) });
         return ok([]);
       }
     }
@@ -366,7 +367,7 @@ export class Engine {
     p.waitForBB = !!opts.waitForBB;
     this.s.players.push(p);
     this.reseat();
-    this.logLine(`${p.name} joins the table`);
+    this.logLine(`${p.name} joins the table`, { k: 'join', pid: p.id, who: p.name });
     return p;
   }
 
@@ -431,7 +432,7 @@ export class Engine {
     p.sittingOut = false;
     p.away = false;
     p.sitOutHands = 0;
-    this.logLine(`${p.name} rebuys for ${add}`);
+    this.logLine(`${p.name} rebuys for ${add}`, { k: 'rebuy', pid: p.id, who: p.name, amt: add });
     return [{ t: 'rebuy', pid: id, amount: add }];
   }
 
@@ -460,9 +461,20 @@ export class Engine {
     return [{ t: 'presence', pid: p.id, connected }];
   }
 
-  logLine(text: string): void {
-    this.s.log.push({ h: this.s.handNo, text });
+  /**
+   * One line of the table log: the sentence, and the same thing as data (`d`: what kind of line it is, who,
+   * how much) so a screen can draw it. Lines are numbered for the life of the table (`n`).
+   */
+  logLine(text: string, d?: LogData): void {
+    const n = (this.s.logN = (this.s.logN ?? this.s.log.length) + 1);
+    this.s.log.push({ h: this.s.handNo, text, n, ...(d ?? {}) });
     if (this.s.log.length > 80) this.s.log.splice(0, this.s.log.length - 80);
+  }
+
+  /** Every chip put in during this hand (for the log: the pot after a bet). */
+  private potNow(): number {
+    const h = this.s.hand;
+    return h ? Object.values(h.ps).reduce((a, x) => a + x.total, 0) : 0;
   }
 
   /** Players who may be dealt in, in chair order (waiting players included: they may be the big blind). */
@@ -545,7 +557,7 @@ export class Engine {
       const bb = Math.max(niceRound(s.level.bb * 1.5), s.level.bb + 1);
       const n = s.level.n + 1;
       s.level = { bb, sb: Math.max(1, Math.round(bb / 2)), n, ante: s.cfg.anteFromLevel > 0 && n >= s.cfg.anteFromLevel ? anteFor(bb) : 0 };
-      this.logLine(`Blinds up: ${s.level.sb}/${s.level.bb}${s.level.ante ? `, ante ${s.level.ante}` : ''}`);
+      this.logLine(`Blinds up: ${s.level.sb}/${s.level.bb}${s.level.ante ? `, ante ${s.level.ante}` : ''}`, { k: 'blinds', up: true, sb: s.level.sb, bb: s.level.bb, ...(s.level.ante ? { ante: s.level.ante } : {}) });
       ev.push({ t: 'level', level: s.level });
     }
     // time banks refill every N hands
@@ -625,7 +637,7 @@ export class Engine {
     for (let round = 0; round < 2; round++) for (const pid of order) hand.ps[pid]!.cards.push(deck.pop()!);
     ev.push({ t: 'dealHole', order: order.slice() });
     const bn = hand.buttonId ? this.P(hand.buttonId).name : 'an empty seat';
-    this.logLine(`Hand #${s.handNo} — ${bn} has the button`);
+    this.logLine(`Hand #${s.handNo} — ${bn} has the button`, { k: 'hand', ...(hand.buttonId ? { pid: hand.buttonId, who: bn } : {}), sb: s.level.sb, bb: s.level.bb, ...(s.level.ante ? { ante: s.level.ante } : {}), players: order.length, pot: this.potNow() });
 
     const first = this.nextToAct(lastBlind);
     if (!first) ev.push(...this.closeRound());
@@ -658,7 +670,7 @@ export class Engine {
     hp.total += amt;
     if (p.stack === 0) hp.allIn = true;
     const what = { sb: 'small blind', bb: 'big blind', straddle: 'a straddle of', missedbb: 'a missed big blind of' }[kind];
-    this.logLine(`${p.name} posts ${what} ${amt}`);
+    this.logLine(`${p.name} posts ${what} ${amt}`, { k: 'post', pid, who: p.name, what: kind, amt });
     return { t: 'blind', pid, amount: amt, kind };
   }
 
@@ -670,7 +682,7 @@ export class Engine {
     p.stack -= amt;
     hp.total += amt;
     if (p.stack === 0) hp.allIn = true;
-    this.logLine(`${p.name} posts ${kind === 'ante' ? 'an ante of' : 'a dead small blind of'} ${amt}`);
+    this.logLine(`${p.name} posts ${kind === 'ante' ? 'an ante of' : 'a dead small blind of'} ${amt}`, { k: 'post', pid, who: p.name, what: kind, amt });
     return kind === 'ante' ? { t: 'ante', pid, amount: amt } : { t: 'blind', pid, amount: amt, kind: 'deadsb' };
   }
 
@@ -739,7 +751,7 @@ export class Engine {
       Object.assign(p, { stack: q.stack, buyins: q.buyins, rebuysUsed: q.rebuysUsed, busted: q.busted, sittingOut: q.sittingOut, away: q.away, sitOutHands: q.sitOutHands });
     }
     this.H.turnStartedAt = now;
-    this.logLine('Dealer undoes the last action');
+    this.logLine('Dealer undoes the last action', { k: 'undo' });
     return [{ t: 'undo' }, { t: 'turn', pid: this.H.toAct, deadline: this.deadline() }];
   }
 
@@ -760,7 +772,8 @@ export class Engine {
       this.chargeBank(p, h);
     }
     const ev: GameEvent[] = [];
-    const say = (text: string): void => this.logLine(`${p.name} ${text}`);
+    const ms = Math.max(0, s.now - h.turnStartedAt);
+    const say = (text: string, a: NonNullable<LogData['a']>, amt?: number, to?: number): void => this.logLine(`${p.name} ${text}`, { k: 'act', pid, who: p.name, a, ...(amt !== undefined ? { amt } : {}), ...(to !== undefined ? { to } : {}), ...(hp.allIn && a !== 'fold' && a !== 'check' ? { allin: true } : {}), pot: this.potNow(), st: h.street, ms });
 
     if (type === 'allin') {
       if (L.canRaise && L.maxTo > h.currentBet) type = 'raise';
@@ -771,18 +784,18 @@ export class Engine {
 
     if (type === 'fold') {
       hp.folded = true; hp.acted = true; hp.lastAction = 'fold';
-      say('folds');
+      say('folds', 'fold');
       ev.push({ t: 'act', pid, a: 'fold' });
     } else if (type === 'check') {
       hp.acted = true; hp.actedAt = h.currentBet; hp.lastAction = 'check';
-      say('checks');
+      say('checks', 'check');
       ev.push({ t: 'act', pid, a: 'check' });
     } else if (type === 'call') {
       const amt = L.toCall;
       p.stack -= amt; hp.streetBet += amt; hp.total += amt;
       if (p.stack === 0) hp.allIn = true;
       hp.acted = true; hp.actedAt = h.currentBet; hp.lastAction = hp.allIn ? 'allin' : 'call';
-      say(hp.allIn ? `calls ${amt} and is all-in` : `calls ${amt}`);
+      say(hp.allIn ? `calls ${amt} and is all-in` : `calls ${amt}`, 'call', amt, hp.streetBet);
       ev.push({ t: 'act', pid, a: hp.allIn ? 'allin' : 'call', amount: amt, to: hp.streetBet });
     } else {
       let to = Math.floor(Number(action.to) || 0);
@@ -797,7 +810,7 @@ export class Engine {
       h.lastAggressor = pid;
       hp.acted = true; hp.actedAt = to;
       hp.lastAction = hp.allIn ? 'allin' : (wasBet ? 'bet' : 'raise');
-      say(hp.allIn ? `goes all-in for ${to}` : wasBet ? `bets ${to}` : `raises to ${to}`);
+      say(hp.allIn ? `goes all-in for ${to}` : wasBet ? `bets ${to}` : `raises to ${to}`, wasBet ? 'bet' : 'raise', amt, to);
       ev.push({ t: 'act', pid, a: hp.lastAction, amount: amt, to });
     }
 
@@ -835,7 +848,7 @@ export class Engine {
     const events = this.act(pid, { type: L.canCheck ? 'check' : 'fold' }).events!;
     const first = events[0];
     if (first && first.t === 'act') first.auto = true;
-    this.logLine(`${this.P(pid).name} ran out of time`);
+    this.logLine(`${this.P(pid).name} ran out of time`, { k: 'timeout', pid, who: this.P(pid).name });
     return events;
   }
 
@@ -851,7 +864,7 @@ export class Engine {
       hp.streetBet -= extra; hp.total -= extra;
       p.stack += extra;
       if (hp.allIn && p.stack > 0) hp.allIn = false;
-      this.logLine(`Uncalled ${extra} returned to ${p.name}`);
+      this.logLine(`Uncalled ${extra} returned to ${p.name}`, { k: 'back', pid: top.pid, who: p.name, amt: extra });
       return [{ t: 'refund', pid: top.pid, amount: extra }];
     }
     return [];
@@ -908,7 +921,7 @@ export class Engine {
   private resolveVote(agreed: boolean): GameEvent[] {
     const h = this.H;
     h.vote = null;
-    this.logLine(agreed ? 'Everyone agrees: the rest of the board is dealt twice' : 'The board is dealt once');
+    this.logLine(agreed ? 'Everyone agrees: the rest of the board is dealt twice' : 'The board is dealt once', { k: 'twice', agreed });
     return [{ t: 'twice', agreed }, ...this.runOut(agreed)];
   }
 
@@ -928,7 +941,7 @@ export class Engine {
         ev.push({ t: 'street', street, cards: cards.map(cardStr), board: 2 });
       }
       h.board2 = b2;
-      this.logLine(`Second board: ${b2.map(cardStr).join(' ')}`);
+      this.logLine(`Second board: ${b2.map(cardStr).join(' ')}`, { k: 'street', st: 'second', cards: b2.map(cardStr), pot: this.potNow() });
     }
     return ev.concat(this.showdown());
   }
@@ -942,7 +955,7 @@ export class Engine {
     else { cards = [h.deck.pop()!]; street = 'river'; }
     h.board.push(...cards);
     h.street = street;
-    this.logLine(`${street.charAt(0).toUpperCase() + street.slice(1)}: ${h.board.map(cardStr).join(' ')}`);
+    this.logLine(`${street.charAt(0).toUpperCase() + street.slice(1)}: ${h.board.map(cardStr).join(' ')}`, { k: 'street', st: street, cards: h.board.map(cardStr), fresh: cards.length, pot: this.potNow() });
     return { t: 'street', street, cards: cards.map(cardStr) };
   }
 
@@ -1019,6 +1032,7 @@ export class Engine {
       const cards: Record<PlayerId, string[]> = {};
       for (const pid of showOrder) { h.revealed[pid] = true; cards[pid] = h.ps[pid]!.cards.map(cardStr); }
       ev.push({ t: 'reveal', cards, order: showOrder });
+      for (const pid of showOrder) this.logLine(`${this.P(pid).name} shows ${cards[pid]!.join(' ')}`, { k: 'show', pid, who: this.P(pid).name, cards: cards[pid]!, desc: evals[pid]?.desc });
     }
     const pots = this.buildPots();
     const results: PotResult[] = [];
@@ -1030,7 +1044,7 @@ export class Engine {
         : [{ amount: pot.amount, evals, suffix: '' }];
       for (const run of runs) {
         const { awards, winners } = this.award(run.amount, pot.elig, run.evals);
-        for (const a of awards) this.logLine(`${this.P(a.pid).name} wins ${a.amount} from ${label}${run.suffix} with ${run.evals[a.pid]!.desc}`);
+        for (const a of awards) this.logLine(`${this.P(a.pid).name} wins ${a.amount} from ${label}${run.suffix} with ${run.evals[a.pid]!.desc}`, { k: 'win', pid: a.pid, who: this.P(a.pid).name, amt: a.amount, from: label + run.suffix, desc: run.evals[a.pid]!.desc, cards: run.evals[a.pid]!.best, potAll: this.potNow() });
         const r: PotResult = { label: label + run.suffix, amount: run.amount, awards, hand: run.evals[winners[0]!]! };
         if (run.board) r.board = run.board;
         results.push(r);
@@ -1050,7 +1064,7 @@ export class Engine {
     const winner = this.livePlayers()[0]!;
     const amount = this.potTotal();
     this.P(winner).stack += amount;
-    this.logLine(`${this.P(winner).name} wins ${amount} uncontested`);
+    this.logLine(`${this.P(winner).name} wins ${amount} uncontested`, { k: 'win', pid: winner, who: this.P(winner).name, amt: amount, from: 'the pot', potAll: amount });
     h.results = { pots: [{ label: 'the pot', amount, awards: [{ pid: winner, amount }], hand: null }], evals: {}, showdown: false };
     this.endHand();
     ev.push({ t: 'win', results: h.results }, this.deckRevealEvent());
@@ -1088,7 +1102,7 @@ export class Engine {
     const hp = h?.ps[pid];
     if (!h || !hp || this.s.phase !== 'between' || h.shown[pid] || h.revealed[pid]) return [];
     h.shown[pid] = true;
-    this.logLine(`${this.P(pid).name} shows ${hp.cards.map(cardStr).join(' ')}`);
+    this.logLine(`${this.P(pid).name} shows ${hp.cards.map(cardStr).join(' ')}`, { k: 'show', pid, who: this.P(pid).name, cards: hp.cards.map(cardStr) });
     return [{ t: 'show', pid, cards: hp.cards.map(cardStr) }];
   }
 
@@ -1137,7 +1151,7 @@ export class Engine {
         connected: p.connected, busted: p.busted, leaving: p.leaving, buyins: p.buyins, bank: p.bank,
         waitForBB: p.waitForBB, missedSB: p.missedSB, missedBB: p.missedBB, rebuysUsed: p.rebuysUsed,
       })),
-      log: s.log.slice(-30), me: pid, hand: null, legal: null, canUndo: this.canUndo(), engineVersion: ENGINE_VERSION,
+      log: s.log.slice(-30).map((l) => logFor(l, pid)), me: pid, hand: null, legal: null, canUndo: this.canUndo(), engineVersion: ENGINE_VERSION,
     };
     if (h) {
       const ps: Record<PlayerId, HandPlayerView> = {};

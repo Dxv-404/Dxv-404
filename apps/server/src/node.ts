@@ -10,6 +10,7 @@ import { dirname, join } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { PROTOCOL_VERSION } from '@tp/protocol';
 import { TableRoom, Recorder, tokenSigner, supabaseSend, supabaseRpc, crewOfEnd, achievementsAfterNight, achievementsDue, checkOfflineUpload, offlineEvents, MAX_UPLOAD_BYTES, type Conn, type Persisted, type OutboxItem, type PushRequest } from '@tp/table';
+import type { LogLine } from '@tp/engine';
 import { INGEST_HEADERS, RateLimiter, ResearchShipper, databaseWriter, ingest, type Envelope } from '@tp/research';
 import { cachedTicketChecker, SUPABASE_KEY, SUPABASE_URL } from '@tp/account/ticket';
 import { LATENCY_PAGE } from './latency-page';
@@ -31,6 +32,7 @@ const MAX_ECHO_PER_ROOM = 20;
 const perAddress = new Map<string, number>();
 mkdirSync(join(DATA, 'tables'), { recursive: true });
 mkdirSync(join(DATA, 'hands'), { recursive: true });
+mkdirSync(join(DATA, 'logs'), { recursive: true });
 mkdirSync(join(DATA, 'outbox'), { recursive: true });
 mkdirSync(join(DATA, 'backups'), { recursive: true, mode: 0o700 });
 mkdirSync(join(DATA, 'research'), { recursive: true, mode: 0o700 });
@@ -156,6 +158,15 @@ function getRoom(code: string): Live {
   if (existsSync(tableFile(code))) {
     try { saved = JSON.parse(readFileSync(tableFile(code), 'utf8')) as Persisted; } catch (e) { console.error(`table ${code}: unreadable save`, e); }
   }
+  // the night's log: one line of the file per saved hand ({h, lines}; a later line for the same hand replaces it)
+  const logFile = join(DATA, 'logs', `${code}.jsonl`);
+  const history: Record<number, LogLine[]> = {};
+  if (saved && existsSync(logFile)) {
+    for (const row of readFileSync(logFile, 'utf8').split('\n')) {
+      if (!row) continue;
+      try { const r = JSON.parse(row) as { h: number; lines: LogLine[] | null }; if (r.lines) history[r.h] = r.lines; else delete history[r.h]; } catch { /* a torn last line */ }
+    }
+  }
   const l: Live = { room: null as unknown as TableRoom, timer: null, dirty: null, saveTimer: null, idleSince: Date.now() };
   l.room = new TableRoom(code, {
     now: () => Date.now(),
@@ -171,13 +182,15 @@ function getRoom(code: string): Live {
       else l.saveTimer ??= setTimeout(() => flush(code, l), SAVE_EVERY_MS);
     },
     appendHand: (h) => appendFileSync(join(DATA, 'hands', `${code}.jsonl`), JSON.stringify(h) + '\n'),
+    saveLog: (h, lines) => appendFileSync(logFile, JSON.stringify({ h, lines }) + '\n'),
+    resetLog: () => { try { unlinkSync(logFile); } catch { /* none yet */ } },
     league: (kind, id, payload) => {
       const fn = kind === 'hand' ? 'record_hand' : 'record_game_end';
       // before the recorder is ready (or with no key yet) the record waits in the outbox on disk
       if (recorder) void recorder.add(fn, id, payload);
       else void outboxStore.put({ id, fn, body: JSON.stringify(payload), tries: 0, nextAt: 0 });
     },
-  }, saved, { identify, server: 'oracle', push: handPush, ...(researchSink ? { research: researchSink } : {}), ...(process.env.HAND_PAUSE_MS ? { handPauseMs: Number(process.env.HAND_PAUSE_MS) } : {}) });
+  }, saved, { identify, server: 'oracle', history, push: handPush, ...(researchSink ? { research: researchSink } : {}), ...(process.env.HAND_PAUSE_MS ? { handPauseMs: Number(process.env.HAND_PAUSE_MS) } : {}) });
   l.room.settleAfterRestart(); // nobody is connected to a table just loaded from disk
   live.set(code, l);
   return l;

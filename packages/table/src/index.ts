@@ -7,3 +7,4 @@ export * from './push';
 export * from './pause';
 export * from './research-tap';
 export * from './achievements-run';
+export * from './log-history';

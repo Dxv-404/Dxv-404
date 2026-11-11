@@ -93,6 +93,8 @@ export const ClientMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('bg'), hidden: z.boolean() }),
   /** One seat per player: this device (watching, signed in as a player who plays from another device) takes the seat. */
   z.object({ t: z.literal('moveSeat') }),
+  /** The table log: the hands just before hand `before` (left out: the latest). Newer servers only. */
+  z.object({ t: z.literal('log'), before: z.number().int().nonnegative().optional() }),
 ]);
 export type ClientMessage = z.infer<typeof ClientMessage>;
 
@@ -118,6 +120,8 @@ export const ServerMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('seatElsewhere'), device: DeviceInfo }),
   /** The seat moved to another device; this one watches now (a welcome as a watcher follows). */
   z.object({ t: z.literal('seatMoved'), device: DeviceInfo }),
+  /** A page of the table log, oldest hand first; `more`: there are older hands still. */
+  z.object({ t: z.literal('log'), hands: z.array(z.object({ h: z.number().int().nonnegative(), lines: z.array(z.record(z.string(), z.unknown())) })).max(50), more: z.boolean(), before: z.number().int().nonnegative().optional(), big: z.object({ h: z.number().int().nonnegative(), pot: z.number() }).optional() }),
   /** Something everyone at the table should be told (not part of the game itself). */
   z.object({ t: z.literal('notice'), text: z.string().max(300) }),
   z.object({ t: z.literal('error'), code: z.enum(['version', 'bad_message', 'not_allowed', 'table_full', 'no_table', 'rate_limited', 'server', 'replaced', 'need_hello', 'ticket']), message: z.string() }),

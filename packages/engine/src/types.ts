@@ -134,7 +134,28 @@ export interface Hand {
   engineVersion: number;
 }
 
-export interface LogLine { h: number; text: string }
+/** What a log line is about, as data (the sentence is in `text`). */
+export interface LogData {
+  /** hand: a hand begins. post: a blind or ante. act: a player's action. street: cards on the board. win, show, back (uncalled chips returned), timeout, join, rebuy, blinds, pause, resume, undo, twice. */
+  k: 'hand' | 'post' | 'act' | 'street' | 'win' | 'show' | 'back' | 'timeout' | 'join' | 'rebuy' | 'blinds' | 'pause' | 'resume' | 'undo' | 'twice';
+  pid?: PlayerId; who?: string;
+  a?: 'fold' | 'check' | 'call' | 'bet' | 'raise';
+  what?: string;
+  /** chips this line moved; `to`: the player's whole bet on this street after it; `pot`: every chip in after it */
+  amt?: number; to?: number; pot?: number; potAll?: number;
+  allin?: boolean; st?: string; cards?: string[]; fresh?: number; desc?: string | undefined; from?: string;
+  sb?: number; bb?: number; ante?: number; up?: boolean; players?: number; agreed?: boolean;
+  /** how long the decision took. Only the player's own are sent to a screen (logFor). */
+  ms?: number;
+}
+export interface LogLine extends Partial<LogData> { h: number; text: string; /** the line's number at this table (absent on lines written before lines were numbered) */ n?: number }
+/** A line as one viewer may see it: other people's decision times are left out. */
+export const logFor = (l: LogLine, viewer: PlayerId | null): LogLine => {
+  if (l.ms === undefined || (viewer !== null && l.pid === viewer)) return l;
+  const rest = { ...l };
+  delete rest.ms;
+  return rest;
+};
 export interface Stat { won: number; biggest: number }
 
 export interface GameState {
@@ -153,6 +174,8 @@ export interface GameState {
   hand: Hand | null;
   phase: Phase;
   log: LogLine[];
+  /** How many log lines this table has written (the last line's number). */
+  logN?: number;
   stats: Record<PlayerId, Stat>;
   paused: boolean;
   departed?: Player[];

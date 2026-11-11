@@ -98,11 +98,11 @@ const esc = (s: string): string => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;',
 const fmt = (n: number): string => Math.round(n).toLocaleString('en-IN');
 
 /** One row: rank, avatar, name, chips (with the last hand's + or −), status. */
-export function rowHtml(r: PanelRow, av: (r: PanelRow) => string): string {
-  const cls = ['prow', r.me ? 'me' : '', r.bust ? 'bust' : '', r.newLead ? 'lead' : '', r.status === 'Folded' ? 'fold' : '', r.status === 'All-in' ? 'allin' : ''].filter(Boolean).join(' ');
+export function rowHtml(r: PanelRow, av: (r: PanelRow) => string, only: string | null = null): string {
+  const cls = ['prow', only === r.id ? 'only' : '', r.me ? 'me' : '', r.bust ? 'bust' : '', r.newLead ? 'lead' : '', r.status === 'Folded' ? 'fold' : '', r.status === 'All-in' ? 'allin' : ''].filter(Boolean).join(' ');
   const tag = r.delta ? `<u class="dl ${r.delta > 0 ? 'up' : 'dn'}">${r.delta > 0 ? '+' : '−'}${fmt(Math.abs(r.delta))}</u>` : '';
   const label = `${r.rank}. ${r.name}${r.me ? ' (you)' : ''}, ${fmt(r.stack)} chips, ${r.status.toLowerCase()}${r.delta ? `, ${r.delta > 0 ? 'won' : 'lost'} ${fmt(Math.abs(r.delta))} last hand` : ''}`;
-  return `<div class="${cls}" data-id="${esc(r.id)}" role="listitem" aria-label="${esc(label)}"><em class="rk" aria-hidden="true">${r.rank}</em><span class="av" aria-hidden="true">${av(r)}</span><b aria-hidden="true">${esc(r.name)}</b>`
+  return `<div class="${cls}" data-id="${esc(r.id)}" role="listitem" aria-label="${esc(label)}" title="${only === r.id ? 'Show everyone in the log' : `Show only ${esc(r.name)} in the log`}"><em class="rk" aria-hidden="true">${r.rank}</em><span class="av" aria-hidden="true">${av(r)}</span><b aria-hidden="true">${esc(r.name)}</b>`
     + `<span class="pc" aria-hidden="true"><i data-n="${r.stack}" data-d="${r.delta}">${fmt(r.stack)}</i>${tag}</span><small aria-hidden="true">${r.me && r.status === 'Playing' ? 'You' : r.status}</small></div>`;
 }
-export const listHtml = (rows: PanelRow[], av: (r: PanelRow) => string): string => `<div class="plist" role="list" aria-label="Players by chips">${rows.map((r) => rowHtml(r, av)).join('')}</div>`;
+export const listHtml = (rows: PanelRow[], av: (r: PanelRow) => string, only: string | null = null): string => `<div class="plist" role="list" aria-label="Players by chips">${rows.map((r) => rowHtml(r, av, only)).join('')}</div>`;
