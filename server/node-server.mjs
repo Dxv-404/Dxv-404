@@ -2084,7 +2084,7 @@ var require_extension = __commonJS({
       if (dest[name] === void 0) dest[name] = [elem];
       else dest[name].push(elem);
     }
-    function parse4(header) {
+    function parse5(header) {
       const offers = /* @__PURE__ */ Object.create(null);
       let params = /* @__PURE__ */ Object.create(null);
       let mustUnescape = false;
@@ -2224,7 +2224,7 @@ var require_extension = __commonJS({
         }).join(", ");
       }).join(", ");
     }
-    module.exports = { format, parse: parse4 };
+    module.exports = { format, parse: parse5 };
   }
 });
 
@@ -2235,7 +2235,7 @@ var require_websocket = __commonJS({
     var EventEmitter = __require("events");
     var https = __require("https");
     var http = __require("http");
-    var net = __require("net");
+    var net2 = __require("net");
     var tls = __require("tls");
     var { randomBytes, createHash } = __require("crypto");
     var { Duplex, Readable } = __require("stream");
@@ -2257,7 +2257,7 @@ var require_websocket = __commonJS({
     var {
       EventTarget: { addEventListener, removeEventListener }
     } = require_event_target();
-    var { format, parse: parse4 } = require_extension();
+    var { format, parse: parse5 } = require_extension();
     var { toBuffer } = require_buffer_util();
     var closeTimeout = 30 * 1e3;
     var kAborted = Symbol("kAborted");
@@ -2924,7 +2924,7 @@ var require_websocket = __commonJS({
           }
           let extensions;
           try {
-            extensions = parse4(secWebSocketExtensions);
+            extensions = parse5(secWebSocketExtensions);
           } catch (err) {
             const message = "Invalid Sec-WebSocket-Extensions header";
             abortHandshake(websocket, socket, message);
@@ -2966,12 +2966,12 @@ var require_websocket = __commonJS({
     }
     function netConnect(options) {
       options.path = options.socketPath;
-      return net.connect(options);
+      return net2.connect(options);
     }
     function tlsConnect(options) {
       options.path = void 0;
       if (!options.servername && options.servername !== "") {
-        options.servername = net.isIP(options.host) ? "" : options.host;
+        options.servername = net2.isIP(options.host) ? "" : options.host;
       }
       return tls.connect(options);
     }
@@ -3214,7 +3214,7 @@ var require_subprotocol = __commonJS({
   "../../node_modules/.pnpm/ws@8.18.3/node_modules/ws/lib/subprotocol.js"(exports, module) {
     "use strict";
     var { tokenChars } = require_validation();
-    function parse4(header) {
+    function parse5(header) {
       const protocols = /* @__PURE__ */ new Set();
       let start = -1;
       let end = -1;
@@ -3250,7 +3250,7 @@ var require_subprotocol = __commonJS({
       protocols.add(protocol);
       return protocols;
     }
-    module.exports = { parse: parse4 };
+    module.exports = { parse: parse5 };
   }
 });
 
@@ -14279,14 +14279,14 @@ var JSONSchemaGenerator = class {
       regex: ""
       // do not set
     };
-    const seen = this.seen.get(schema);
-    if (seen) {
-      seen.count++;
+    const seen2 = this.seen.get(schema);
+    if (seen2) {
+      seen2.count++;
       const isCycle = _params.schemaPath.includes(schema);
       if (isCycle) {
-        seen.cycle = _params.path;
+        seen2.cycle = _params.path;
       }
-      return seen.schema;
+      return seen2.schema;
     }
     const result = { schema: {}, count: 1, cycle: void 0, path: _params.path };
     this.seen.set(schema, result);
@@ -14818,12 +14818,12 @@ var JSONSchemaGenerator = class {
       if (entry[1].schema.$ref) {
         return;
       }
-      const seen = entry[1];
+      const seen2 = entry[1];
       const { ref, defId } = makeURI(entry);
-      seen.def = { ...seen.schema };
+      seen2.def = { ...seen2.schema };
       if (defId)
-        seen.defId = defId;
-      const schema2 = seen.schema;
+        seen2.defId = defId;
+      const schema2 = seen2.schema;
       for (const key in schema2) {
         delete schema2[key];
       }
@@ -14831,16 +14831,16 @@ var JSONSchemaGenerator = class {
     };
     if (params.cycles === "throw") {
       for (const entry of this.seen.entries()) {
-        const seen = entry[1];
-        if (seen.cycle) {
-          throw new Error(`Cycle detected: #/${seen.cycle?.join("/")}/<root>
+        const seen2 = entry[1];
+        if (seen2.cycle) {
+          throw new Error(`Cycle detected: #/${seen2.cycle?.join("/")}/<root>
 
 Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.`);
         }
       }
     }
     for (const entry of this.seen.entries()) {
-      const seen = entry[1];
+      const seen2 = entry[1];
       if (schema === entry[0]) {
         extractToDef(entry);
         continue;
@@ -14857,11 +14857,11 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
         extractToDef(entry);
         continue;
       }
-      if (seen.cycle) {
+      if (seen2.cycle) {
         extractToDef(entry);
         continue;
       }
-      if (seen.count > 1) {
+      if (seen2.count > 1) {
         if (params.reused === "ref") {
           extractToDef(entry);
           continue;
@@ -14869,14 +14869,14 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
       }
     }
     const flattenRef = (zodSchema, params2) => {
-      const seen = this.seen.get(zodSchema);
-      const schema2 = seen.def ?? seen.schema;
+      const seen2 = this.seen.get(zodSchema);
+      const schema2 = seen2.def ?? seen2.schema;
       const _cached = { ...schema2 };
-      if (seen.ref === null) {
+      if (seen2.ref === null) {
         return;
       }
-      const ref = seen.ref;
-      seen.ref = null;
+      const ref = seen2.ref;
+      seen2.ref = null;
       if (ref) {
         flattenRef(ref, params2);
         const refSchema = this.seen.get(ref).schema;
@@ -14888,11 +14888,11 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
           Object.assign(schema2, _cached);
         }
       }
-      if (!seen.isParent)
+      if (!seen2.isParent)
         this.override({
           zodSchema,
           jsonSchema: schema2,
-          path: seen.path ?? []
+          path: seen2.path ?? []
         });
     };
     for (const entry of [...this.seen.entries()].reverse()) {
@@ -14918,9 +14918,9 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     Object.assign(result, root.def);
     const defs = params.external?.defs ?? {};
     for (const entry of this.seen.entries()) {
-      const seen = entry[1];
-      if (seen.def && seen.defId) {
-        defs[seen.defId] = seen.def;
+      const seen2 = entry[1];
+      if (seen2.def && seen2.defId) {
+        defs[seen2.defId] = seen2.def;
       }
     }
     if (params.external) {
@@ -16330,10 +16330,16 @@ var RANK_PLURAL = ["Twos", "Threes", "Fours", "Fives", "Sixes", "Sevens", "Eight
 var rankOf = (c) => c >> 2;
 var suitOf = (c) => c & 3;
 var cardStr = (c) => RANKS.charAt(c >> 2) + SUITS.charAt(c & 3);
+function parseCard(s) {
+  const r = RANKS.indexOf(s.charAt(0));
+  const u2 = SUITS.indexOf(s.charAt(1));
+  if (s.length !== 2 || r < 0 || u2 < 0) throw new Error(`Not a card: ${s}`);
+  return r << 2 | u2;
+}
 function freshDeck() {
-  const d = [];
-  for (let i = 0; i < 52; i++) d.push(i);
-  return d;
+  const d2 = [];
+  for (let i = 0; i < 52; i++) d2.push(i);
+  return d2;
 }
 var cryptoWords = (out) => {
   globalThis.crypto.getRandomValues(out);
@@ -16437,13 +16443,13 @@ function combos(n) {
 }
 function evalBest(cards) {
   if (cards.length < 5) return null;
-  let best = null;
+  let best2 = null;
   for (const idx of combos(cards.length)) {
     const hand = idx.map((i) => cards[i]);
     const e = eval5(hand);
-    if (!best || e.score > best.score) best = { ...e, cards: hand };
+    if (!best2 || e.score > best2.score) best2 = { ...e, cards: hand };
   }
-  const b = best;
+  const b = best2;
   const res = { ...b, name: CATEGORY[b.cat], desc: "" };
   res.desc = describe(res);
   return res;
@@ -16561,7 +16567,7 @@ function sha256(data) {
       const s1 = (b2 >>> 17 | b2 << 15) ^ (b2 >>> 19 | b2 << 13) ^ b2 >>> 10;
       w[i] = w[i - 16] + s0 + w[i - 7] + s1 >>> 0;
     }
-    let a = h[0], b = h[1], c = h[2], d = h[3], e = h[4], f = h[5], g = h[6], hh = h[7];
+    let a = h[0], b = h[1], c = h[2], d2 = h[3], e = h[4], f = h[5], g = h[6], hh = h[7];
     for (let i = 0; i < 64; i++) {
       const S1 = (e >>> 6 | e << 26) ^ (e >>> 11 | e << 21) ^ (e >>> 25 | e << 7);
       const ch = e & f ^ ~e & g;
@@ -16572,8 +16578,8 @@ function sha256(data) {
       hh = g;
       g = f;
       f = e;
-      e = d + t1 >>> 0;
-      d = c;
+      e = d2 + t1 >>> 0;
+      d2 = c;
       c = b;
       b = a;
       a = t1 + t2 >>> 0;
@@ -16581,7 +16587,7 @@ function sha256(data) {
     h[0] = h[0] + a >>> 0;
     h[1] = h[1] + b >>> 0;
     h[2] = h[2] + c >>> 0;
-    h[3] = h[3] + d >>> 0;
+    h[3] = h[3] + d2 >>> 0;
     h[4] = h[4] + e >>> 0;
     h[5] = h[5] + f >>> 0;
     h[6] = h[6] + g >>> 0;
@@ -16660,9 +16666,9 @@ var round1 = (x) => Math.round(x * 10) / 10;
 function niceRound(x) {
   const steps = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
   const mag = Math.pow(10, Math.floor(Math.log10(x)));
-  let best = steps[0] * mag;
-  for (const s of steps) if (Math.abs(s * mag - x) < Math.abs(best - x)) best = s * mag;
-  return Math.max(1, Math.round(best));
+  let best2 = steps[0] * mag;
+  for (const s of steps) if (Math.abs(s * mag - x) < Math.abs(best2 - x)) best2 = s * mag;
+  return Math.max(1, Math.round(best2));
 }
 var anteFor = (bb) => Math.max(1, niceRound(bb / 10));
 var TABLE_DEFAULTS = {
@@ -17014,14 +17020,14 @@ var Engine = class _Engine {
   addPlayer(name, opts = {}) {
     const chair = opts.chair ?? this.freeChair();
     const p = _Engine.fillPlayer({ id: opts.id ?? "p" + rid(7), name: _Engine.cleanName(name), stack: this.s.cfg.startStack }, chair, this.s.cfg);
-    const old = opts.id ? (this.s.departed ?? []).find((d) => d.id === opts.id) : void 0;
+    const old = opts.id ? (this.s.departed ?? []).find((d2) => d2.id === opts.id) : void 0;
     if (old) {
       p.stack = old.stack;
       p.buyins = old.buyins;
       p.rebuysUsed = old.rebuysUsed;
       p.busted = old.busted;
       p.bank = old.bank;
-      this.s.departed = this.s.departed.filter((d) => d.id !== old.id);
+      this.s.departed = this.s.departed.filter((d2) => d2.id !== old.id);
     }
     p.waitForBB = !!opts.waitForBB;
     this.s.players.push(p);
@@ -17505,8 +17511,8 @@ var Engine = class _Engine {
     s.now = Math.max(s.now, now);
     if (s.paused || !h || s.phase !== "hand") return [];
     if (h.vote) return now >= h.vote.deadline ? this.resolveVote(false) : [];
-    const d = this.deadline();
-    if (d === null || now < d) return [];
+    const d2 = this.deadline();
+    if (d2 === null || now < d2) return [];
     const pid = h.toAct;
     this.P(pid).bank = 0;
     const L = this.legal(pid);
@@ -17669,8 +17675,8 @@ var Engine = class _Engine {
     return evals;
   }
   award(amount, elig, evals) {
-    const best = Math.max(...elig.map((pid) => evals[pid].score));
-    const winners = elig.filter((pid) => evals[pid].score === best).sort((a, b) => this.distFromButton(a) - this.distFromButton(b));
+    const best2 = Math.max(...elig.map((pid) => evals[pid].score));
+    const winners = elig.filter((pid) => evals[pid].score === best2).sort((a, b) => this.distFromButton(a) - this.distFromButton(b));
     const share = Math.floor(amount / winners.length);
     let odd = amount - share * winners.length;
     const awards = winners.map((pid) => {
@@ -18020,6 +18026,8 @@ var Recorder = class {
   }
   items = /* @__PURE__ */ new Map();
   refused = [];
+  /** Runs once the database has taken a record (a night's end starts the achievements run). Never throws into the recorder. */
+  onStored = null;
   nextOrder = 0;
   async start() {
     const loaded = (await this.store.load()).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -18078,6 +18086,12 @@ var Recorder = class {
       if (res === "refused") {
         this.refused.push(it);
         this.log(`recorder: ${it.id} refused by the database`);
+      } else if (res === "ok") {
+        try {
+          this.onStored?.(it);
+        } catch (e) {
+          this.log(`recorder: after ${it.id}: ${String(e)}`);
+        }
       }
       this.items.delete(it.id);
       await this.store.remove(it.id);
@@ -18102,9 +18116,9 @@ var RUNOUT_FIRST_MS = 1e3;
 var RUNOUT_STREET_MS = 1400;
 function bestCategory(results) {
   if (!results.showdown) return -1;
-  let best = -1;
-  for (const p of results.pots) if (p.hand) best = Math.max(best, CATEGORY.indexOf(p.hand.name));
-  return best;
+  let best2 = -1;
+  for (const p of results.pots) if (p.hand) best2 = Math.max(best2, CATEGORY.indexOf(p.hand.name));
+  return best2;
 }
 function runoutStreets(events2, runout) {
   if (!runout) return 0;
@@ -18558,25 +18572,25 @@ var RateLimiter = class {
     return true;
   }
 };
-async function ingest(raw, d) {
-  const st = d.now();
+async function ingest(raw, d2) {
+  const st = d2.now();
   const checked = checkBatch(raw, "c");
   if ("error" in checked) return { status: checked.error === "too large" ? 413 : 400, body: { ok: false, error: checked.error, st } };
   const key = checked.ok[0]?.d ?? checked.ok[0]?.s ?? "unknown";
-  if (!d.limiter.take(key, raw.length)) return { status: 429, body: { ok: false, error: "rate limited", st } };
+  if (!d2.limiter.take(key, raw.length)) return { status: 429, body: { ok: false, error: "rate limited", st } };
   for (const e of checked.ok) e.ts = st;
   if (checked.ok.length) {
     let stored = false;
     try {
-      stored = await d.forward(checked.ok);
+      stored = await d2.forward(checked.ok);
     } catch (e) {
-      d.log?.(`research ingest: ${String(e)}`);
+      d2.log?.(`research ingest: ${String(e)}`);
     }
-    if (!stored) return { status: 503, body: { ok: false, error: "not stored", st: d.now() } };
+    if (!stored) return { status: 503, body: { ok: false, error: "not stored", st: d2.now() } };
   }
   return { status: 200, body: { ok: true, st, accepted: checked.ok.length, rejected: checked.rejected.length, ...checked.rejected.length ? { why: checked.rejected.slice(0, 5) } : {} } };
 }
-var globalFetch = (u, i) => globalThis.fetch(u, i);
+var globalFetch = (u2, i) => globalThis.fetch(u2, i);
 function databaseWriter(url2, key, sign, fetchFn = globalFetch) {
   return async (events2) => {
     const body = JSON.stringify({ events: events2 });
@@ -18590,8 +18604,8 @@ var INGEST_HEADERS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow
 // ../../packages/research/src/shipper.ts
 var DEFAULTS = { delayMs: 1500, batchEvents: 300, maxWaiting: 5e4, maxBackoffMs: 5 * 6e4 };
 var ResearchShipper = class {
-  constructor(d, o = {}) {
-    this.d = d;
+  constructor(d2, o = {}) {
+    this.d = d2;
     this.o = { ...DEFAULTS, ...o };
   }
   buf = [];
@@ -18730,9 +18744,9 @@ var RoomTap = class {
     try {
       const at = extra.at ?? this.now();
       const who = pid ? this.ctx.isAccount(pid) ? { a: pid, g: null } : { a: null, g: pid } : { a: extra.a ?? null, g: extra.g ?? null };
-      const d = extra.d !== void 0 ? extra.d : pid ? this.ctx.deviceOf(pid) : null;
+      const d2 = extra.d !== void 0 ? extra.d : pid ? this.ctx.deviceOf(pid) : null;
       const where = { tb: this.ctx.code, gm: this.ctx.gameId(), h: extra.h !== void 0 ? extra.h : this.ctx.handNo(), st: extra.st !== void 0 ? extra.st : this.ctx.street() };
-      this.sink.emit(this.maker.make(t, p, { ...who, d: d ? safeId(d) : null }, where, { tc: at, ts: at }));
+      this.sink.emit(this.maker.make(t, p, { ...who, d: d2 ? safeId(d2) : null }, where, { tc: at, ts: at }));
     } catch (e) {
       warn(e);
     }
@@ -19527,11 +19541,11 @@ var TableRoom = class {
       return;
     }
     const everyone = e.s.players.concat(e.s.departed ?? []);
-    const seen = /* @__PURE__ */ new Set();
+    const seen2 = /* @__PURE__ */ new Set();
     const players = [];
     for (const p of everyone) {
-      if (seen.has(p.id)) continue;
-      seen.add(p.id);
+      if (seen2.has(p.id)) continue;
+      seen2.add(p.id);
       players.push({ key: p.id, account: this.accountOf(p.id), name: p.name, buyins: p.buyins, final: p.stack, minStack: Math.min(this.minStacks[p.id] ?? p.stack, p.stack) });
     }
     this.store.league("end", `${this.game.id}:end`, { game: this.gameInfo(), endedAt: new Date(this.clock.now()).toISOString(), players });
@@ -19574,7 +19588,7 @@ var TableRoom = class {
     return { ...v, nextDealAt: dealing ? this.nextDealAt : null };
   }
   welcome(conn, pid, lastSeq) {
-    const missed = lastSeq > 0 && lastSeq < this.seq && this.recent[0] && this.recent[0].seq <= lastSeq + 1 ? this.recent.filter((u) => u.seq > lastSeq).flatMap((u) => u.events) : void 0;
+    const missed = lastSeq > 0 && lastSeq < this.seq && this.recent[0] && this.recent[0].seq <= lastSeq + 1 ? this.recent.filter((u2) => u2.seq > lastSeq).flatMap((u2) => u2.events) : void 0;
     this.send(conn, { t: "welcome", v: PROTOCOL_VERSION, seq: this.seq, you: pid, host: this.host, view: this.view(pid), serverTime: this.clock.now(), ...missed ? { missed } : {} });
   }
   ack(conn, pid, actionId, error46) {
@@ -19795,6 +19809,611 @@ function checkOfflineUpload(item) {
   throw new Error("unknown kind");
 }
 
+// ../../packages/table/src/push.ts
+function supabaseRpc(url2, key, fetchFn = fetch) {
+  return async (fn, body, sig) => {
+    const res = await fetchFn(`${url2}/rest/v1/rpc/${fn}`, { method: "POST", headers: { apikey: key, "content-type": "application/json" }, body: JSON.stringify({ p_body: body, p_sig: sig }), signal: AbortSignal.timeout(1e4) });
+    if (!res.ok) throw new Error(`${fn}: ${res.status} ${await res.text().catch(() => "")}`);
+    return res.json();
+  };
+}
+
+// ../../packages/achievements/src/defs.ts
+var u = (kind, name) => [{ kind, name }];
+var d = (id2, name, how, group, rarity, when, unlocks = [], more = {}) => ({ id: id2, name, how, group, rarity, unlocks, hidden: group === "hidden", when, ...more });
+var ACHIEVEMENTS = [
+  // ---- the cards you hold
+  d("quads", "Quads", "Win a hand with four of a kind", "cards", "rare", "hand", u("frame", "Four Corners")),
+  d("straight_flush", "Straight Flush", "Make a straight flush", "cards", "legendary", "hand", u("finish", "Foil")),
+  d("royal", "Royal", "Make a royal flush", "cards", "mythic", "hand", u("backdrop", "Throne Room")),
+  d("the_wheel", "The Wheel", "Win with A-2-3-4-5", "cards", "uncommon", "hand", u("pose", "Smirk")),
+  d("seven_deuce", "Seven-Deuce Glory", "Win a pot holding 7-2 offsuit, the worst starting hand", "cards", "rare", "hand", u("title", "The Worst Hand Wins")),
+  d("set_mining", "Set Mining", "Flop three of a kind with a pocket pair", "cards", "common", "hand"),
+  d("pocket_rockets", "Pocket Rockets, Grounded", "Lose a showdown holding aces", "cards", "uncommon", "hand", u("title", "Aces Cracked")),
+  d("cooler", "Cooler", "Lose a showdown with a full house or better", "cards", "rare", "hand", u("backdrop", "Rain")),
+  d("board_plays", "Board Plays", "Split a pot because the five board cards were the best hand for everyone", "cards", "uncommon", "hand"),
+  // ---- how you play
+  d("stone_cold_bluff", "Stone Cold Bluff", "Win a pot with no pair and no draw by betting and getting everyone to fold", "play", "uncommon", "hand", u("pose", "Poker Face"), {
+    tiers: [{ at: 1, rarity: "uncommon", unlocks: u("pose", "Poker Face") }, { at: 10, rarity: "rare", unlocks: [] }, { at: 50, rarity: "epic", unlocks: [] }]
+  }),
+  d("hero_call", "Hero Call", "Call a river bet with one pair or less and win", "play", "rare", "hand", u("title", "I Knew It")),
+  d("great_fold", "Great Fold", "Fold two pair or better to a bet when the other player really had you beat", "play", "rare", "hand", u("title", "The Reader")),
+  d("check_raise", "Check-Raise", "Check, then raise the bettor on the same street, and win the pot", "play", "uncommon", "hand"),
+  d("the_trap", "The Trap", "Check or call with three of a kind or better on the flop and win a pot over 30 big blinds", "play", "rare", "hand", u("backdrop", "Spider's Web")),
+  d("runner_runner", "Runner-Runner", "Win at showdown when you needed both the turn and the river to be ahead", "play", "epic", "hand", u("finish", "Gloss")),
+  d("survivor", "Survivor", "Be all-in and behind when the chips went in, then win", "play", "rare", "hand", u("pose", "Relieved")),
+  d("ten_high_hero", "Ten-High Hero", "Win a showdown with ten-high or worse", "play", "epic", "hand", u("title", "All Nerve")),
+  d("second_best", "Second Best", "Lose with the second-best possible hand on that board", "play", "uncommon", "hand"),
+  // ---- your nights
+  d("phoenix", "Phoenix", "Win a night after dropping below 20% of your starting stack", "nights", "epic", "night", u("backdrop", "Ashes and Fire")),
+  d("flawless", "Flawless", "Win a night with no rebuys and never below your starting stack", "nights", "legendary", "night", u("finish", "Etched")),
+  d("wire_to_wire", "Wire to Wire", "Chip leader from hand 10 to the end, and win", "nights", "rare", "night", u("frame", "Laurel")),
+  d("double_up", "Double Up", "Double your stack in a single hand", "nights", "common", "hand"),
+  d("bounty_hunter", "Bounty Hunter", "Knock out 3 players in one night", "nights", "rare", "hand", u("title", "Bounty Hunter")),
+  d("rebuy_royalty", "Rebuy Royalty", "Rebuy 2 or more times and still finish top 3", "nights", "uncommon", "night", u("title", "Never Dead")),
+  d("last_hand_best_hand", "Last Hand, Best Hand", "Win the last hand of the night and take the lead with it", "nights", "rare", "night"),
+  d("iron_focus", "Iron Focus", "Play a 30+ hand night with no timeouts", "nights", "common", "night"),
+  // ---- crew and seasons
+  d("regular", "Regular", "Hands played", "crew", "common", "hand", u("frame", "Regular 100"), {
+    tiers: [
+      { at: 100, rarity: "common", unlocks: u("frame", "Regular 100") },
+      { at: 500, rarity: "uncommon", unlocks: u("frame", "Regular 500") },
+      { at: 1e3, rarity: "rare", unlocks: [{ kind: "frame", name: "Regular 1,000" }, { kind: "finish", name: "Gold Leaf" }] },
+      { at: 5e3, rarity: "legendary", unlocks: u("frame", "Regular 5,000") }
+    ]
+  }),
+  d("every_week", "Every Week", "Play at least once a week for 4 weeks in a row", "crew", "uncommon", "history", u("backdrop", "Calendar Wall")),
+  d("podium", "Podium", "Finish a season in the top 3", "crew", "epic", "history", u("frame", "Podium")),
+  d("champion", "Champion", "Win a season", "crew", "legendary", "history", u("finish", "Holographic")),
+  d("nemesis", "Nemesis", "Finish above the same player 3 nights in a row", "crew", "uncommon", "history", u("title", "[name]'s Problem")),
+  d("full_house_party", "Full House Party", "Play a night with every member of the crew at the table", "crew", "uncommon", "history", u("backdrop", "Crowded Table")),
+  d("host", "Host", "Host 10 games", "crew", "uncommon", "history", u("pose", "Host")),
+  d("night_owl", "Night Owl", "Play a hand after 2:00 AM", "crew", "uncommon", "hand", u("backdrop", "Midnight")),
+  // ---- hidden: "???" until earned
+  d("trust_issues", "Trust Issues", "Peek at your cards 20 times in one hand", "hidden", "uncommon", "hand"),
+  d("same_again", "Same Again", "Win two hands in a row with the exact same starting hand", "hidden", "epic", "hand"),
+  d("gone_fishing", "Gone Fishing", "Time out three hands in a row", "hidden", "common", "hand")
+];
+var ACHIEVEMENT = Object.fromEntries(ACHIEVEMENTS.map((a) => [a.id, a]));
+var MILESTONES = [
+  { id: "hands", name: "Hands played", unit: "hands", steps: [100, 500, 1e3, 5e3], reward: (s) => s === 1e3 ? "Frame and Gold Leaf finish" : "Frame" },
+  { id: "nights", name: "Nights played", unit: "nights", steps: [5, 25, 50, 100] },
+  { id: "wins", name: "Wins", unit: "wins", steps: [1, 5, 15, 40] },
+  { id: "showdowns", name: "Showdowns won", unit: "showdowns", steps: [25, 100, 300] },
+  { id: "bluffs", name: "Bluffs that worked", unit: "bluffs", steps: [1, 10, 50], reward: (s) => s === 1 ? "Pose: Poker Face" : null },
+  { id: "bb", name: "Big blinds won", unit: "big blinds", steps: [100, 500, 2e3] },
+  { id: "weeks", name: "Weekly streak", unit: "weeks", steps: [2, 4, 8, 12], reward: (s) => s === 4 ? "Backdrop: Calendar Wall" : null },
+  { id: "achievements", name: "Achievements collected", unit: "achievements", steps: [10, 20, ACHIEVEMENTS.length] }
+];
+
+// ../../packages/achievements/src/facts.ts
+function factsFromRecord(rec, extra = {}) {
+  const e = Engine.fromSnapshot({ ...rec.before, hand: null, log: [] });
+  const actions = [];
+  for (const input of rec.inputs) {
+    const h0 = e.s.hand;
+    const live2 = h0 && e.s.phase === "hand" ? h0 : null;
+    const pre = live2 ? { street: live2.street, bet: live2.currentBet, board: live2.board.length, toAct: live2.toAct, mine: live2.toAct ? live2.ps[live2.toAct]?.streetBet ?? 0 : 0, stack: live2.toAct ? e.player(live2.toAct)?.stack ?? 0 : 0 } : null;
+    const r = e.apply(input);
+    if (r.error) throw new Error(`hand ${rec.handNo} does not replay: ${r.error}`);
+    if (!pre) continue;
+    for (const ev of r.events ?? []) {
+      if (ev.t !== "act") continue;
+      const raised2 = ev.a === "bet" || ev.a === "raise" || ev.a === "allin" && (ev.to ?? 0) > pre.bet;
+      const kind = ev.a === "fold" || ev.a === "check" ? ev.a : raised2 ? pre.bet === 0 ? "bet" : "raise" : "call";
+      actions.push({
+        pid: ev.pid,
+        street: pre.street,
+        kind,
+        put: ev.amount ?? 0,
+        toCall: Math.min(Math.max(pre.bet - pre.mine, 0), pre.stack),
+        allIn: ev.a === "allin",
+        auto: ev.auto === true,
+        board: pre.board
+      });
+    }
+  }
+  const h = e.s.hand;
+  if (!h || !h.results) throw new Error(`hand ${rec.handNo} did not finish`);
+  const before = new Map(rec.before.players.map((p) => [p.id, p]));
+  const after = new Map(e.s.players.concat(e.s.departed ?? []).map((p) => [p.id, p]));
+  const f = {
+    game: rec.gameId,
+    handNo: rec.handNo,
+    endedAt: rec.endedAt,
+    bb: e.s.level.bb,
+    order: h.order.slice(),
+    hole: {},
+    board: h.board.map(cardStr),
+    board2: h.board2 ? h.board2.map(cardStr) : null,
+    actions,
+    showdown: h.results.showdown ? h.order.filter((pid) => !h.ps[pid].folded) : [],
+    awards: {},
+    pot: h.results.pots.reduce((s, p) => s + p.amount, 0),
+    stackBefore: {},
+    stackAfter: {},
+    buyins: {}
+  };
+  for (const pid of h.order) {
+    f.hole[pid] = h.ps[pid].cards.map(cardStr);
+    f.stackBefore[pid] = before.get(pid)?.stack ?? 0;
+    f.stackAfter[pid] = after.get(pid)?.stack ?? 0;
+    f.buyins[pid] = before.get(pid)?.buyins ?? 0;
+  }
+  for (const pot of h.results.pots) for (const a of pot.awards) f.awards[a.pid] = (f.awards[a.pid] ?? 0) + a.amount;
+  if (extra.peeks) f.peeks = extra.peeks;
+  return f;
+}
+
+// ../../packages/achievements/src/cards.ts
+var parse4 = (cards) => cards.map(parseCard);
+function best(hole, board) {
+  const b = evalBest(parse4([...hole, ...board]));
+  return b ? { score: b.score, cat: b.cat, ranks: b.ranks } : null;
+}
+function catOf(cards) {
+  if (cards.length >= 5) return evalBest(parse4(cards)).cat;
+  const n = /* @__PURE__ */ new Map();
+  for (const c of parse4(cards)) n.set(rankOf(c), (n.get(rankOf(c)) ?? 0) + 1);
+  const g = [...n.values()].sort((a, b) => b - a);
+  return g[0] === 4 ? 7 : g[0] === 3 ? 3 : g[0] === 2 && g[1] === 2 ? 2 : g[0] === 2 ? 1 : 0;
+}
+function madeNow(hole, board) {
+  const b = best(hole, board);
+  if (b) return b.score;
+  const r = parse4(hole).map(rankOf).sort((x, y) => y - x);
+  return r[0] === r[1] ? 1e3 + r[0] : r[0] * 13 + r[1];
+}
+var isPocketPair = (hole) => hole.length === 2 && hole[0].charAt(0) === hole[1].charAt(0);
+function startingHand(hole) {
+  const [a, b] = parse4(hole).sort((x, y) => rankOf(y) - rankOf(x));
+  const s = RANKS.charAt(rankOf(a)) + RANKS.charAt(rankOf(b));
+  return rankOf(a) === rankOf(b) ? s : s + (suitOf(a) === suitOf(b) ? "s" : "o");
+}
+function nothing(hole, board) {
+  if (board.length < 3 || isPocketPair(hole)) return false;
+  const hr = parse4(hole).map(rankOf), br = parse4(board).map(rankOf);
+  if (hr.some((r) => br.includes(r))) return false;
+  const all = [...hole, ...board];
+  if (catOf(all) > catOf(board)) return false;
+  if (board.length === 5) return true;
+  for (let s = 0; s < 4; s++) {
+    if (parse4(hole).some((c) => suitOf(c) === s) && parse4(all).filter((c) => suitOf(c) === s).length >= 4) return false;
+  }
+  const has = (ranks, r) => ranks.includes(r === -1 ? 12 : r);
+  for (let lo = -1; lo <= 8; lo++) {
+    let withHole = 0, boardOnly = 0;
+    for (let r = lo; r < lo + 5; r++) {
+      if (has(hr, r) || has(br, r)) withHole++;
+      if (has(br, r)) boardOnly++;
+    }
+    if (withHole >= 4 && boardOnly < 4) return false;
+  }
+  return true;
+}
+function isSecondBest(hole, board) {
+  const b = parse4(board);
+  const mine = evalBest([...parse4(hole), ...b]).score;
+  const rest = freshDeck().filter((c) => !b.includes(c));
+  let better = -1;
+  for (let i = 0; i < rest.length; i++) for (let j = i + 1; j < rest.length; j++) {
+    const s = evalBest([rest[i], rest[j], ...b]).score;
+    if (s <= mine || s === better) continue;
+    if (better >= 0) return false;
+    better = s;
+  }
+  return better >= 0;
+}
+var IST = 5.5 * 36e5;
+var istHour = (ms) => Math.floor(((ms + IST) % 864e5 + 864e5) % 864e5 / 36e5);
+var istDay = (ms) => Math.floor((ms + IST) / 864e5);
+var istWeek = (ms) => Math.floor((istDay(ms) + 3) / 7);
+
+// ../../packages/achievements/src/hand.ts
+var PEEKS_FOR_TRUST_ISSUES = 20;
+var DOUBLE_UP_MIN_BB = 10;
+var NIGHT_OWL_HOURS = [2, 5];
+var net = (h, p) => (h.stackAfter[p] ?? 0) - (h.stackBefore[p] ?? 0);
+var wonHand = (h, p) => (h.awards[p] ?? 0) > 0 && net(h, p) > 0;
+var lostShowdown = (h, p) => h.showdown.includes(p) && !(h.awards[p] ?? 0);
+var acts = (h, p) => h.actions.filter((a) => a.pid === p);
+var raised = (a) => a.kind === "bet" || a.kind === "raise";
+function seen(h, p, board = h.board) {
+  const fold = h.actions.find((a) => a.pid === p && a.kind === "fold");
+  return board.slice(0, fold ? fold.board : board.length);
+}
+var boards = (h) => h.board2 ? [h.board, h.board2] : [h.board];
+function ownBest(h, p, ok, by = "cat") {
+  return boards(h).some((bd) => {
+    const s = seen(h, p, bd);
+    const b = best(h.hole[p], s);
+    if (!b || !ok(b)) return false;
+    return by === "cat" ? catOf(s) < b.cat : s.length < 5 || best([], s).score < b.score;
+  });
+}
+var quads = (h, p) => wonHand(h, p) && ownBest(h, p, (b) => b.cat === 7);
+var straightFlush = (h, p) => ownBest(h, p, (b) => b.cat >= 8);
+var royal = (h, p) => ownBest(h, p, (b) => b.cat === 9);
+var wheel = (h, p) => wonHand(h, p) && ownBest(h, p, (b) => (b.cat === 4 || b.cat === 8) && b.ranks[0] === 3);
+function sevenDeuce(h, p) {
+  const [a, b] = h.hole[p];
+  return wonHand(h, p) && [a.charAt(0), b.charAt(0)].sort().join("") === "27" && a.charAt(1) !== b.charAt(1);
+}
+function setMining(h, p) {
+  const hole = h.hole[p];
+  if (!isPocketPair(hole) || h.board.length < 3 || seen(h, p).length < 3) return false;
+  return h.board.slice(0, 3).some((c) => c.charAt(0) === hole[0].charAt(0));
+}
+var pocketRockets = (h, p) => lostShowdown(h, p) && h.hole[p].every((c) => c.charAt(0) === "A");
+var cooler = (h, p) => lostShowdown(h, p) && ownBest(h, p, (b) => b.cat >= 6, "score");
+function boardPlays(h, p) {
+  if (h.showdown.length < 2 || !h.showdown.includes(p) || h.board.length < 5 || h.board2 || !(h.awards[p] ?? 0)) return false;
+  const table = best([], h.board).score;
+  return h.showdown.every((q) => best(h.hole[q], h.board).score === table);
+}
+function stoneColdBluff(h, p) {
+  if (h.showdown.length || !wonHand(h, p)) return false;
+  const last = [...h.actions].reverse().find(raised);
+  if (!last || last.pid !== p || last.board < 3) return false;
+  return nothing(h.hole[p], h.board.slice(0, last.board));
+}
+function heroCall(h, p) {
+  if (!h.showdown.includes(p) || !wonHand(h, p) || h.board2) return false;
+  const last = acts(h, p).at(-1);
+  if (!last || last.kind !== "call" || last.street !== "river" || last.toCall <= 0) return false;
+  return best(h.hole[p], h.board).cat <= 1;
+}
+function greatFold(h, p) {
+  const i = h.actions.findIndex((a) => a.pid === p && a.kind === "fold");
+  const fold = h.actions[i];
+  if (!fold || fold.toCall <= 0 || fold.board < 3) return null;
+  const bet = h.actions.slice(0, i).reverse().find((a) => raised(a) && a.street === fold.street && a.pid !== p);
+  if (!bet) return null;
+  const bd = h.board.slice(0, fold.board);
+  const mine = best(h.hole[p], bd);
+  if (mine.cat < Math.max(2, catOf(bd) + 2)) return null;
+  return best(h.hole[bet.pid], bd).score > mine.score ? { bettor: bet.pid } : null;
+}
+function checkRaise(h, p) {
+  if (!wonHand(h, p)) return false;
+  const mine = acts(h, p);
+  return mine.some((a, i) => a.kind === "check" && mine.slice(i + 1).some((b) => b.street === a.street && b.kind === "raise"));
+}
+function theTrap(h, p) {
+  if (!wonHand(h, p) || h.pot <= 30 * h.bb || h.board.length < 3) return false;
+  const onFlop = acts(h, p).filter((a) => a.street === "flop");
+  if (!onFlop.length || onFlop.some((a) => a.kind !== "check" && a.kind !== "call")) return false;
+  const flop = h.board.slice(0, 3);
+  const c = catOf([...h.hole[p], ...flop]);
+  return c >= 3 && c > catOf(flop);
+}
+var behindOn = (h, p, bd) => {
+  const mine = madeNow(h.hole[p], bd);
+  return h.showdown.some((q) => q !== p && madeNow(h.hole[q], bd) > mine);
+};
+function runnerRunner(h, p) {
+  if (h.showdown.length < 2 || !h.showdown.includes(p) || !wonHand(h, p) || h.board.length < 5 || h.board2) return false;
+  const flop = h.board.slice(0, 3);
+  return behindOn(h, p, flop) && behindOn(h, p, [...flop, h.board[3]]) && behindOn(h, p, [...flop, h.board[4]]) && !behindOn(h, p, h.board);
+}
+function survivor(h, p) {
+  if (h.showdown.length < 2 || !h.showdown.includes(p) || !wonHand(h, p)) return false;
+  const shove = acts(h, p).find((a) => a.allIn);
+  return !!shove && shove.board < 5 && behindOn(h, p, h.board.slice(0, shove.board));
+}
+function tenHighHero(h, p) {
+  if (h.showdown.length < 2 || !h.showdown.includes(p) || !wonHand(h, p) || h.board.length < 5) return false;
+  return boards(h).some((bd) => {
+    const b = best(h.hole[p], bd);
+    return b.cat === 0 && b.ranks[0] <= 8;
+  });
+}
+function secondBest(h, p) {
+  if (!lostShowdown(h, p) || h.board.length < 5 || h.board2) return false;
+  return isSecondBest(h.hole[p], h.board);
+}
+var doubleUp = (h, p) => {
+  const b = h.stackBefore[p] ?? 0;
+  return b >= DOUBLE_UP_MIN_BB * h.bb && (h.stackAfter[p] ?? 0) >= 2 * b;
+};
+function knockouts(h) {
+  const bust = h.order.filter((p) => (h.stackBefore[p] ?? 0) > 0 && (h.stackAfter[p] ?? 0) === 0).length;
+  const out = {};
+  if (!bust) return out;
+  const top = Math.max(...h.order.map((p) => net(h, p)));
+  if (top <= 0) return out;
+  for (const p of h.order) if (net(h, p) === top) out[p] = bust;
+  return out;
+}
+var timedOut = (h, p) => h.actions.some((a) => a.pid === p && a.auto);
+var nightOwl = (h) => {
+  const hr = istHour(h.endedAt);
+  return hr >= NIGHT_OWL_HOURS[0] && hr < NIGHT_OWL_HOURS[1];
+};
+function checkHand(h, night = { hands: [] }) {
+  const out = [];
+  for (const p of h.order) {
+    if (h.hole[p]?.length !== 2) continue;
+    const owned = new Set(night.owned?.[p] ?? []);
+    const give = (id2, more = {}) => {
+      if (!ACHIEVEMENT[id2]) throw new Error(`unknown achievement ${id2}`);
+      if (owned.has(more.tier ? `${id2}:${more.tier}` : id2)) return;
+      out.push({ id: id2, pid: p, reveal: "now", game: h.game, hand: h.handNo, at: h.endedAt, ...more });
+    };
+    const count = (id2, before, add) => {
+      ACHIEVEMENT[id2].tiers.forEach((t, i) => {
+        if (before < t.at && before + add >= t.at) give(id2, { tier: i + 1 });
+      });
+    };
+    const mine = night.hands.filter((x) => x.order.includes(p));
+    const career = night.career?.[p] ?? { hands: 0, bluffs: 0 };
+    if (quads(h, p)) give("quads");
+    if (straightFlush(h, p)) give("straight_flush");
+    if (royal(h, p)) give("royal");
+    if (wheel(h, p)) give("the_wheel");
+    if (sevenDeuce(h, p)) give("seven_deuce");
+    if (setMining(h, p)) give("set_mining");
+    if (pocketRockets(h, p)) give("pocket_rockets");
+    if (cooler(h, p)) give("cooler");
+    if (boardPlays(h, p)) give("board_plays");
+    if (stoneColdBluff(h, p)) count("stone_cold_bluff", career.bluffs + mine.filter((x) => stoneColdBluff(x, p)).length, 1);
+    if (heroCall(h, p)) give("hero_call");
+    const gf = greatFold(h, p);
+    if (gf) give("great_fold", { reveal: h.showdown.includes(gf.bettor) ? "now" : "night" });
+    if (checkRaise(h, p)) give("check_raise");
+    if (theTrap(h, p)) give("the_trap");
+    if (runnerRunner(h, p)) give("runner_runner");
+    if (survivor(h, p)) give("survivor");
+    if (tenHighHero(h, p)) give("ten_high_hero");
+    if (secondBest(h, p)) give("second_best");
+    if (doubleUp(h, p)) give("double_up");
+    const ko = knockouts(h)[p] ?? 0;
+    if (ko) {
+      const before = night.hands.reduce((s, x) => s + (knockouts(x)[p] ?? 0), 0);
+      if (before < 3 && before + ko >= 3) give("bounty_hunter");
+    }
+    count("regular", career.hands + mine.length, 1);
+    if (nightOwl(h)) give("night_owl");
+    if ((h.peeks?.[p] ?? 0) >= PEEKS_FOR_TRUST_ISSUES) give("trust_issues");
+    const prev = mine.at(-1);
+    if (prev && wonHand(h, p) && wonHand(prev, p) && startingHand(h.hole[p]) === startingHand(prev.hole[p])) give("same_again");
+    if (timedOut(h, p) && mine.length >= 2 && mine.slice(-2).every((x) => timedOut(x, p))) give("gone_fishing");
+  }
+  return out;
+}
+
+// ../../packages/achievements/src/night.ts
+var NIGHT_MIN_PLAYERS = 3;
+var FLAWLESS_MIN_HANDS = 10;
+var WIRE_FROM_HAND = 10;
+var IRON_FOCUS_HANDS = 30;
+var PHOENIX_BELOW = 0.2;
+function netSeries(hands) {
+  const cur = {};
+  return hands.map((h) => {
+    for (const p of h.order) cur[p] = (h.stackAfter[p] ?? 0) - (h.buyins[p] ?? 0);
+    return { ...cur };
+  });
+}
+function standings(hands) {
+  const last = netSeries(hands).at(-1) ?? {};
+  const rebuys = {}, bought = {};
+  for (const h of hands) for (const p of h.order) {
+    const b = h.buyins[p] ?? 0;
+    if (bought[p] !== void 0 && b > bought[p]) rebuys[p] = (rebuys[p] ?? 0) + 1;
+    bought[p] = b;
+  }
+  const pids = Object.keys(last);
+  return pids.map((pid) => ({ pid, place: 1 + pids.filter((q) => last[q] > last[pid]).length, rebuys: rebuys[pid] ?? 0 }));
+}
+function checkNight(n, owned = {}) {
+  const out = [];
+  const series = netSeries(n.hands);
+  const lastHand = n.hands.at(-1);
+  const real = n.players.length >= NIGHT_MIN_PLAYERS;
+  for (const pl of n.players) {
+    const p = pl.pid;
+    const give = (id2, hand = null) => {
+      if (!(owned[p] ?? []).includes(id2)) out.push({ id: id2, pid: p, reveal: "night", game: n.game, hand, at: n.endedAt });
+    };
+    const mine = n.hands.filter((h) => h.order.includes(p));
+    const won = real && pl.place === 1;
+    const low = mine.find((h) => (h.stackAfter[p] ?? 0) < PHOENIX_BELOW * n.startStack);
+    if (won && low) give("phoenix", low.handNo);
+    if (won && pl.rebuys === 0 && mine.length >= FLAWLESS_MIN_HANDS && mine.every((h) => (h.stackAfter[p] ?? 0) >= n.startStack)) give("flawless");
+    if (won && n.hands.length >= 2 * WIRE_FROM_HAND && series.slice(WIRE_FROM_HAND - 1).every((s) => s[p] !== void 0 && s[p] === Math.max(...Object.values(s)))) give("wire_to_wire");
+    if (pl.rebuys >= 2 && pl.place <= 3 && n.players.length > 3) give("rebuy_royalty");
+    if (won && lastHand && n.hands.length >= 2 && wonHand(lastHand, p)) {
+      const before = series.at(-2), after = series.at(-1);
+      const others = (s) => Math.max(...Object.entries(s).filter(([q]) => q !== p).map(([, v]) => v));
+      if ((before[p] ?? 0) < others(before) && after[p] > others(after)) give("last_hand_best_hand", lastHand.handNo);
+    }
+    if (mine.length >= IRON_FOCUS_HANDS && !mine.some((h) => timedOut(h, p))) give("iron_focus");
+  }
+  return out;
+}
+
+// ../../packages/achievements/src/history.ts
+var WEEKS_IN_A_ROW = 4;
+var NEMESIS_NIGHTS = 3;
+var HOST_GAMES = 10;
+var PARTY_MIN_MEMBERS = 3;
+function checkHistory(f) {
+  const out = [];
+  const has = /* @__PURE__ */ new Set();
+  const give = (id2, pid, n, detail) => {
+    if (has.has(`${id2} ${pid}`)) return;
+    has.add(`${id2} ${pid}`);
+    out.push({ id: id2, pid, reveal: "night", game: n.game, hand: null, at: n.at, ...detail ? { detail } : {} });
+  };
+  const nights = [...f.nights].sort((a, b) => a.endedAt - b.endedAt);
+  const ref = (n) => ({ game: n.game, at: n.endedAt });
+  const run = {};
+  for (const n of nights) for (const { pid } of n.players) {
+    const w = istWeek(n.endedAt), r = run[pid];
+    if (r && r.week === w) continue;
+    run[pid] = { week: w, n: r && r.week === w - 1 ? r.n + 1 : 1 };
+    if (run[pid].n >= WEEKS_IN_A_ROW) give("every_week", pid, ref(n));
+  }
+  for (const s of f.seasons) if (s.closed) for (const r of s.ranks) {
+    if (r.rank === null) continue;
+    if (r.rank <= 3) give("podium", r.pid, { game: null, at: s.closedAt }, { season: s.name });
+    if (r.rank === 1) give("champion", r.pid, { game: null, at: s.closedAt }, { season: s.name });
+  }
+  const above = {};
+  for (const n of nights) for (const a of n.players) for (const b of n.players) {
+    if (a.pid === b.pid) continue;
+    const k = `${a.pid} ${b.pid}`;
+    above[k] = a.place < b.place ? (above[k] ?? 0) + 1 : 0;
+    if (above[k] >= NEMESIS_NIGHTS) give("nemesis", a.pid, ref(n), { victim: b.pid, name: f.names?.[b.pid] ?? "" });
+  }
+  for (const n of nights) {
+    const then = f.members.filter((m) => m.joined <= n.endedAt && !(m.left && m.left <= n.endedAt));
+    if (then.length < PARTY_MIN_MEMBERS || !then.every((m) => n.players.some((p) => p.pid === m.pid))) continue;
+    for (const m of then) give("full_house_party", m.pid, ref(n));
+  }
+  const hosted = {};
+  for (const n of nights) if (n.host) {
+    hosted[n.host] = (hosted[n.host] ?? 0) + 1;
+    if (hosted[n.host] >= HOST_GAMES) give("host", n.host, ref(n));
+  }
+  return out;
+}
+
+// ../../packages/achievements/src/crew.ts
+function runHistory(x) {
+  const names = {};
+  for (const m of x.members) names[m.account] = m.name;
+  const career = {}, owned = {}, nightsOf = {};
+  const earned = [];
+  const skipped = [];
+  const keep = (list) => {
+    for (const e of list) {
+      (owned[e.pid] ??= []).push(e.tier ? `${e.id}:${e.tier}` : e.id);
+      earned.push(e);
+    }
+  };
+  const byGame = /* @__PURE__ */ new Map();
+  for (const h of x.hands) {
+    const l = byGame.get(h.game) ?? [];
+    l.push(h);
+    byGame.set(h.game, l);
+  }
+  const games = [...x.games].sort((a, b) => Date.parse(a.started) - Date.parse(b.started));
+  const nights = [];
+  const accounts = new Set(x.members.map((m) => m.account));
+  let hands = 0;
+  for (const g of games) {
+    const players = g.players ?? [];
+    for (const p of players) {
+      names[p.account ?? p.key] ??= p.name;
+      if (p.account) accounts.add(p.account);
+    }
+    const who = new Map(players.map((p) => [p.key, p.account ?? p.key]));
+    const rename = (f) => {
+      const id2 = (k) => who.get(k) ?? k;
+      const map2 = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [id2(k), v]));
+      return { ...f, game: g.id, order: f.order.map(id2), hole: map2(f.hole), actions: f.actions.map((a) => ({ ...a, pid: id2(a.pid) })), showdown: f.showdown.map(id2), awards: map2(f.awards), stackBefore: map2(f.stackBefore), stackAfter: map2(f.stackAfter), buyins: map2(f.buyins) };
+    };
+    const facts = [];
+    for (const h of (byGame.get(g.id) ?? []).sort((a, b) => a.no - b.no)) {
+      let f;
+      try {
+        f = rename(factsFromRecord(h.record));
+      } catch (e) {
+        skipped.push({ game: g.id, no: h.no, why: String(e.message ?? e) });
+        continue;
+      }
+      if (!g.casual) keep(checkHand(f, { hands: facts, career, owned }));
+      facts.push(f);
+      hands++;
+    }
+    if (g.casual) continue;
+    for (const f of facts) for (const p of f.order) {
+      const c = career[p] ??= { hands: 0, bluffs: 0 };
+      c.hands++;
+      if (stoneColdBluff(f, p)) c.bluffs++;
+    }
+    const seen2 = new Map(standings(facts).map((s) => [s.pid, s]));
+    const rows = players.filter((p) => p.net !== null);
+    const result = rows.map((p) => ({
+      pid: p.account ?? p.key,
+      place: p.place ?? 1 + rows.filter((q) => (q.net ?? 0) > (p.net ?? 0)).length,
+      rebuys: Math.max(seen2.get(p.account ?? p.key)?.rebuys ?? 0, Math.round(p.buyins / g.start_stack) - 1, 0)
+    }));
+    const ended = Date.parse(g.ended ?? g.started);
+    for (const r of result) nightsOf[r.pid] = (nightsOf[r.pid] ?? 0) + 1;
+    if (facts.length) keep(checkNight({ game: g.id, startStack: g.start_stack, endedAt: ended, hands: facts, players: result }, owned));
+    nights.push({ game: g.id, endedAt: ended, host: g.host, players: result.map((r) => ({ pid: r.pid, place: r.place })) });
+  }
+  const hist = checkHistory({
+    nights,
+    names,
+    seasons: x.seasons.map((s) => ({ id: s.id, name: s.name, closed: !!s.closed, closedAt: Date.parse(s.closed ?? s.ends), ranks: s.ranks.map((r) => ({ pid: r.account, rank: r.rank })) })),
+    members: x.members.map((m) => ({ pid: m.account, joined: Date.parse(m.joined) }))
+  });
+  keep(hist.filter((e) => !(owned[e.pid] ?? []).includes(e.id)));
+  const members = new Set(x.members.map((m) => m.account));
+  const pids = [.../* @__PURE__ */ new Set([...Object.keys(career), ...Object.keys(nightsOf), ...earned.map((e) => e.pid)])];
+  const out = pids.map((pid) => ({
+    pid,
+    name: names[pid] ?? pid,
+    member: members.has(pid),
+    account: accounts.has(pid),
+    earned: earned.filter((e) => e.pid === pid).sort((a, b) => a.at - b.at),
+    hands: career[pid]?.hands ?? 0,
+    bluffs: career[pid]?.bluffs ?? 0,
+    nights: nightsOf[pid] ?? 0
+  })).sort((a, b) => b.earned.length - a.earned.length || b.hands - a.hands || a.name.localeCompare(b.name));
+  return { crew: x.crew?.name ?? "", games: games.length, hands, skipped, players: out };
+}
+function recordBody(r, ref, whole = false, crew) {
+  const players = r.players.filter((p) => p.account);
+  return {
+    ref,
+    ...crew ? { crew } : {},
+    // (a run over the crew's whole history: the database notes the crew is up to date)
+    earned: players.flatMap((p) => p.earned.map((e) => ({ account: p.pid, id: e.id, tier: e.tier ?? 0, reveal: e.reveal, at: new Date(e.at).toISOString(), ...e.hand ? { hand: e.hand } : {}, ...e.game ? { game: e.game } : {}, ...e.detail ? { detail: e.detail } : {} }))),
+    // `whole`: this run covered the crew's whole history, so the counts are totals to set (a run after every
+    // night repeats the history; adding would count the old hands again)
+    counts: players.filter((p) => p.bluffs > 0).map((p) => whole ? { account: p.pid, key: "bluffs", set: p.bluffs } : { account: p.pid, key: "bluffs", add: p.bluffs })
+  };
+}
+
+// ../../packages/table/src/achievements-run.ts
+function crewOfEnd(body) {
+  try {
+    const g = JSON.parse(body).game;
+    return g?.id && g.crew && !g.casual ? { crew: g.crew, game: g.id } : null;
+  } catch {
+    return null;
+  }
+}
+async function achievementsAfterNight(crew, game, d2, ref = `night:${game}`) {
+  const ask = JSON.stringify({ crew, game });
+  const x = await d2.rpc("achievements_feed", ask, await d2.sign(ask));
+  if (!x?.crew) return "no crew";
+  const report = runHistory(x);
+  const out = JSON.stringify(recordBody(report, ref, true, x.crew.id));
+  const res = String(await d2.rpc("record_achievements", out, await d2.sign(out)));
+  d2.log?.(`achievements: ${x.crew.name} after ${game.slice(0, 8)}: ${report.hands} hands, ${report.players.reduce((n, p) => n + p.earned.length, 0)} held in all, ${res}`);
+  return res;
+}
+async function achievementsDue(d2, now = Date.now) {
+  const ask = JSON.stringify({ due: now() });
+  const crews = await d2.rpc("achievements_due", ask, await d2.sign(ask));
+  let n = 0;
+  for (const crew of crews ?? []) {
+    try {
+      await achievementsAfterNight(crew, "due", d2, `due:${crew}:${now()}`);
+      n++;
+    } catch (e) {
+      d2.log?.(`achievements: crew ${crew.slice(0, 8)}: ${String(e)}`);
+    }
+  }
+  return n;
+}
+
 // ../../packages/account/src/ticket.ts
 var SUPABASE_URL = "https://yghyartpurzwogtldzii.supabase.co";
 var SUPABASE_KEY = "sb_publishable_kkp6rh7CrHks9RS5eDyOrw_J2CXKFdt";
@@ -19972,6 +20591,19 @@ void recorderKey().then(async (key) => {
   }
   signBody = tokenSigner(key);
   recorder = new Recorder(outboxStore, signBody, supabaseSend(process.env.SUPABASE_URL ?? SUPABASE_URL, SUPABASE_KEY), Date.now, (m) => console.log(m));
+  const rpc = supabaseRpc(process.env.SUPABASE_URL ?? SUPABASE_URL, SUPABASE_KEY);
+  const sign = signBody;
+  recorder.onStored = (it) => {
+    const end = it.fn === "record_game_end" ? crewOfEnd(it.body) : null;
+    if (end) void achievementsAfterNight(end.crew, end.game, { sign, rpc, log: (m) => console.log(m) }).catch((e) => console.log(`achievements: ${String(e)}`));
+  };
+  const due = () => {
+    void achievementsDue({ sign, rpc, log: (m) => console.log(m) }).then((k) => {
+      if (k) console.log(`achievements: ${k} crew(s) brought up to date`);
+    }).catch((e) => console.log(`achievements due: ${String(e)}`));
+  };
+  setTimeout(due, 2e4);
+  setInterval(due, 10 * 6e4).unref();
   await recorder.start();
   console.log(`league recorder ready (${recorder.pending} waiting in the outbox)`);
   void recorder.flush();
@@ -20132,17 +20764,17 @@ var server = createServer((req, res) => {
 var uploadsFrom = /* @__PURE__ */ new Map();
 function offlineUpload(req, res, cors) {
   const addr = String(req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "").split(",").pop().trim();
-  const u = uploadsFrom.get(addr) ?? { n: 0, since: Date.now() };
-  if (Date.now() - u.since > 36e5) {
-    u.n = 0;
-    u.since = Date.now();
+  const u2 = uploadsFrom.get(addr) ?? { n: 0, since: Date.now() };
+  if (Date.now() - u2.since > 36e5) {
+    u2.n = 0;
+    u2.since = Date.now();
   }
-  uploadsFrom.set(addr, u);
+  uploadsFrom.set(addr, u2);
   const reply = (code, o) => {
     res.writeHead(code, { "content-type": "application/json", ...cors });
     res.end(JSON.stringify(o));
   };
-  if (++u.n > 3e3) return reply(429, { error: "Too many uploads; try again later" });
+  if (++u2.n > 3e3) return reply(429, { error: "Too many uploads; try again later" });
   let text = "";
   req.on("data", (c) => {
     text += c;
