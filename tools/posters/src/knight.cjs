@@ -231,7 +231,7 @@ const bolt = (L, x0, y0, x1, y1, j) => {
   XB['b' + k] = L;
 });
 // ... and the ground: a ring running out, walls of dust, glowing cracks, rubble thrown up
-const RUB = Array.from({ length: 20 }, (_, i) => ({ x: 24 + (rnd() - .5) * 14, vx: (i % 2 ? 1 : -1) * (.5 + rnd() * 2.4), vy: 2.6 + rnd() * 4.2, s: rnd() < .35 ? 2 : 1, c: ['d', 'e', 'M', 'L'][i % 4] }));
+const RUB = Array.from({ length: 20 }, (_, i) => ({ x: 24 + (rnd() - .5) * 14, vx: (i % 2 ? 1 : -1) * (.5 + rnd() * 2.4), vy: 2.6 + rnd() * 4.2, c: ['G', 'R', 'G', 'B', 'G', 'L'][i % 6] }));
 for (let k = 0; k < 9; k++) {
   const L = blank();
   const rx = 5 + k * 4.6, ry = 1.5 + k * .9, col = k < 3 ? 'W' : k < 6 ? 'w' : 'd';
@@ -241,7 +241,7 @@ for (let k = 0; k < 9; k++) {
     for (let j = 0; j < h; j++) { const wv = Math.round(Math.sin(j * .9 + k) * 1.2); for (let q = 0; q < 3; q++) if (rnd() < .82) put(L, Math.round(x0 + sd * q + wv), 57 - j, j > h - 2 ? 'L' : q === 0 ? 'd' : 'e'); }
   });
   [-1, 1].forEach(sd => { let y = 60; for (let d = 1; d <= Math.min(22, 3 + k * 4); d++) { if (d % 4 === 0) y += (d % 8 ? 1 : -1); put(L, 24 + sd * d, Math.max(59, Math.min(62, y)), k < 2 ? 'W' : k < 4 ? 'Y' : k < 6 ? 'G' : 'g'); if (d % 5 === 2) put(L, 24 + sd * d, Math.max(59, Math.min(62, y + 1)), k < 4 ? 'G' : 'g'); } });
-  RUB.forEach(p => { const t = k + 1, x = Math.round(p.x + p.vx * t), y = Math.round(57 - (p.vy * t - .42 * t * t)); if (y < 58 && y >= 0) rect(L, x, y, p.s, p.s, p.c); });
+  RUB.forEach(p => { const t = k + 1, x = Math.round(p.x + p.vx * t), y = Math.round(57 - (p.vy * t - .42 * t * t)); if (y < 57 && y >= 0) { rect(L, x, y, 2, 2, p.c); put(L, x, y, p.c === 'G' ? 'Y' : p.c === 'L' ? 'W' : 'L'); } });
   XF['s' + k] = L;
 }
 { const L = blank(); rect(L, 23, 41, 2, 17, 'W'); rect(L, 18, 39, 12, 2, 'Y'); for (let y = 42; y < 58; y += 2) { put(L, 22, y, 'w'); put(L, 25, y + 1, 'w'); } XF.hotp = L; }
@@ -251,6 +251,29 @@ for (let k = 0; k < 10; k++) { const L = blank(); EMB.forEach((p, i) => { if (k 
 // idle: a shooting star now and then; light running down the planted blade
 for (let k = 0; k < 5; k++) { const L = blank(), x = 44 - k * 5, y = 2 + k * 2; put(L, x, y, 'W'); put(L, x + 1, y, 'W'); put(L, x + 2, y - 1, 'w'); put(L, x + 3, y - 1, 'w'); put(L, x + 5, y - 2, '#8d7fb8'); XB['ss' + k] = L; }
 for (let k = 0; k < 8; k++) { const L = blank(), y = 42 + k * 2; rect(L, 23, y, 2, 2, 'W'); put(L, 22, y, 'w'); put(L, 25, y + 1, 'w'); XF['pg' + k] = L; }
+// the royal flush: ten to ace of spades, dealt into the sky behind him; and a crown
+const GLY = { A: ['.#.', '#.#', '###', '#.#', '#.#'], K: ['#.#', '#.#', '##.', '#.#', '#.#'], Q: ['###', '#.#', '#.#', '###', '..#'], J: ['..#', '..#', '..#', '#.#', '###'], T: ['#.###', '#.#.#', '#.#.#', '#.#.#', '#.###'] };
+const SPD = ['..#..', '.###.', '#####', '#####', '..#..', '.###.'];
+const XC = {};
+const CARDS = [['T', 0, 5, -1, -.5], ['J', 10, 2, -.5, -1], ['Q', 20, 0, 0, -1], ['K', 30, 2, .5, -1], ['A', 39, 5, 1, -.5]];
+const card = (L, r, x, y, mode) => {
+  const edge = mode === 'g' ? 'Y' : 'O', face = mode === 'w' ? 'W' : mode === 'g' ? '#fff6d8' : 'L', ink = mode === 'w' ? 'W' : 'O';
+  rect(L, x, y, 9, 13, edge); rect(L, x + 1, y + 1, 7, 11, face);
+  if (mode === 'g') { rect(L, x - 1, y + 2, 1, 9, 'G'); rect(L, x + 9, y + 2, 1, 9, 'G'); rect(L, x + 2, y - 1, 5, 1, 'G'); rect(L, x + 2, y + 13, 5, 1, 'G'); }
+  GLY[r].forEach((row, j) => [...row].forEach((ch, i) => { if (ch === '#') put(L, x + 1 + i, y + 1 + j, ink); }));
+  SPD.forEach((row, j) => [...row].forEach((ch, i) => { if (ch === '#') put(L, x + 2 + i, y + 6 + j, ink); }));
+};
+CARDS.forEach(([r, x, y], n) => ['', 'w', 'g'].forEach(m => { const L = blank(); card(L, r, x, y, m); XC['c' + n + m] = L; }));
+[5, 11, 18].forEach((d, k) => {                               // the hand bursts outwards with the strike
+  const L = blank();
+  CARDS.forEach(([r, x, y, dx, dy]) => { const X = Math.round(x + dx * d), Y = Math.round(y + dy * d); if (k < 2) card(L, r, X, Y, k ? 'w' : 'g'); else [[4, 6], [2, 3], [6, 9], [1, 10], [7, 2]].forEach(([i, j]) => put(L, X + i, Y + j, (i + j) % 2 ? 'Y' : 'W')); });
+  XC['cb' + k] = L;
+});
+const crown = (L, y, c1, c2) => { rect(L, 20, y + 2, 9, 2, c1); [20, 24, 28].forEach(x => rect(L, x, y, 1, 2, c1)); [22, 26].forEach(x => put(L, x, y + 1, c1)); rect(L, 20, y + 3, 9, 1, c2); put(L, 24, y + 2, c1 === 'W' ? 'W' : 'R'); put(L, 21, y + 2, c1 === 'W' ? 'W' : 'Y'); put(L, 27, y + 2, c1 === 'W' ? 'W' : 'Y'); };
+const XK = {};
+{ const L = blank(); crown(L, 7, 'G', 'g'); XK.crown = L; }
+{ const L = blank(); crown(L, 7, 'W', 'W'); rect(L, 17, 9, 2, 1, 'W'); rect(L, 30, 9, 2, 1, 'W'); rect(L, 24, 4, 1, 2, 'W'); XK.crownw = L; }
+{ const L = blank(); crown(L, 8, 'G', 'g'); XK.crownd = L; }
 const ov = X => Object.entries(X).map(([k, L]) => `<g class="kn-o kn-x" data-x="${k}">${paths(L)}</g>`).join('');
 const motes = Array.from({ length: 6 }, () => `<rect class="kn-mote" width="1" height="1" fill="#ffe08a"/>`).join('');
 
@@ -268,8 +291,8 @@ const markup = `<svg class="kn-svg" xmlns="http://www.w3.org/2000/svg" viewBox="
 ${ov(XB)}
 <!-- sprite frames: exactly one is shown at a time (class kn-on) -->
 <g class="kn-sprite">${frames}${visor}${glint}${spark}</g>
-<!-- effects in front of him -->
-${ov(XF)}${motes}
+<!-- effects in front of him, then the hand, then the crown -->
+${ov(XF)}${ov(XC)}${ov(XK)}${motes}
 </g>
 <rect class="kn-o kn-dark" width="${W}" height="${H}" fill="#0d0a18"/>
 </g>

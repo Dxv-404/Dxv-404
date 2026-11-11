@@ -2,25 +2,29 @@
 // frame plus pixel overlays (the effects), like a game sprite sheet.
 var FPS=12;
 // signature move, one entry per tick: [frame, {flash, dy, x:[overlay names], sh:[dx,dy] shake}]
-// He tears the sword from the ground and raises it; light pours into the blade until it is white-hot and
-// the moon flares; then he drives it down: a pillar of light, the ground splits, the page shakes.
+// He tears the sword from the ground and raises it; a royal flush in spades is dealt into the sky behind him,
+// the hand lights up and a crown lands on his helm; then he drives the sword down: the cards burst away,
+// a pillar of light, the ground splits, chips and coins fly, the page shakes.
 var SIG=(function(){
-  var s=[['crouch'],['crouch'],['rip',{flash:1,sh:[0,-1]}],['pull',{sh:[0,1]}],['smear'],['up0',{x:['f1']}]],i,x;
-  for(i=0;i<14;i++){
+  var s=[['crouch'],['crouch'],['rip',{flash:1,sh:[0,-1]}],['pull',{sh:[0,1]}],['smear'],['up0',{x:['f1']}]],i,c,x;
+  var ALL=['c0g','c1g','c2g','c3g','c4g'];
+  for(i=0;i<16;i++){
     x=[i>=6?'halo2':'halo','f'+Math.min(5,1+Math.floor(i/2.5))];
     if(i<6)x.push('g'+i);
     if(i>=3)x.push('a'+(i%3));
     if(i>=5&&i%2)x.push('hot');
-    if(i>=7&&i%2)x.push('z'+((i>>1)%3));
-    s.push([(i>>1)%2?'up2':'up1',{x:x,sh:i>=9?[i%2?1:-1,0]:null}]);
+    // the royal flush is dealt into the sky, ten to ace; then the whole hand lights and he is crowned
+    for(c=0;c<5;c++){if(i===1+2*c)x.push('c'+c+'w');else if(i>1+2*c)x.push('c'+c+(i>=11&&i%2?'g':''))}
+    if(i>=11)x.push(i===11?'crownw':'crown');
+    s.push([(i>>1)%2?'up2':'up1',{x:x,sh:i>=12?[i%2?1:-1,0]:null}]);
   }
-  s.push(['up2',{x:['a0','f5','halo2','hot']}],['smear',{x:['halo2']}]);
+  s.push(['up2',{x:ALL.concat(['a0','f5','halo2','hot','crown'])}],['smear',{x:ALL.concat(['halo2','crown'])}]);
   var SH=[[0,3],[1,-2],[-1,2],[1,-1],[-1,1],[0,-1],[0,1]];
   for(i=0;i<9;i++){
-    x=['s'+i];if(i<6)x.push('b'+i);if(i<7)x.push('hotp');if(i<3)x.push('halo2');if(i===2||i===4)x.push('hot');
+    x=['s'+i,'crownd'];if(i<6)x.push('b'+i);if(i<7)x.push('hotp');if(i<3)x.push('halo2','cb'+i);if(i===2||i===4)x.push('hot');
     s.push([i<2?'slamsil':i<5?'slam':i<8?'settle':'crouch',{flash:i===0?1:0,dy:i<2?1:0,x:x,sh:SH[i]}]);
   }
-  for(i=0;i<10;i++)s.push([i<2?'crouch':['i0','i0','i1','i1','i2','i2','i1','i1'][i-2],{x:['e'+i]}]);
+  for(i=0;i<10;i++){x=['e'+i];if(i<6||i===7)x.push(i<2?'crownd':'crown');s.push([i<2?'crouch':['i0','i0','i1','i1','i2','i2','i1','i1'][i-2],{x:x}])}
   return s;
 })();
 var ENT=[[null,{dark:1}],[null,{dark:.66}],[null,{dark:.33}],['i1',{dy:-34}],['i2',{dy:-16}],['i1',{dy:-4}],
